@@ -190,7 +190,9 @@ fn parse_update() {
     let sql = "UPDATE t SET a = 1 extrabadstuff";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: extrabadstuff\nNear ` t SET a = 1`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: extrabadstuff\nNear ` t SET a = 1`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -236,12 +238,14 @@ fn parse_update_set_from() {
                             distinct: None,
                             top: None,
                             projection: vec![
-                                SelectItem::UnnamedExpr(Expr::Identifier(
-                                    Ident::new("name").empty_span()
-                                ).empty_span()).empty_span(),
-                                SelectItem::UnnamedExpr(Expr::Identifier(
-                                    Ident::new("id").empty_span()
-                                ).empty_span()).empty_span(),
+                                SelectItem::UnnamedExpr(
+                                    Expr::Identifier(Ident::new("name").empty_span()).empty_span()
+                                )
+                                .empty_span(),
+                                SelectItem::UnnamedExpr(
+                                    Expr::Identifier(Ident::new("id").empty_span()).empty_span()
+                                )
+                                .empty_span(),
                             ],
                             into: None,
                             from: vec![TableWithJoins {
@@ -360,9 +364,12 @@ fn parse_select_with_table_alias() {
     assert_eq!(
         select.projection,
         vec![
-            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("a").empty_span()).empty_span(),).empty_span(),
-            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("b").empty_span()).empty_span(),).empty_span(),
-            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("c").empty_span()).empty_span(),).empty_span(),
+            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("a").empty_span()).empty_span(),)
+                .empty_span(),
+            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("b").empty_span()).empty_span(),)
+                .empty_span(),
+            SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("c").empty_span()).empty_span(),)
+                .empty_span(),
         ]
     );
     assert_eq!(
@@ -638,7 +645,8 @@ fn parse_select_distinct() {
     let select = verified_only_select(sql);
     assert!(select.distinct.is_some());
     assert_eq!(
-        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("name").empty_span()).empty_span()).empty_span(),
+        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("name").empty_span()).empty_span())
+            .empty_span(),
         only(&select.projection)
     );
 }
@@ -649,11 +657,13 @@ fn parse_select_distinct_two_fields() {
     let select = verified_only_select(sql);
     assert!(select.distinct.is_some());
     assert_eq!(
-        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("name").empty_span()).empty_span()).empty_span(),
+        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("name").empty_span()).empty_span())
+            .empty_span(),
         &select.projection[0]
     );
     assert_eq!(
-        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("id").empty_span()).empty_span()).empty_span(),
+        &SelectItem::UnnamedExpr(Expr::Identifier(Ident::new("id").empty_span()).empty_span())
+            .empty_span(),
         &select.projection[1]
     );
 }
@@ -663,10 +673,14 @@ fn parse_select_distinct_tuple() {
     let sql = "SELECT DISTINCT (name, id) FROM customer";
     let select = verified_only_select(sql);
     assert_eq!(
-        &vec![SelectItem::UnnamedExpr(Expr::Tuple(vec![
-            Expr::Identifier(Ident::new("name").empty_span()),
-            Expr::Identifier(Ident::new("id").empty_span()),
-        ]).empty_span()).empty_span()],
+        &vec![SelectItem::UnnamedExpr(
+            Expr::Tuple(vec![
+                Expr::Identifier(Ident::new("name").empty_span()),
+                Expr::Identifier(Ident::new("id").empty_span()),
+            ])
+            .empty_span()
+        )
+        .empty_span()],
         &select.projection
     );
 }
@@ -676,7 +690,9 @@ fn parse_select_distinct_on() {
     let sql = "SELECT DISTINCT ON (album_id) name FROM track ORDER BY album_id, milliseconds";
     let select = verified_only_select(sql);
     assert_eq!(
-        &Some(Distinct::On(vec![Expr::Identifier(Ident::new("album_id").empty_span())])),
+        &Some(Distinct::On(vec![Expr::Identifier(
+            Ident::new("album_id").empty_span()
+        )])),
         &select.distinct
     );
 
@@ -699,7 +715,9 @@ fn parse_select_distinct_on() {
 fn parse_select_distinct_missing_paren() {
     let result = parse_sql_statements("SELECT DISTINCT (name, id FROM customer");
     assert_eq!(
-        ParserError::ParserError("Expected ), found: FROM\nNear `SELECT DISTINCT (name, id`".to_string()),
+        ParserError::ParserError(
+            "Expected ), found: FROM\nNear `SELECT DISTINCT (name, id`".to_string()
+        ),
         result.unwrap_err(),
     );
 }
@@ -743,7 +761,9 @@ fn parse_select_into() {
     let sql = "SELECT * INTO table0 asdf FROM table1";
     let result = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: asdf\nNear `SELECT * INTO table0`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: asdf\nNear `SELECT * INTO table0`".to_string()
+        ),
         result.unwrap_err()
     )
 }
@@ -763,7 +783,8 @@ fn parse_select_wildcard() {
         &SelectItem::QualifiedWildcard(
             ObjectName(vec![Ident::new("foo")]),
             WildcardAdditionalOptions::default()
-        ).empty_span(),
+        )
+        .empty_span(),
         only(&select.projection)
     );
 
@@ -773,14 +794,17 @@ fn parse_select_wildcard() {
         &SelectItem::QualifiedWildcard(
             ObjectName(vec![Ident::new("myschema"), Ident::new("mytable"),]),
             WildcardAdditionalOptions::default(),
-        ).empty_span(),
+        )
+        .empty_span(),
         only(&select.projection)
     );
 
     let sql = "SELECT * + * FROM foo;";
     let result = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: +\nNear `SELECT *`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: +\nNear `SELECT *`".to_string()
+        ),
         result.unwrap_err(),
     );
 }
@@ -820,13 +844,17 @@ fn parse_count_wildcard() {
 fn test_eof_after_as() {
     let res = parse_sql_statements("SELECT foo AS");
     assert_eq!(
-        ParserError::ParserError("Expected an identifier after AS, found: EOF\nNear `SELECT foo AS`".to_string()),
+        ParserError::ParserError(
+            "Expected an identifier after AS, found: EOF\nNear `SELECT foo AS`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("SELECT 1 FROM foo AS");
     assert_eq!(
-        ParserError::ParserError("Expected an identifier after AS, found: EOF\nNear `SELECT 1 FROM foo AS`".to_string()),
+        ParserError::ParserError(
+            "Expected an identifier after AS, found: EOF\nNear `SELECT 1 FROM foo AS`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -902,7 +930,9 @@ fn parse_not() {
 fn parse_invalid_infix_not() {
     let res = parse_sql_statements("SELECT c FROM t WHERE c NOT (");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: NOT\nNear ` c FROM t WHERE c`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: NOT\nNear ` c FROM t WHERE c`".to_string()
+        ),
         res.unwrap_err(),
     );
 }
@@ -990,11 +1020,13 @@ fn parse_exponent_in_select() -> Result<(), ParserError> {
             SelectItem::ExprWithAlias {
                 expr: Expr::Value(number("1e3")).empty_span(),
                 alias: Ident::new("a").empty_span()
-            }.empty_span(),
+            }
+            .empty_span(),
             SelectItem::ExprWithAlias {
                 expr: Expr::Value(number("1")).empty_span(),
                 alias: Ident::new("e").empty_span()
-            }.empty_span(),
+            }
+            .empty_span(),
             SelectItem::UnnamedExpr(Expr::Value(number("0.5e2")).empty_span()).empty_span(),
         ],
         &select.projection
@@ -1026,13 +1058,16 @@ fn parse_escaped_single_quote_string_predicate() {
                WHERE salary <> 'Jim''s salary'";
     let ast = verified_only_select(sql);
     assert_eq!(
-        Some(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("salary").empty_span())),
-            op: NotEq,
-            right: Box::new(Expr::Value(Value::SingleQuotedString(
-                "Jim's salary".to_string()
-            ))),
-        }.empty_span()),
+        Some(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("salary").empty_span())),
+                op: NotEq,
+                right: Box::new(Expr::Value(Value::SingleQuotedString(
+                    "Jim's salary".to_string()
+                ))),
+            }
+            .empty_span()
+        ),
         ast.selection,
     );
 }
@@ -1236,12 +1271,15 @@ fn parse_null_like() {
                 negated: false,
                 pattern: Box::new(Expr::Value(Value::Null)),
                 escape_char: None,
-            }.empty_span(),
+            }
+            .empty_span(),
             alias: Ident {
                 value: "col_null".to_owned(),
                 quote_style: None,
-            }.empty_span(),
-        }.empty_span(),
+            }
+            .empty_span(),
+        }
+        .empty_span(),
         select.projection[0]
     );
     assert_eq!(
@@ -1251,12 +1289,15 @@ fn parse_null_like() {
                 negated: false,
                 pattern: Box::new(Expr::Identifier(Ident::new("column1").empty_span())),
                 escape_char: None,
-            }.empty_span(),
+            }
+            .empty_span(),
             alias: Ident {
                 value: "null_col".to_owned(),
                 quote_style: None,
-            }.empty_span(),
-        }.empty_span(),
+            }
+            .empty_span(),
+        }
+        .empty_span(),
         select.projection[1]
     );
 }
@@ -1275,7 +1316,8 @@ fn parse_ilike() {
                 negated,
                 pattern: Box::new(Expr::Value(Value::SingleQuotedString("%a".to_string()))),
                 escape_char: None,
-            }.empty_span(),
+            }
+            .empty_span(),
             select.selection.unwrap()
         );
 
@@ -1291,7 +1333,8 @@ fn parse_ilike() {
                 negated,
                 pattern: Box::new(Expr::Value(Value::SingleQuotedString("%a".to_string()))),
                 escape_char: Some('^'),
-            }.empty_span(),
+            }
+            .empty_span(),
             select.selection.unwrap()
         );
 
@@ -1308,7 +1351,8 @@ fn parse_ilike() {
                 negated,
                 pattern: Box::new(Expr::Value(Value::SingleQuotedString("%a".to_string()))),
                 escape_char: None,
-            })).empty_span(),
+            }))
+            .empty_span(),
             select.selection.unwrap()
         );
     }
@@ -1332,7 +1376,8 @@ fn parse_in_list() {
                     Expr::Value(Value::SingleQuotedString("MED".to_string())),
                 ],
                 negated,
-            }.empty_span(),
+            }
+            .empty_span(),
             select.selection.unwrap()
         );
     }
@@ -1349,7 +1394,8 @@ fn parse_in_subquery() {
             expr: Box::new(Expr::Identifier(Ident::new("segment").empty_span())),
             subquery: Box::new(verified_query("SELECT segm FROM bar")),
             negated: false,
-        }.empty_span(),
+        }
+        .empty_span(),
         select.selection.unwrap()
     );
 }
@@ -1367,7 +1413,8 @@ fn parse_in_unnest() {
                 expr: Box::new(Expr::Identifier(Ident::new("segment").empty_span())),
                 array_expr: Box::new(verified_expr("expr")),
                 negated,
-            }.empty_span(),
+            }
+            .empty_span(),
             select.selection.unwrap()
         );
     }
@@ -1381,7 +1428,9 @@ fn parse_in_error() {
     let sql = "SELECT * FROM customers WHERE segment in segment";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected (, found: segment\nNear ` FROM customers WHERE segment in`".to_string()),
+        ParserError::ParserError(
+            "Expected (, found: segment\nNear ` FROM customers WHERE segment in`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -1392,11 +1441,15 @@ fn parse_string_agg() {
 
     let select = verified_only_select(sql);
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
-            op: BinaryOperator::StringConcat,
-            right: Box::new(Expr::Identifier(Ident::new("b").empty_span())),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
+                op: BinaryOperator::StringConcat,
+                right: Box::new(Expr::Identifier(Ident::new("b").empty_span())),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[0]
     );
 }
@@ -1424,11 +1477,15 @@ fn parse_bitwise_ops() {
     for (str_op, op, dialects) in bitwise_ops {
         let select = dialects.verified_only_select(&format!("SELECT a {} b", &str_op));
         assert_eq!(
-            SelectItem::UnnamedExpr(Expr::BinaryOp {
-                left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
-                op: op.clone(),
-                right: Box::new(Expr::Identifier(Ident::new("b").empty_span())),
-            }.empty_span()).empty_span(),
+            SelectItem::UnnamedExpr(
+                Expr::BinaryOp {
+                    left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
+                    op: op.clone(),
+                    right: Box::new(Expr::Identifier(Ident::new("b").empty_span())),
+                }
+                .empty_span()
+            )
+            .empty_span(),
             select.projection[0]
         );
     }
@@ -1438,13 +1495,17 @@ fn parse_bitwise_ops() {
 fn parse_binary_any() {
     let select = verified_only_select("SELECT a = ANY(b)");
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
-            op: BinaryOperator::Eq,
-            right: Box::new(Expr::AnyOp(Box::new(Expr::Identifier(
-                Ident::new("b").empty_span()
-            )))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::AnyOp(Box::new(Expr::Identifier(
+                    Ident::new("b").empty_span()
+                )))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[0]
     );
 }
@@ -1453,13 +1514,17 @@ fn parse_binary_any() {
 fn parse_binary_all() {
     let select = verified_only_select("SELECT a = ALL(b)");
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
-            op: BinaryOperator::Eq,
-            right: Box::new(Expr::AllOp(Box::new(Expr::Identifier(
-                Ident::new("b").empty_span()
-            )))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("a").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::AllOp(Box::new(Expr::Identifier(
+                    Ident::new("b").empty_span()
+                )))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[0]
     );
 }
@@ -1469,35 +1534,51 @@ fn parse_logical_xor() {
     let sql = "SELECT true XOR true, false XOR false, true XOR false, false XOR true";
     let select = verified_only_select(sql);
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Value(Value::Boolean(true))),
-            op: BinaryOperator::Xor,
-            right: Box::new(Expr::Value(Value::Boolean(true))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Value(Value::Boolean(true))),
+                op: BinaryOperator::Xor,
+                right: Box::new(Expr::Value(Value::Boolean(true))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[0]
     );
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Value(Value::Boolean(false))),
-            op: BinaryOperator::Xor,
-            right: Box::new(Expr::Value(Value::Boolean(false))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Value(Value::Boolean(false))),
+                op: BinaryOperator::Xor,
+                right: Box::new(Expr::Value(Value::Boolean(false))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[1]
     );
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Value(Value::Boolean(true))),
-            op: BinaryOperator::Xor,
-            right: Box::new(Expr::Value(Value::Boolean(false))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Value(Value::Boolean(true))),
+                op: BinaryOperator::Xor,
+                right: Box::new(Expr::Value(Value::Boolean(false))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[2]
     );
     assert_eq!(
-        SelectItem::UnnamedExpr(Expr::BinaryOp {
-            left: Box::new(Expr::Value(Value::Boolean(false))),
-            op: BinaryOperator::Xor,
-            right: Box::new(Expr::Value(Value::Boolean(true))),
-        }.empty_span()).empty_span(),
+        SelectItem::UnnamedExpr(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Value(Value::Boolean(false))),
+                op: BinaryOperator::Xor,
+                right: Box::new(Expr::Value(Value::Boolean(true))),
+            }
+            .empty_span()
+        )
+        .empty_span(),
         select.projection[3]
     );
 }
@@ -1516,7 +1597,8 @@ fn parse_between() {
                 low: Box::new(Expr::Value(number("25"))),
                 high: Box::new(Expr::Value(number("32"))),
                 negated,
-            }.empty_span(),
+            }
+            .empty_span(),
             select.selection.unwrap()
         );
     }
@@ -1543,7 +1625,8 @@ fn parse_between_with_expr() {
                 right: Box::new(Expr::Value(number("4"))),
             }),
             negated: false,
-        })).empty_span(),
+        }))
+        .empty_span(),
         select.selection.unwrap()
     );
 
@@ -1567,7 +1650,8 @@ fn parse_between_with_expr() {
                 high: Box::new(Expr::Value(number("2"))),
                 negated: false,
             }),
-        }.empty_span(),
+        }
+        .empty_span(),
         select.selection.unwrap(),
     )
 }
@@ -1578,16 +1662,21 @@ fn parse_tuples() {
     let select = verified_only_select(sql);
     assert_eq!(
         vec![
-            SelectItem::UnnamedExpr(Expr::Tuple(vec![
-                Expr::Value(number("1")),
-                Expr::Value(number("2")),
-            ]).empty_span()).empty_span(),
-            SelectItem::UnnamedExpr(Expr::Nested(Box::new(Expr::Value(number("1")))).empty_span()).empty_span(),
-            SelectItem::UnnamedExpr(Expr::Tuple(vec![
-                Expr::Value(Value::SingleQuotedString("foo".into())),
-                Expr::Value(number("3")),
-                Expr::Identifier(Ident::new("baz").empty_span()),
-            ]).empty_span()).empty_span(),
+            SelectItem::UnnamedExpr(
+                Expr::Tuple(vec![Expr::Value(number("1")), Expr::Value(number("2")),]).empty_span()
+            )
+            .empty_span(),
+            SelectItem::UnnamedExpr(Expr::Nested(Box::new(Expr::Value(number("1")))).empty_span())
+                .empty_span(),
+            SelectItem::UnnamedExpr(
+                Expr::Tuple(vec![
+                    Expr::Value(Value::SingleQuotedString("foo".into())),
+                    Expr::Value(number("3")),
+                    Expr::Identifier(Ident::new("baz").empty_span()),
+                ])
+                .empty_span()
+            )
+            .empty_span(),
         ],
         select.projection
     );
@@ -1965,7 +2054,9 @@ fn parse_extract() {
 
     let res = parse_sql_statements("SELECT EXTRACT(JIFFY FROM d)");
     assert_eq!(
-        ParserError::ParserError("Expected date/time field, found: JIFFY\nNear `SELECT EXTRACT(JIFFY`".to_string()),
+        ParserError::ParserError(
+            "Expected date/time field, found: JIFFY\nNear `SELECT EXTRACT(JIFFY`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -2003,7 +2094,9 @@ fn parse_ceil_datetime() {
 
     let res = parse_sql_statements("SELECT CEIL(d TO JIFFY) FROM df");
     assert_eq!(
-        ParserError::ParserError("Expected date/time field, found: JIFFY\nNear `SELECT CEIL(d TO JIFFY`".to_string()),
+        ParserError::ParserError(
+            "Expected date/time field, found: JIFFY\nNear `SELECT CEIL(d TO JIFFY`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -2029,7 +2122,9 @@ fn parse_floor_datetime() {
 
     let res = parse_sql_statements("SELECT FLOOR(d TO JIFFY) FROM df");
     assert_eq!(
-        ParserError::ParserError("Expected date/time field, found: JIFFY\nNear `SELECT FLOOR(d TO JIFFY`".to_string()),
+        ParserError::ParserError(
+            "Expected date/time field, found: JIFFY\nNear `SELECT FLOOR(d TO JIFFY`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -2377,7 +2472,9 @@ fn parse_create_table_hive_array() {
 
     assert_eq!(
         dialects.parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError("Expected >, found: )\nNear `name int, val array<int`".to_string())
+        ParserError::ParserError(
+            "Expected >, found: )\nNear `name int, val array<int`".to_string()
+        )
     );
 }
 
@@ -3100,7 +3197,10 @@ fn parse_alter_table_alter_column_type() {
         &format!("{alter_stmt} ALTER COLUMN is_active SET DATA TYPE TEXT USING 'text'"),
     );
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: USING\nNear ` is_active SET DATA TYPE TEXT`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: USING\nNear ` is_active SET DATA TYPE TEXT`"
+                .to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -3148,7 +3248,10 @@ fn parse_alter_table_drop_constraint() {
         &format!("{alter_stmt} DROP CONSTRAINT is_active TEXT"),
     );
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: TEXT\nNear ` TABLE tab DROP CONSTRAINT is_active`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: TEXT\nNear ` TABLE tab DROP CONSTRAINT is_active`"
+                .to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -3157,7 +3260,9 @@ fn parse_alter_table_drop_constraint() {
 fn parse_bad_constraint() {
     let res = parse_sql_statements("ALTER TABLE tab ADD");
     assert_eq!(
-        ParserError::ParserError("Expected identifier, found: EOF\nNear `ALTER TABLE tab ADD`".to_string()),
+        ParserError::ParserError(
+            "Expected identifier, found: EOF\nNear `ALTER TABLE tab ADD`".to_string()
+        ),
         res.unwrap_err()
     );
 
@@ -3375,25 +3480,34 @@ fn test_parse_named_window() {
                         quote_style: None,
                     }]),
                     args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                        Expr::Identifier(Ident {
-                            value: "c12".to_string(),
-                            quote_style: None,
-                        }.empty_span()),
+                        Expr::Identifier(
+                            Ident {
+                                value: "c12".to_string(),
+                                quote_style: None,
+                            }
+                            .empty_span(),
+                        ),
                     ))],
-                    over: Some(WindowType::NamedWindow(Ident {
-                        value: "window1".to_string(),
-                        quote_style: None,
-                    }.empty_span())),
+                    over: Some(WindowType::NamedWindow(
+                        Ident {
+                            value: "window1".to_string(),
+                            quote_style: None,
+                        }
+                        .empty_span(),
+                    )),
                     distinct: false,
                     special: false,
                     order_by: vec![],
                     null_treatment: None,
-                }).empty_span(),
+                })
+                .empty_span(),
                 alias: Ident {
                     value: "min1".to_string(),
                     quote_style: None,
-                }.empty_span(),
-            }.empty_span(),
+                }
+                .empty_span(),
+            }
+            .empty_span(),
             SelectItem::ExprWithAlias {
                 expr: Expr::Function(Function {
                     name: ObjectName(vec![Ident {
@@ -3401,25 +3515,34 @@ fn test_parse_named_window() {
                         quote_style: None,
                     }]),
                     args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
-                        Expr::Identifier(Ident {
-                            value: "c12".to_string(),
-                            quote_style: None,
-                        }.empty_span()),
+                        Expr::Identifier(
+                            Ident {
+                                value: "c12".to_string(),
+                                quote_style: None,
+                            }
+                            .empty_span(),
+                        ),
                     ))],
-                    over: Some(WindowType::NamedWindow(Ident {
-                        value: "window2".to_string(),
-                        quote_style: None,
-                    }.empty_span())),
+                    over: Some(WindowType::NamedWindow(
+                        Ident {
+                            value: "window2".to_string(),
+                            quote_style: None,
+                        }
+                        .empty_span(),
+                    )),
                     distinct: false,
                     special: false,
                     order_by: vec![],
                     null_treatment: None,
-                }).empty_span(),
+                })
+                .empty_span(),
                 alias: Ident {
                     value: "max1".to_string(),
                     quote_style: None,
-                }.empty_span(),
-            }.empty_span(),
+                }
+                .empty_span(),
+            }
+            .empty_span(),
         ],
         into: None,
         from: vec![TableWithJoins {
@@ -3446,14 +3569,18 @@ fn test_parse_named_window() {
                 Ident {
                     value: "window1".to_string(),
                     quote_style: None,
-                }.empty_span(),
+                }
+                .empty_span(),
                 WindowSpec {
                     partition_by: vec![],
                     order_by: vec![OrderByExpr {
-                        expr: Expr::Identifier(Ident {
-                            value: "C12".to_string(),
-                            quote_style: None,
-                        }.empty_span()),
+                        expr: Expr::Identifier(
+                            Ident {
+                                value: "C12".to_string(),
+                                quote_style: None,
+                            }
+                            .empty_span(),
+                        ),
                         asc: None,
                         nulls_first: None,
                     }],
@@ -3464,12 +3591,16 @@ fn test_parse_named_window() {
                 Ident {
                     value: "window2".to_string(),
                     quote_style: None,
-                }.empty_span(),
+                }
+                .empty_span(),
                 WindowSpec {
-                    partition_by: vec![Expr::Identifier(Ident {
-                        value: "C11".to_string(),
-                        quote_style: None,
-                    }.empty_span())],
+                    partition_by: vec![Expr::Identifier(
+                        Ident {
+                            value: "C11".to_string(),
+                            quote_style: None,
+                        }
+                        .empty_span(),
+                    )],
                     order_by: vec![],
                     window_frame: None,
                 },
@@ -3711,13 +3842,18 @@ fn parse_interval() {
 
     let result = parse_sql_statements("SELECT INTERVAL '1' SECOND TO SECOND");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: SECOND\nNear `SELECT INTERVAL '1' SECOND TO`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: SECOND\nNear `SELECT INTERVAL '1' SECOND TO`"
+                .to_string()
+        ),
         result.unwrap_err(),
     );
 
     let result = parse_sql_statements("SELECT INTERVAL '10' HOUR (1) TO HOUR (2)");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: (\nNear `HOUR (1) TO HOUR `".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: (\nNear `HOUR (1) TO HOUR `".to_string()
+        ),
         result.unwrap_err(),
     );
 
@@ -3755,13 +3891,17 @@ fn parse_interval_and_or_xor() {
         body: Box::new(SetExpr::Select(Box::new(Select {
             distinct: None,
             top: None,
-            projection: vec![UnnamedExpr(Expr::Identifier(
-                Ident {
-                    value: "col".to_string(),
-                    quote_style: None,
-                }
+            projection: vec![UnnamedExpr(
+                Expr::Identifier(
+                    Ident {
+                        value: "col".to_string(),
+                        quote_style: None,
+                    }
+                    .empty_span(),
+                )
                 .empty_span(),
-            ).empty_span()).empty_span()],
+            )
+            .empty_span()],
             into: None,
             from: vec![TableWithJoins {
                 relation: TableFactor::Table {
@@ -3776,67 +3916,70 @@ fn parse_interval_and_or_xor() {
                 joins: vec![],
             }],
             lateral_views: vec![],
-            selection: Some(Expr::BinaryOp {
-                left: Box::new(Expr::BinaryOp {
-                    left: Box::new(Expr::Identifier(
-                        Ident {
-                            value: "d3_date".to_string(),
-                            quote_style: None,
-                        }
-                        .empty_span(),
-                    )),
-                    op: BinaryOperator::Gt,
-                    right: Box::new(Expr::BinaryOp {
+            selection: Some(
+                Expr::BinaryOp {
+                    left: Box::new(Expr::BinaryOp {
                         left: Box::new(Expr::Identifier(
                             Ident {
-                                value: "d1_date".to_string(),
+                                value: "d3_date".to_string(),
                                 quote_style: None,
                             }
                             .empty_span(),
                         )),
-                        op: BinaryOperator::Plus,
-                        right: Box::new(Expr::Interval(Interval {
-                            value: Box::new(Expr::Value(Value::SingleQuotedString(
-                                "5 days".to_string(),
-                            ))),
-                            leading_field: None,
-                            leading_precision: None,
-                            last_field: None,
-                            fractional_seconds_precision: None,
-                        })),
+                        op: BinaryOperator::Gt,
+                        right: Box::new(Expr::BinaryOp {
+                            left: Box::new(Expr::Identifier(
+                                Ident {
+                                    value: "d1_date".to_string(),
+                                    quote_style: None,
+                                }
+                                .empty_span(),
+                            )),
+                            op: BinaryOperator::Plus,
+                            right: Box::new(Expr::Interval(Interval {
+                                value: Box::new(Expr::Value(Value::SingleQuotedString(
+                                    "5 days".to_string(),
+                                ))),
+                                leading_field: None,
+                                leading_precision: None,
+                                last_field: None,
+                                fractional_seconds_precision: None,
+                            })),
+                        }),
                     }),
-                }),
-                op: BinaryOperator::And,
-                right: Box::new(Expr::BinaryOp {
-                    left: Box::new(Expr::Identifier(
-                        Ident {
-                            value: "d2_date".to_string(),
-                            quote_style: None,
-                        }
-                        .empty_span(),
-                    )),
-                    op: BinaryOperator::Gt,
+                    op: BinaryOperator::And,
                     right: Box::new(Expr::BinaryOp {
                         left: Box::new(Expr::Identifier(
                             Ident {
-                                value: "d1_date".to_string(),
+                                value: "d2_date".to_string(),
                                 quote_style: None,
                             }
                             .empty_span(),
                         )),
-                        op: BinaryOperator::Plus,
-                        right: Box::new(Expr::Interval(Interval {
-                            value: Box::new(Expr::Value(Value::SingleQuotedString(
-                                "3 days".to_string(),
-                            ))),
-                            leading_field: None,
-                            leading_precision: None,
-                            last_field: None,
-                            fractional_seconds_precision: None,
-                        })),
+                        op: BinaryOperator::Gt,
+                        right: Box::new(Expr::BinaryOp {
+                            left: Box::new(Expr::Identifier(
+                                Ident {
+                                    value: "d1_date".to_string(),
+                                    quote_style: None,
+                                }
+                                .empty_span(),
+                            )),
+                            op: BinaryOperator::Plus,
+                            right: Box::new(Expr::Interval(Interval {
+                                value: Box::new(Expr::Value(Value::SingleQuotedString(
+                                    "3 days".to_string(),
+                                ))),
+                                leading_field: None,
+                                leading_precision: None,
+                                last_field: None,
+                                fractional_seconds_precision: None,
+                            })),
+                        }),
                     }),
-                }),
-            }.empty_span()),
+                }
+                .empty_span(),
+            ),
             group_by: vec![],
             cluster_by: vec![],
             distribute_by: vec![],
@@ -3932,12 +4075,15 @@ fn parse_at_timezone() {
                 special: false,
                 order_by: vec![],
                 null_treatment: None,
-            },).empty_span(),
+            },)
+            .empty_span(),
             alias: Ident {
                 value: "hour".to_string(),
                 quote_style: Some('"'),
-            }.empty_span(),
-        }.empty_span(),
+            }
+            .empty_span(),
+        }
+        .empty_span(),
         only(&select.projection),
     );
 }
@@ -4100,7 +4246,9 @@ fn parse_table_function() {
 
     let res = parse_sql_statements("SELECT * FROM TABLE '1' AS a");
     assert_eq!(
-        ParserError::ParserError("Expected (, found: \'1\'\nNear `SELECT * FROM TABLE`".to_string()),
+        ParserError::ParserError(
+            "Expected (, found: \'1\'\nNear `SELECT * FROM TABLE`".to_string()
+        ),
         res.unwrap_err()
     );
 
@@ -4566,7 +4714,10 @@ fn parse_natural_join() {
 
     let sql = "SELECT * FROM t1 natural";
     assert_eq!(
-        ParserError::ParserError("Expected a join type after NATURAL, found: EOF\nNear `SELECT * FROM t1 natural`".to_string()),
+        ParserError::ParserError(
+            "Expected a join type after NATURAL, found: EOF\nNear `SELECT * FROM t1 natural`"
+                .to_string()
+        ),
         parse_sql_statements(sql).unwrap_err(),
     );
 }
@@ -4647,7 +4798,9 @@ fn parse_join_syntax_variants() {
 
     let res = parse_sql_statements("SELECT * FROM a OUTER JOIN b ON 1");
     assert_eq!(
-        ParserError::ParserError("Expected APPLY, found: JOIN\nNear `SELECT * FROM a OUTER`".to_string()),
+        ParserError::ParserError(
+            "Expected APPLY, found: JOIN\nNear `SELECT * FROM a OUTER`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -4741,7 +4894,8 @@ fn parse_recursive_cte() {
             name: Ident {
                 value: "nums".to_string(),
                 quote_style: None,
-            }.empty_span(),
+            }
+            .empty_span(),
             columns: vec![Ident {
                 value: "val".to_string(),
                 quote_style: None,
@@ -4915,7 +5069,9 @@ fn parse_overlay() {
         "SELECT OVERLAY('abccccde' PLACING 'abc' FROM 3 FOR 12)",
     );
     assert_eq!(
-        ParserError::ParserError("Expected PLACING, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned()),
+        ParserError::ParserError(
+            "Expected PLACING, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned()
+        ),
         parse_sql_statements("SELECT OVERLAY('abccccde' FROM 3)").unwrap_err(),
     );
 
@@ -4967,6 +5123,30 @@ fn parse_trim() {
         ParserError::ParserError("Expected ), found: 'xyz'\nNear `SELECT TRIM(FOO`".to_owned()),
         parse_sql_statements("SELECT TRIM(FOO 'xyz' FROM 'xyzfooxyz')").unwrap_err()
     );
+
+    //keep Snowflake TRIM syntax failing
+    let all_expected_snowflake = TestedDialects {
+        dialects: vec![
+            Box::new(GenericDialect {}),
+            Box::new(PostgreSqlDialect {}),
+            Box::new(MsSqlDialect {}),
+            Box::new(AnsiDialect {}),
+            //Box::new(SnowflakeDialect {}),
+            Box::new(HiveDialect {}),
+            Box::new(RedshiftSqlDialect {}),
+            Box::new(MySqlDialect {}),
+            Box::new(BigQueryDialect {}),
+            Box::new(SQLiteDialect {}),
+            Box::new(DuckDbDialect {}),
+        ],
+        options: None,
+    };
+    assert_eq!(
+        ParserError::ParserError("Expected ), found: 'a'\nNear `SELECT TRIM('xyz',`".to_owned()),
+        all_expected_snowflake
+            .parse_sql_statements("SELECT TRIM('xyz', 'a')")
+            .unwrap_err()
+    );
 }
 
 #[test]
@@ -4978,7 +5158,8 @@ fn parse_exists_subquery() {
         Expr::Exists {
             negated: false,
             subquery: Box::new(expected_inner.clone()),
-        }.empty_span(),
+        }
+        .empty_span(),
         select.selection.unwrap(),
     );
 
@@ -4988,7 +5169,8 @@ fn parse_exists_subquery() {
         Expr::Exists {
             negated: true,
             subquery: Box::new(expected_inner),
-        }.empty_span(),
+        }
+        .empty_span(),
         select.selection.unwrap(),
     );
 
@@ -5341,7 +5523,9 @@ fn parse_drop_view() {
 fn parse_invalid_subquery_without_parens() {
     let res = parse_sql_statements("SELECT SELECT 1 FROM bar WHERE 1=1 FROM baz");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: 1\nNear `SELECT SELECT `".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: 1\nNear `SELECT SELECT `".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -5625,19 +5809,27 @@ fn parse_start_transaction() {
 
     let res = parse_sql_statements("START TRANSACTION ISOLATION LEVEL BAD");
     assert_eq!(
-        ParserError::ParserError("Expected isolation level, found: BAD\nNear `START TRANSACTION ISOLATION LEVEL`".to_string()),
+        ParserError::ParserError(
+            "Expected isolation level, found: BAD\nNear `START TRANSACTION ISOLATION LEVEL`"
+                .to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("START TRANSACTION BAD");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: BAD\nNear `START TRANSACTION`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: BAD\nNear `START TRANSACTION`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("START TRANSACTION READ ONLY,");
     assert_eq!(
-        ParserError::ParserError("Expected transaction mode, found: EOF\nNear `START TRANSACTION READ ONLY,`".to_string()),
+        ParserError::ParserError(
+            "Expected transaction mode, found: EOF\nNear `START TRANSACTION READ ONLY,`"
+                .to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -6138,7 +6330,8 @@ fn parse_merge() {
                             top: None,
                             projection: vec![SelectItem::Wildcard(
                                 WildcardAdditionalOptions::default()
-                            ).empty_span()],
+                            )
+                            .empty_span()],
                             into: None,
                             from: vec![TableWithJoins {
                                 relation: TableFactor::Table {
@@ -6170,7 +6363,8 @@ fn parse_merge() {
                         name: Ident {
                             value: "stg".to_string(),
                             quote_style: None,
-                        }.empty_span(),
+                        }
+                        .empty_span(),
                         columns: vec![],
                     }),
                 }
@@ -6397,11 +6591,14 @@ fn test_placeholder() {
     let ast = verified_only_select(sql);
     assert_eq!(
         ast.selection,
-        Some(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
-            op: BinaryOperator::Eq,
-            right: Box::new(Expr::Value(Value::Placeholder("?".into()))),
-        }.empty_span())
+        Some(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::Value(Value::Placeholder("?".into()))),
+            }
+            .empty_span()
+        )
     );
 
     let dialects = TestedDialects {
@@ -6422,11 +6619,14 @@ fn test_placeholder() {
     let ast = dialects.verified_only_select(sql);
     assert_eq!(
         ast.selection,
-        Some(Expr::BinaryOp {
-            left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
-            op: BinaryOperator::Eq,
-            right: Box::new(Expr::Value(Value::Placeholder("$Id1".into()))),
-        }.empty_span())
+        Some(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::Value(Value::Placeholder("$Id1".into()))),
+            }
+            .empty_span()
+        )
     );
 
     let sql = "SELECT * FROM student LIMIT $1 OFFSET $2";
@@ -6448,7 +6648,8 @@ fn test_placeholder() {
     assert_eq!(
         ast.projection,
         vec![
-            UnnamedExpr(Expr::Value(Value::Placeholder("$fromage_français".into())).empty_span()).empty_span(),
+            UnnamedExpr(Expr::Value(Value::Placeholder("$fromage_français".into())).empty_span())
+                .empty_span(),
             UnnamedExpr(Expr::Value(Value::Placeholder(":x".into())).empty_span()).empty_span(),
             UnnamedExpr(Expr::Value(Value::Placeholder("?123".into())).empty_span()).empty_span(),
         ]
@@ -6500,7 +6701,8 @@ fn parse_identifiers() {
                 vec![SelectItem::ExprWithAlias {
                     expr: Expr::Identifier(Ident::new("foo").empty_span()).empty_span(),
                     alias: Ident::new("baz").empty_span()
-                }.empty_span()]
+                }
+                .empty_span()]
             )
         }
         _ => {}
@@ -6547,19 +6749,25 @@ fn parse_offset_and_limit() {
     // Can't repeat OFFSET / LIMIT
     let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 OFFSET 2");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: OFFSET\nNear ` foo FROM bar OFFSET 2`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: OFFSET\nNear ` foo FROM bar OFFSET 2`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("SELECT foo FROM bar LIMIT 2 LIMIT 2");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: LIMIT\nNear ` foo FROM bar LIMIT 2`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: LIMIT\nNear ` foo FROM bar LIMIT 2`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 LIMIT 2 OFFSET 2");
     assert_eq!(
-        ParserError::ParserError("Expected end of statement, found: OFFSET\nNear ` bar OFFSET 2 LIMIT 2`".to_string()),
+        ParserError::ParserError(
+            "Expected end of statement, found: OFFSET\nNear ` bar OFFSET 2 LIMIT 2`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -6682,7 +6890,9 @@ fn parse_position_negative() {
     let sql = "SELECT POSITION(foo IN) from bar";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected an expression:, found: )\nNear `SELECT POSITION(foo IN)`".to_string()),
+        ParserError::ParserError(
+            "Expected an expression:, found: )\nNear `SELECT POSITION(foo IN)`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -6964,19 +7174,25 @@ fn parse_cache_table() {
 
     let res = parse_sql_statements("CACHE 'table_name'");
     assert_eq!(
-        ParserError::ParserError("Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE `".to_string()),
+        ParserError::ParserError(
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE `".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE 'table_name' OPTIONS('K1'='V1')");
     assert_eq!(
-        ParserError::ParserError("Expected a `TABLE` keyword, found: OPTIONS\nNear `CACHE 'table_name'`".to_string()),
+        ParserError::ParserError(
+            "Expected a `TABLE` keyword, found: OPTIONS\nNear `CACHE 'table_name'`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE flag 'table_name' OPTIONS('K1'='V1')");
     assert_eq!(
-        ParserError::ParserError("Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE flag`".to_string()),
+        ParserError::ParserError(
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE flag`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -7001,19 +7217,25 @@ fn parse_uncache_table() {
 
     let res = parse_sql_statements("UNCACHE TABLE 'table_name' foo");
     assert_eq!(
-        ParserError::ParserError("Expected an `EOF`, found: foo\nNear `UNCACHE TABLE 'table_name'`".to_string()),
+        ParserError::ParserError(
+            "Expected an `EOF`, found: foo\nNear `UNCACHE TABLE 'table_name'`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("UNCACHE 'table_name' foo");
     assert_eq!(
-        ParserError::ParserError("Expected a `TABLE` keyword, found: 'table_name'\nNear `UNCACHE`".to_string()),
+        ParserError::ParserError(
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `UNCACHE`".to_string()
+        ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("UNCACHE IF EXISTS 'table_name' foo");
     assert_eq!(
-        ParserError::ParserError("Expected a `TABLE` keyword, found: IF\nNear `UNCACHE`".to_string()),
+        ParserError::ParserError(
+            "Expected a `TABLE` keyword, found: IF\nNear `UNCACHE`".to_string()
+        ),
         res.unwrap_err()
     );
 }
@@ -7127,7 +7349,8 @@ fn parse_pivot_table() {
                 name: Ident {
                     value: "p".to_string(),
                     quote_style: None
-                }.empty_span(),
+                }
+                .empty_span(),
                 columns: vec![Ident::new("c"), Ident::new("d")],
             }),
         }

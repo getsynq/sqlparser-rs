@@ -1262,6 +1262,7 @@ impl<'a> Parser<'a> {
     pub fn parse_trim_expr(&mut self) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
         let mut trim_where = None;
+
         if let Token::Word(word) = self.peek_token().token {
             if [Keyword::BOTH, Keyword::LEADING, Keyword::TRAILING]
                 .iter()
@@ -1270,6 +1271,7 @@ impl<'a> Parser<'a> {
                 trim_where = Some(self.parse_trim_where()?);
             }
         }
+
         let expr = self.parse_expr()?;
         if self.parse_keyword(Keyword::FROM) {
             let trim_what = Box::new(expr);
@@ -1281,12 +1283,12 @@ impl<'a> Parser<'a> {
                 trim_what: Some(trim_what),
                 trim_characters: None,
             })
-        } else if self.consume_token(&Token::Comma) {
+        } else if self.consume_token(&Token::Comma) && dialect_of!(self is SnowflakeDialect) {
             let characters = self.parse_comma_separated(Parser::parse_expr)?;
             self.expect_token(&Token::RParen)?;
             Ok(Expr::Trim {
                 expr: Box::new(expr),
-                trim_where,
+                trim_where: None,
                 trim_what: None,
                 trim_characters: Some(characters),
             })

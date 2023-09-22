@@ -582,7 +582,7 @@ pub enum Expr {
     /// ```sql
     /// TRIM([BOTH | LEADING | TRAILING] [<expr> FROM] <expr>)
     /// TRIM(<expr>)
-    /// TRIM(<expr>, [, characters])
+    /// TRIM(<expr>, [, characters]) -- Snowflake
     /// ```
     Trim {
         expr: Box<Expr>,
@@ -1004,11 +1004,11 @@ impl fmt::Display for Expr {
                 }
                 if let Some(trim_char) = trim_what {
                     write!(f, "{trim_char} FROM {expr}")?;
-                }
-                if let Some(characters) = trim_characters {
-                    write!(f, ",{}", display_comma_separated(characters))?;
                 } else {
                     write!(f, "{expr}")?;
+                    if let Some(characters) = trim_characters {
+                        write!(f, ", {}", display_comma_separated(characters))?;
+                    }
                 }
 
                 write!(f, ")")
