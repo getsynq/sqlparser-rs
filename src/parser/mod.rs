@@ -195,7 +195,7 @@ impl fmt::Display for ParserError {
 impl std::error::Error for ParserError {}
 
 // By default, allow expressions up to this deep before erroring
-const DEFAULT_REMAINING_DEPTH: usize = 48;
+const DEFAULT_REMAINING_DEPTH: usize = 44;
 
 /// Options that control how the [`Parser`] parses SQL text
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -770,6 +770,7 @@ impl<'a> Parser<'a> {
                         special: true,
                         order_by: vec![],
                         null_treatment: None,
+                        within_group: None,
                     }))
                 }
                 Keyword::CURRENT_TIMESTAMP
@@ -958,6 +959,16 @@ impl<'a> Parser<'a> {
             null_treatment = Some(NullTreatment::RESPECT)
         }
 
+        let within_group = if self.parse_keywords(&[Keyword::WITHIN, Keyword::GROUP]) {
+            self.expect_token(&Token::LParen)?;
+            self.expect_keywords(&[Keyword::ORDER, Keyword::BY])?;
+            let order_by = self.parse_comma_separated(Parser::parse_order_by_expr)?;
+            self.expect_token(&Token::RParen)?;
+            Some(order_by)
+        } else {
+            None
+        };
+
         let over = if self.parse_keyword(Keyword::OVER) {
             if self.consume_token(&Token::LParen) {
                 let window_spec = self.parse_window_spec()?;
@@ -968,6 +979,7 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+
         Ok(Expr::Function(Function {
             name,
             args,
@@ -976,6 +988,7 @@ impl<'a> Parser<'a> {
             special: false,
             order_by,
             null_treatment,
+            within_group,
         }))
     }
 
@@ -994,6 +1007,7 @@ impl<'a> Parser<'a> {
             special,
             order_by,
             null_treatment,
+            within_group: None,
         }))
     }
 
