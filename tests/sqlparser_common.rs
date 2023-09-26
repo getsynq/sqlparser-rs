@@ -7789,4 +7789,28 @@ fn parse_percentile_cont() {
             "Expected ), found: ,\nNear `WITHIN GROUP (ORDER BY metric`".to_owned()
         )
     );
+
+    // BiqQuery syntax not supported
+    // Dialects has different error for expecting number:
+    //  Expected a concrete value VS Expected literal number
+    // So pick only some
+    let same_number_err_dialects = TestedDialects {
+        dialects: vec![
+            Box::new(RedshiftSqlDialect {}),
+            Box::new(MySqlDialect {}),
+            Box::new(SQLiteDialect {}),
+            Box::new(DuckDbDialect {}),
+        ],
+        options: None,
+    };
+    let bigquery_sql = r#"SELECT PERCENTILE_CONT(metric, 0.5) OVER ()"#;
+    assert_eq!(
+        same_number_err_dialects
+            .parse_sql_statements(bigquery_sql)
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected a concrete value, found: metric\nNear `SELECT PERCENTILE_CONT(metric`"
+                .to_owned()
+        )
+    );
 }
