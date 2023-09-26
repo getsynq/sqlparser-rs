@@ -2347,6 +2347,7 @@ fn parse_listagg() {
             )))),
             on_overflow,
             within_group,
+            over: None,
         }),
         expr_from_projection(only(&select.projection))
     );

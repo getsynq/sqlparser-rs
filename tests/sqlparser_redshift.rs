@@ -323,5 +323,10 @@ fn test_create_view_late_binding() {
 
 #[test]
 fn parse_within_group() {
-    redshift().verified_only_select(r#"SELECT LISTAGG(sellerid, ', ') WITHIN GROUP (ORDER BY sellerid) FROM sales WHERE eventid = 4337"#);
+    redshift().verified_only_select(r#"SELECT SOMEAGGFUNC(sellerid, ', ') WITHIN GROUP (ORDER BY sellerid) FROM sales WHERE eventid = 4337"#);
+}
+
+#[test]
+fn parse_listagg() {
+    redshift().verified_only_select(r#"SELECT LISTAGG(a.attname, '|') WITHIN GROUP (ORDER BY a.attsortkeyord) OVER (PARTITION BY n.nspname, c.relname) AS sort_keys FROM bar"#);
 }

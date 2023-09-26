@@ -3880,6 +3880,7 @@ pub struct ListAgg {
     pub separator: Option<Box<Expr>>,
     pub on_overflow: Option<ListAggOnOverflow>,
     pub within_group: Vec<OrderByExpr>,
+    pub over: Option<WindowType>,
 }
 
 impl fmt::Display for ListAgg {
@@ -3903,6 +3904,9 @@ impl fmt::Display for ListAgg {
                 " WITHIN GROUP (ORDER BY {})",
                 display_comma_separated(&self.within_group)
             )?;
+        }
+        if let Some(o) = &self.over {
+            write!(f, " OVER {o}")?;
         }
         Ok(())
     }

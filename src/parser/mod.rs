@@ -969,16 +969,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let over = if self.parse_keyword(Keyword::OVER) {
-            if self.consume_token(&Token::LParen) {
-                let window_spec = self.parse_window_spec()?;
-                Some(WindowType::WindowSpec(window_spec))
-            } else {
-                Some(WindowType::NamedWindow(self.parse_identifier()?))
-            }
-        } else {
-            None
-        };
+        let over = self.parse_over()?;
 
         Ok(Expr::Function(Function {
             name,
@@ -1493,12 +1484,16 @@ impl<'a> Parser<'a> {
         } else {
             vec![]
         };
+
+        let over = self.parse_over()?;
+
         Ok(Expr::ListAgg(ListAgg {
             distinct,
             expr,
             separator,
             on_overflow,
             within_group,
+            over,
         }))
     }
 
@@ -7744,6 +7739,19 @@ impl<'a> Parser<'a> {
             params,
             body: statements,
         })
+    }
+
+    pub fn parse_over(&mut self) -> Result<Option<WindowType>, ParserError> {
+        if self.parse_keyword(Keyword::OVER) {
+            if self.consume_token(&Token::LParen) {
+                let window_spec = self.parse_window_spec()?;
+                Ok(Some(WindowType::WindowSpec(window_spec)))
+            } else {
+                Ok(Some(WindowType::NamedWindow(self.parse_identifier()?)))
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn parse_window_spec(&mut self) -> Result<WindowSpec, ParserError> {
