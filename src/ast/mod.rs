@@ -1059,13 +1059,27 @@ impl fmt::Display for Expr {
             }
             Expr::PercentileCont {
                 percentile,
-                null_treatment: _,
-                value_expr: _,
+                null_treatment,
+                value_expr,
                 within_group,
                 window_spec,
                 alias,
             } => {
-                write!(f, "PERCENTILE_CONT({percentile})")?;
+                //write!(f, "PERCENTILE_CONT({percentile})")?;
+                write!(f, "PERCENTILE_CONT(")?;
+
+                if let Some(expr) = value_expr {
+                    write!(f, "{expr}, ")?;
+                }
+
+                write!(f, "{percentile}")?;
+
+                if let Some(null_treat) = null_treatment {
+                    write!(f, "{null_treat}")?;
+                }
+
+                write!(f, ")")?;
+
                 if let Some(group) = within_group {
                     write!(f, " WITHIN GROUP (ORDER BY {})", group)?;
                 };
@@ -3804,6 +3818,15 @@ pub struct Function {
 pub enum NullTreatment {
     IGNORE,
     RESPECT,
+}
+
+impl fmt::Display for NullTreatment {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            NullTreatment::IGNORE => " IGNORE NULLS",
+            NullTreatment::RESPECT => " RESPECT NULLS",
+        })
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
