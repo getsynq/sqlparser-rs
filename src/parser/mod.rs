@@ -1345,16 +1345,37 @@ impl<'a> Parser<'a> {
     ///
     /// ```sql
     /// SELECT PERCENTILE_CONT(<percentile>) WITHIN GROUP (ORDER BY <expr>) OVER (PARTITION BY <expr>)
+    /// SELECT PERCENTILE_CONT(<expr>, <percentile>) OVER () -- BigQuery
     /// ```
     pub fn parse_percentile_cont_expr(&mut self) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
+
+        let value_expr = if dialect_of!(self is BigQueryDialect) {
+            let expr = self.parse_expr()?;
+            self.expect_token(&Token::Comma)?;
+            Some(Box::new(expr))
+        } else {
+            None
+        };
+
         let percentile = self.parse_number_value()?;
+
+        let mut null_treatment = None;
+        if dialect_of!(self is BigQueryDialect) {
+            null_treatment = if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
+                Some(NullTreatment::IGNORE)
+            } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
+                Some(NullTreatment::RESPECT)
+            } else {
+                None
+            };
+        };
+
         self.expect_token(&Token::RParen)?;
 
         let within_group = if self.parse_keywords(&[Keyword::WITHIN, Keyword::GROUP]) {
             self.expect_token(&Token::LParen)?;
-            self.expect_keyword(Keyword::ORDER)?;
-            self.expect_keyword(Keyword::BY)?;
+            self.expect_keywords(&[Keyword::ORDER, Keyword::BY])?;
             let order_by = self.parse_order_by_expr()?;
             self.expect_token(&Token::RParen)?;
             Some(Box::new(order_by))
@@ -1374,6 +1395,8 @@ impl<'a> Parser<'a> {
 
         Ok(Expr::PercentileCont {
             percentile,
+            null_treatment,
+            value_expr,
             within_group,
             window_spec,
             alias,

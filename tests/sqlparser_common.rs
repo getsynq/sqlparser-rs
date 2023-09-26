@@ -7736,6 +7736,21 @@ fn parse_create_type() {
 
 #[test]
 fn parse_percentile_cont() {
+    let dialects = TestedDialects {
+        dialects: vec![
+            Box::new(GenericDialect {}),
+            Box::new(PostgreSqlDialect {}),
+            Box::new(MsSqlDialect {}),
+            Box::new(AnsiDialect {}),
+            Box::new(SnowflakeDialect {}),
+            Box::new(RedshiftSqlDialect {}),
+            Box::new(MySqlDialect {}),
+            Box::new(SQLiteDialect {}),
+            Box::new(DuckDbDialect {}),
+        ],
+        options: None,
+    };
+
     let statements = vec![
         r#"SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY metric) OVER (PARTITION BY team) AS median FROM metric_sample"#,
         r#"SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY metric ASC) OVER (PARTITION BY team) FROM metric_sample"#,
@@ -7743,17 +7758,17 @@ fn parse_percentile_cont() {
     ];
 
     for statement in statements {
-        //println!("statement: {:#?}", statement);
-        assert_eq!(verified_stmt(statement).to_string(), statement);
+        assert_eq!(dialects.verified_stmt(statement).to_string(), statement);
     }
 
     let select_sql = r#"SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY metric)"#;
-    let select = verified_only_select(select_sql);
-    println!("res: {:#?}", expr_from_projection(only(&select.projection)));
+    let select = dialects.verified_only_select(select_sql);
 
     assert_eq!(
         &Expr::PercentileCont {
             percentile: Value::Number("0.5".into(), false),
+            value_expr: None,
+            null_treatment: None,
             within_group: Some(Box::new(OrderByExpr {
                 expr: Expr::Identifier(Ident::new("metric").empty_span()),
                 asc: None,
@@ -7765,11 +7780,13 @@ fn parse_percentile_cont() {
         expr_from_projection(only(&select.projection))
     );
 
-    let bad_sql = r#"SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (BY metric) FROM metric_sample"#;
+    // Only one order_by_expression is allowed
+    let bad_sql =
+        r#"SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY metric, another) FROM metric_sample"#;
     assert_eq!(
-        parse_sql_statements(bad_sql).unwrap_err(),
+        dialects.parse_sql_statements(bad_sql).unwrap_err(),
         ParserError::ParserError(
-            "Expected ORDER, found: BY\nNear `PERCENTILE_CONT(0.5) WITHIN GROUP (`".to_owned()
+            "Expected ), found: ,\nNear `WITHIN GROUP (ORDER BY metric`".to_owned()
         )
     );
 }

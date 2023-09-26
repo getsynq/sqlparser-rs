@@ -612,6 +612,8 @@ pub enum Expr {
     /// ```
     PercentileCont {
         percentile: Value,
+        null_treatment: Option<NullTreatment>,
+        value_expr: Option<Box<Expr>>,
         within_group: Option<Box<OrderByExpr>>,
         window_spec: Option<WindowSpec>,
         alias: Option<WithSpan<Ident>>,
@@ -1057,6 +1059,8 @@ impl fmt::Display for Expr {
             }
             Expr::PercentileCont {
                 percentile,
+                null_treatment: _,
+                value_expr: _,
                 within_group,
                 window_spec,
                 alias,

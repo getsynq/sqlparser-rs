@@ -523,3 +523,16 @@ fn parse_map_access_offset() {
         bigquery().verified_only_select(sql);
     }
 }
+
+#[test]
+fn parse_percentile_cont() {
+    let statements = vec![
+        r#"SELECT PERCENTILE_CONT(metric, 0.5 RESPECT NULLS) OVER (PARTITION BY team) AS median FROM metric_sample"#,
+        r#"SELECT PERCENTILE_CONT(metric, 0.5 IGNORE NULLS) OVER ()"#,
+        r#"SELECT PERCENTILE_CONT(metric, 0.5) OVER()"#,
+    ];
+
+    for statement in statements {
+        assert_eq!(bigquery().verified_stmt(statement).to_string(), statement);
+    }
+}
