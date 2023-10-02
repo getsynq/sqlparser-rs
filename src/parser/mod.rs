@@ -7114,7 +7114,7 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        let opt_except = if dialect_of!(self is GenericDialect | BigQueryDialect) {
+        let opt_except = if dialect_of!(self is GenericDialect | BigQueryDialect | ClickHouseDialect) {
             self.parse_optional_select_item_except()?
         } else {
             None
@@ -7125,8 +7125,14 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let opt_replace = if dialect_of!(self is GenericDialect | BigQueryDialect) {
+        let opt_replace = if dialect_of!(self is GenericDialect | BigQueryDialect | ClickHouseDialect) {
             self.parse_optional_select_item_replace()?
+        } else {
+            None
+        };
+
+        let opt_apply = if dialect_of!(self is GenericDialect | ClickHouseDialect) {
+            self.parse_optional_select_item_apply()?
         } else {
             None
         };
@@ -7136,6 +7142,7 @@ impl<'a> Parser<'a> {
             opt_except,
             opt_rename,
             opt_replace,
+            opt_apply,
         })
     }
 
@@ -7241,6 +7248,21 @@ impl<'a> Parser<'a> {
             column_name,
             as_keyword,
         })
+    }
+
+    pub fn parse_optional_select_item_apply(
+        &mut self,
+    ) -> Result<Option<ApplySelectItem>, ParserError> {
+        let opt_apply = if self.parse_keyword(Keyword::APPLY) {
+            self.expect_token(&Token::LParen)?;
+                let func = self.parse_object_name()?;
+                self.expect_token(&Token::RParen)?;
+                Some(ApplySelectItem{func})
+        } else {
+            None
+        };
+
+        Ok(opt_apply)
     }
 
     /// Parse an expression, optionally followed by ASC or DESC (used in ORDER BY)

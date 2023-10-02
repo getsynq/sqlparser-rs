@@ -434,12 +434,17 @@ pub struct WildcardAdditionalOptions {
     /// `[EXCLUDE...]`.
     pub opt_exclude: Option<ExcludeSelectItem>,
     /// `[EXCEPT...]`.
+    ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#except>
     pub opt_except: Option<ExceptSelectItem>,
     /// `[RENAME ...]`.
     pub opt_rename: Option<RenameSelectItem>,
     /// `[REPLACE]`
     ///  BigQuery syntax: <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace>
+    ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#replace>
     pub opt_replace: Option<ReplaceSelectItem>,
+    /// `[APPLY]`
+    ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#apply>
+    pub opt_apply: Option<ApplySelectItem>,
 }
 
 impl fmt::Display for WildcardAdditionalOptions {
@@ -455,6 +460,9 @@ impl fmt::Display for WildcardAdditionalOptions {
         }
         if let Some(replace) = &self.opt_replace {
             write!(f, " {replace}")?;
+        }
+        if let Some(apply) = &self.opt_apply {
+            write!(f, " {apply}")?;
         }
         Ok(())
     }
@@ -593,6 +601,20 @@ impl fmt::Display for ReplaceSelectItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "REPLACE")?;
         write!(f, " ({})", display_comma_separated(&self.items))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ApplySelectItem {
+    pub func: ObjectName,
+}
+
+impl fmt::Display for ApplySelectItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "APPLY ({})", self.func)?;
         Ok(())
     }
 }

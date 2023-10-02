@@ -442,6 +442,26 @@ fn parse_select_ignore_nulls() {
     clickhouse().verified_stmt("SELECT last_value(b) IGNORE NULLS FROM test_data");
 }
 
+#[test]
+fn parse_select_star_except() {
+    clickhouse().verified_stmt("SELECT * EXCEPT (prev_status) FROM anomalies");
+}
+
+#[test]
+fn parse_select_star_replace() {
+    clickhouse().verified_stmt("SELECT * REPLACE (i + 1 AS i) FROM columns_transformers");
+}
+
+#[test]
+fn parse_select_star_apply() {
+    clickhouse().verified_stmt("SELECT * APPLY (toString) FROM columns_transformers");
+}
+
+#[test]
+fn parse_select_star_modifiers() {
+    clickhouse().verified_stmt("SELECT * APPLY(toString) APPLY(length) APPLY(max) from columns_transformers");
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],
