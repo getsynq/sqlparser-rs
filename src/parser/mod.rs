@@ -815,6 +815,7 @@ impl<'a> Parser<'a> {
                 // identifier, a function call, or a simple identifier:
                 _ => match self.peek_token().token {
                     Token::LParen | Token::Period => {
+                        let start_idx = self.index;
                         let mut id_parts: Vec<Ident> = vec![w.to_ident()];
                         while self.consume_token(&Token::Period) {
                             let next_token = self.next_token();
@@ -831,7 +832,9 @@ impl<'a> Parser<'a> {
                             self.prev_token();
                             self.parse_function(ObjectName(id_parts))
                         } else {
-                            Ok(Expr::CompoundIdentifier(id_parts))
+                            Ok(Expr::CompoundIdentifier(
+                                id_parts.spanning(self.span_from_index(start_idx)),
+                            ))
                         }
                     }
                     // string introducer https://dev.mysql.com/doc/refman/8.0/en/charset-introducer.html
