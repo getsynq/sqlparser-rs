@@ -43,7 +43,7 @@ pub use self::query::{
     IdentWithAlias, Join, JoinConstraint, JoinOperator, LateralView, LockClause, LockType,
     NamedWindowDefinition, NonBlock, Offset, OffsetRows, OrderByExpr, Query, RenameSelectItem,
     ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem,
-    SelectionCount, SetExpr, SetOperator, SetQuantifier, Table, TableAlias, TableFactor,
+    SelectionCount, SetExpr, SetOperator, SetQuantifier, StructItem, Table, TableAlias, TableFactor,
     TableSampleSeed, TableVersion, TableWithJoins, Top, Values, WildcardAdditionalOptions, With,
 };
 pub use self::value::{

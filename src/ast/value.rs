@@ -20,7 +20,7 @@ use bigdecimal::BigDecimal;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::ast::Expr;
+use crate::ast::{DataType, display_comma_separated, Expr, StructItem};
 #[cfg(feature = "visitor")]
 use sqlparser_derive::{Visit, VisitMut};
 
@@ -31,6 +31,13 @@ pub struct ObjectConstantKeyValue {
     pub key: String,
     pub value: Box<Expr>,
 }
+
+impl fmt::Display for ObjectConstantKeyValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.key, self.value)
+    }
+}
+
 
 /// Primitive SQL values such as number and string
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -78,6 +85,11 @@ pub enum Value {
     /// OBJECT constant as used by Snowflake
     /// https://docs.snowflake.com/en/sql-reference/data-types-semistructured#object-constants
     ObjectConstant(Vec<ObjectConstantKeyValue>),
+
+    Struct{
+        types: Option<Vec<DataType>>,
+        items: Vec<StructItem>
+    }
 }
 
 impl fmt::Display for Value {
@@ -101,18 +113,15 @@ impl fmt::Display for Value {
                 if fields.is_empty() {
                     write!(f, "{}", "{}")
                 } else {
-                    let mut first = true;
-                    write!(f, "{}", "{ ")?;
-                    for ObjectConstantKeyValue { key, value } in fields {
-                        if first {
-                            first = false;
-                        } else {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "'{}': {}", key, value)?;
-                    }
-                    write!(f, "{}", " }")
+                    write!(f, "{} {} {}", "{", display_comma_separated(fields), "}")
                 }
+            }
+            Value::Struct { types, items } => {
+                write!(f, "{}", "STRUCT")?;
+                if let Some(types) = types {
+                    write!(f, "<{}>", display_comma_separated(types))?;
+                }
+                write!(f, "({})", display_comma_separated(items))
             }
         }
     }

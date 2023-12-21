@@ -10,14 +10,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-mod test_utils;
-
 use std::ops::Deref;
 
 use sqlparser::ast::*;
 use sqlparser::dialect::{BigQueryDialect, GenericDialect};
 use test_utils::*;
+
+#[macro_use]
+mod test_utils;
 
 #[test]
 fn parse_literal_string() {
@@ -627,4 +627,23 @@ fn test_external_query() {
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY(\"projects/bq-proj/locations/EU/connections/connection_name\",\"SELECT * FROM public.auth0_user \")");
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY(\"projects/bq-proj/locations/EU/connections/connection_name\",\"SELECT * FROM public.auth0_user \", '{\"default_type_for_decimal_columns\":\"numeric\"}')");
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY('connection_id','''SELECT * FROM customers AS c ORDER BY c.customer_id''')");
+}
+
+#[test]
+fn test_typeless_struct() {
+    bigquery().verified_expr(r#"STRUCT(1, 2, 3)"#);
+    bigquery().verified_expr(r#"STRUCT()"#);
+    bigquery().verified_expr(r#"STRUCT('abc')"#);
+    bigquery().verified_expr(r#"STRUCT(1, t.str_col)"#);
+    bigquery().verified_expr(r#"STRUCT(1 AS a, 'abc' AS b)"#);
+    bigquery().verified_expr(r#"STRUCT(str_col AS abc)"#);
+}
+
+#[test]
+fn test_typed_struct() {
+    bigquery().verified_expr(r#"STRUCT<INT64>(5)"#);
+    bigquery().verified_expr(r#"STRUCT<DATE>("2011-05-05")"#);
+    bigquery().verified_expr(r#"STRUCT<x INT64, y string>(1, t.str_col)"#);
+    bigquery().verified_expr(r#"STRUCT<INT64>(int_col)"#);
+    bigquery().verified_expr(r#"STRUCT<x INT64>(5 AS x)"#); // Error - Typed syntax does not allow AS
 }

@@ -416,6 +416,17 @@ pub enum AggregateItem {
     ExprWithAlias { expr: Expr, alias: Ident },
 }
 
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum StructItem {
+    /// Any expression, not followed by `[ AS ] alias`
+    UnnamedExpr(Expr),
+    /// An expression, followed by `[ AS ] alias`
+    ExprWithAlias { expr: Expr, alias: Ident },
+}
+
 /// Single aliased identifier
 ///
 /// # Syntax
@@ -656,6 +667,16 @@ impl fmt::Display for AggregateItem {
         match &self {
             AggregateItem::UnnamedExpr(expr) => write!(f, "{expr}"),
             AggregateItem::ExprWithAlias { expr, alias } => write!(f, "{expr} AS {alias}"),
+        }
+    }
+}
+
+
+impl fmt::Display for StructItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            StructItem::UnnamedExpr(expr) => write!(f, "{expr}"),
+            StructItem::ExprWithAlias { expr, alias } => write!(f, "{expr} AS {alias}"),
         }
     }
 }

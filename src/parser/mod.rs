@@ -824,7 +824,7 @@ impl<'a> Parser<'a> {
                 // Here `w` is a word, check if it's a part of a multi-part
                 // identifier, a function call, or a simple identifier:
                 _ => match self.peek_token().token {
-                    Token::LParen | Token::Period => {
+                    Token::LParen | Token::Period | Token::Lt => {
                         let mut id_parts: Vec<Ident> = vec![w.to_ident()];
                         while self.consume_token(&Token::Period) {
                             let next_token = self.next_token();
@@ -839,7 +839,21 @@ impl<'a> Parser<'a> {
 
                         if self.consume_token(&Token::LParen) {
                             self.prev_token();
-                            self.parse_function(ObjectName(id_parts))
+                            if dialect_of!(self is BigQueryDialect)
+                                && w.value.to_lowercase() == "struct"
+                                && id_parts.len() == 1
+                            {
+                                self.parse_bigquery_struct(None)
+                            } else {
+                                self.parse_function(ObjectName(id_parts))
+                            }
+                        } else if dialect_of!(self is BigQueryDialect)
+                            && w.value.to_lowercase() == "struct"
+                            && id_parts.len() == 1
+                            && self.consume_token(&Token::Lt)
+                        {
+                            self.prev_token();
+                            self.parse_typed_bigquery_struct()
                         } else {
                             Ok(Expr::CompoundIdentifier(
                                 id_parts.spanning(self.span_from_index(start_idx)),
@@ -5166,6 +5180,14 @@ impl<'a> Parser<'a> {
                         Ok(DataType::Int4(optional_precision?))
                     }
                 }
+                Keyword::INT64 => {
+                    let optional_precision = self.parse_optional_precision();
+                    if self.parse_keyword(Keyword::UNSIGNED) {
+                        Ok(DataType::UnsignedInt4(optional_precision?))
+                    } else {
+                        Ok(DataType::Int64(optional_precision?))
+                    }
+                }
                 Keyword::INTEGER => {
                     let optional_precision = self.parse_optional_precision();
                     if self.parse_keyword(Keyword::UNSIGNED) {
@@ -7579,6 +7601,21 @@ impl<'a> Parser<'a> {
             })
     }
 
+    /// Parse a comma-delimited list of aggregations after PIVOT
+    pub fn parse_struct_item(&mut self) -> Result<StructItem, ParserError> {
+        let expr = self.parse_expr()?;
+        let expr_with_location = expr;
+        if self.parse_keyword(Keyword::AS) {
+            let alias = self.parse_identifier()?.unwrap();
+            Ok(StructItem::ExprWithAlias {
+                expr: expr_with_location,
+                alias,
+            })
+        } else {
+            Ok(StructItem::UnnamedExpr(expr_with_location))
+        }
+    }
+
     /// Parse an [`WildcardAdditionalOptions`](WildcardAdditionalOptions) information for wildcard select items.
     ///
     /// If it is not possible to parse it, will return an option.
@@ -8347,6 +8384,26 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::RParen)?;
         Ok(partitions)
     }
+    fn parse_bigquery_struct(&mut self, types: Option<Vec<DataType>>) -> Result<Expr, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        if self.consume_token(&Token::RParen) {
+            return Ok(Expr::Value(Value::Struct {
+                types,
+                items: vec![],
+            }));
+        }
+        let items = self.parse_comma_separated(Parser::parse_struct_item)?;
+        self.expect_token(&Token::RParen)?;
+        Ok(Expr::Value(Value::Struct { types, items }))
+    }
+
+    fn parse_typed_bigquery_struct(&mut self) -> Result<Expr, ParserError> {
+        self.expect_token(&Token::Lt)?;
+        let types = Some(self.parse_comma_separated(Parser::parse_data_type)?);
+        self.expect_token(&Token::Gt)?;
+        self.parse_bigquery_struct(types)
+    }
+
 }
 
 impl Word {
