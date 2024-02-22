@@ -1211,3 +1211,39 @@ fn test_select_json_field() {
         _select.projection[0]
     );
 }
+
+#[test]
+fn test_safe_function_prefix() {
+    let _select =
+        bigquery().verified_only_select("SELECT SAFE.SUBSTR('foo', 0, -2) AS safe_output");
+
+    assert_eq!(
+        SelectItem::ExprWithAlias {
+            expr: Expr::Function(Function {
+                name: ObjectName(vec!["SAFE.SUBSTR".into()]),
+                args: vec![
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(
+                        Value::SingleQuotedString("foo".to_string())
+                    ))),
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("0")))),
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::UnaryOp {
+                        op: UnaryOperator::Minus,
+                        expr: Box::new(Expr::Value(number("2"))),
+                    })),
+                ],
+                over: None,
+                distinct: false,
+                special: false,
+                order_by: vec![],
+                limit: None,
+                on_overflow: None,
+                null_treatment: None,
+                within_group: None,
+            })
+            .empty_span(),
+            alias: Ident::new("safe_output").empty_span(),
+        }
+        .empty_span(),
+        _select.projection[0]
+    );
+}
