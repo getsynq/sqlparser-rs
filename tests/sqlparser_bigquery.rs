@@ -58,7 +58,7 @@ fn parse_byte_literal() {
 #[test]
 fn parse_raw_literal() {
     let sql = r#"SELECT R'abc', R"abc", R'f\(abc,(.*),def\)', R"f\(abc,(.*),def\)""#;
-    let stmt = bigquery().one_statement_parses_to(
+    let stmt = bigquery_unescaped().one_statement_parses_to(
         sql,
         r"SELECT R'abc', R'abc', R'f\(abc,(.*),def\)', R'f\(abc,(.*),def\)'",
     );
@@ -821,7 +821,7 @@ fn parse_cast_string_to_bytes_format() {
 #[test]
 fn parse_cast_bytes_to_string_format() {
     let sql = r#"SELECT CAST(B'\x48\x65\x6c\x6c\x6f' AS STRING FORMAT 'ASCII') AS bytes_to_string"#;
-    bigquery().verified_only_select(sql);
+    bigquery_unescaped().verified_only_select(sql);
 }
 
 #[test]
@@ -848,7 +848,7 @@ fn parse_like() {
             "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = bigquery().verified_only_select(sql);
+        let select = bigquery_unescaped().verified_only_select(sql);
         assert_eq!(
             Expr::Like {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -1060,6 +1060,13 @@ fn bigquery() -> TestedDialects {
     }
 }
 
+fn bigquery_unescaped() -> TestedDialects {
+    TestedDialects {
+        dialects: vec![Box::new(BigQueryDialect {})],
+        options: Some(ParserOptions::new().with_unescape(false)),
+    }
+}
+
 fn bigquery_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(BigQueryDialect {}), Box::new(GenericDialect {})],
@@ -1120,9 +1127,9 @@ fn test_array_agg_over() {
 
 #[test]
 fn test_trim() {
-    bigquery().verified_only_select(r#"SELECT CAST(TRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
-    bigquery().verified_only_select(r#"SELECT CAST(LTRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
-    bigquery().verified_only_select(r#"SELECT CAST(RTRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
+    bigquery_unescaped().verified_only_select(r#"SELECT CAST(TRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
+    bigquery_unescaped().verified_only_select(r#"SELECT CAST(LTRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
+    bigquery_unescaped().verified_only_select(r#"SELECT CAST(RTRIM(NULLIF(TRIM(JSON_QUERY(json_dump, "$.email_verified")), ''), '\"') AS BOOL) AS is_email_verified FROM foo"#);
 }
 
 #[test]
@@ -1243,15 +1250,10 @@ fn test_bigquery_single_line_comment_parsing() {
 
 #[test]
 fn test_regexp_string_double_quote() {
-    let dialect = TestedDialects {
-        dialects: vec![Box::new(BigQueryDialect {})],
-        options: Some(ParserOptions::new().with_unescape(false)),
-    };
-
-    dialect.verified_stmt(r"SELECT 'I\'m fine'");
-    dialect.verified_stmt(r"SELECT 'I\\\'m fine'");
-    dialect.verified_stmt(r#"SELECT 'I''m fine'"#);
-    dialect.verified_stmt(r#"SELECT "I'm ''fine''""#);
-    dialect.verified_stmt(r#"SELECT "I\\\"m fine""#);
-    dialect.verified_stmt(r#"SELECT "[\"\\[\\]]""#);
+    bigquery_unescaped().verified_stmt(r"SELECT 'I\'m fine'");
+    bigquery_unescaped().verified_stmt(r"SELECT 'I\\\'m fine'");
+    bigquery_unescaped().verified_stmt(r#"SELECT 'I''m fine'"#);
+    bigquery_unescaped().verified_stmt(r#"SELECT "I'm ''fine''""#);
+    bigquery_unescaped().verified_stmt(r#"SELECT "I\\\"m fine""#);
+    bigquery_unescaped().verified_stmt(r#"SELECT "[\"\\[\\]]""#);
 }
