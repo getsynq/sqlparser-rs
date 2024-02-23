@@ -18,7 +18,7 @@ use std::ops::Deref;
 
 use sqlparser::ast::*;
 use sqlparser::dialect::{BigQueryDialect, GenericDialect};
-use sqlparser::parser::ParserError;
+use sqlparser::parser::{ParserError, ParserOptions};
 use sqlparser::tokenizer::*;
 use test_utils::*;
 
@@ -1239,4 +1239,19 @@ fn test_bigquery_single_line_comment_parsing() {
         "SELECT book# this is a comment \n FROM library",
         "SELECT book FROM library",
     );
+}
+
+#[test]
+fn test_regexp_string_double_quote() {
+    let dialect = TestedDialects {
+        dialects: vec![Box::new(BigQueryDialect {})],
+        options: Some(ParserOptions::new().with_unescape(false)),
+    };
+
+    dialect.verified_stmt(r"SELECT 'I\'m fine'");
+    dialect.verified_stmt(r"SELECT 'I\\\'m fine'");
+    dialect.verified_stmt(r#"SELECT 'I''m fine'"#);
+    dialect.verified_stmt(r#"SELECT "I'm ''fine''""#);
+    dialect.verified_stmt(r#"SELECT "I\\\"m fine""#);
+    dialect.verified_stmt(r#"SELECT "[\"\\[\\]]""#);
 }

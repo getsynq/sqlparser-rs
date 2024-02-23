@@ -1365,7 +1365,7 @@ impl<'a> Tokenizer<'a> {
                     // consume
                     chars.next();
                     // slash escaping is specific to MySQL dialect.
-                    if dialect_of!(self is MySqlDialect) {
+                    if dialect_of!(self is MySqlDialect | BigQueryDialect) {
                         if let Some(next) = chars.peek() {
                             if !self.unescape {
                                 // In no-escape mode, the given query has to be saved completely including backslashes.
