@@ -1370,7 +1370,7 @@ fn parse_constraints() {
     snowflake().verified_stmt(
         r#"CREATE TABLE foo (id VARCHAR(32), CONSTRAINT "id_uk" UNIQUE (id) NOVALIDATE RELY)"#,
     );
-    let stmt = snowflake().verified_stmt(
+    snowflake().verified_stmt(
         r#"ALTER TABLE foo ADD CONSTRAINT "bar" FOREIGN KEY (baz) REFERENCES othertable(baz) ON DELETE NO ACTION NORELY"#,
     );
 }
