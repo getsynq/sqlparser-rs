@@ -7719,8 +7719,14 @@ fn parse_uncache_table() {
 #[test]
 fn parse_deeply_nested_parens_hits_recursion_limits() {
     let sql = "(".repeat(1000);
-    let res = parse_sql_statements(&sql);
-    assert_eq!(ParserError::RecursionLimitExceeded, res.unwrap_err());
+    let dialect = GenericDialect {};
+    let res = Parser::new(&dialect)
+        .try_with_sql(&sql)
+        .expect("tokenize to work")
+        .with_recursion_limit(38)
+        .parse_statements();
+
+    assert_eq!(res, Err(ParserError::RecursionLimitExceeded));
 }
 
 #[test]
