@@ -378,6 +378,12 @@ fn test_escape_string() {
 }
 
 #[test]
+fn test_distribution_styles() {
+    let sql = "CREATE TABLE foo (id VARCHAR(32)) DISTSTYLE KEY DISTKEY(id) COMPOUND SORTKEY(id)";
+    redshift().verified_stmt(sql);
+}
+
+#[test]
 fn test_utf8_column_names() {
     redshift().verified_stmt("SELECT financing_cost_€k FROM tbl");
 }
