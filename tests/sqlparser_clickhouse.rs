@@ -14,7 +14,7 @@
 //! Test SQL syntax specific to ClickHouse.
 
 #[cfg(test)]
-use assert_eq;
+use pretty_assertions::assert_eq;
 use sqlparser::ast::Expr::{ArrayIndex, BinaryOp, Identifier};
 use sqlparser::ast::Ident;
 use sqlparser::ast::SelectItem::UnnamedExpr;
@@ -189,33 +189,33 @@ fn parse_kill() {
 #[test]
 fn parse_create_table_order_by() {
     clickhouse().one_statement_parses_to(
-        "CREATE TABLE analytics.int_user_stats (`user_id` String, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY tuple() SETTINGS index_granularity = 8192",
-        "CREATE TABLE analytics.int_user_stats (`user_id` String, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY () SETTINGS index_granularity = 8192"
+        "CREATE TABLE analytics.int_user_stats (`user_id` STRING, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY tuple() SETTINGS index_granularity = 8192",
+        "CREATE TABLE analytics.int_user_stats (`user_id` STRING, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY () SETTINGS index_granularity = 8192"
     );
 }
 
 #[test]
 fn parse_create_table_primary_key() {
     clickhouse().verified_stmt(
-        "CREATE TABLE analytics.int_user_stats (`user_id` String, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') PRIMARY KEY (user_id) SETTINGS index_granularity = 8192",
+        "CREATE TABLE analytics.int_user_stats (`user_id` STRING, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') PRIMARY KEY (user_id) SETTINGS index_granularity = 8192",
     );
 }
 
 #[test]
 fn parse_create_table_ttl() {
     clickhouse().verified_stmt(
-        "CREATE TABLE analytics.int_user_stats (`user_id` String, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY (user_id) TTL toDateTime(state_at) + toIntervalHour(12) SETTINGS index_granularity = 8192",
+        "CREATE TABLE analytics.int_user_stats (`user_id` STRING, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY (user_id) TTL toDateTime(state_at) + toIntervalHour(12) SETTINGS index_granularity = 8192",
     );
 }
 
 #[test]
 fn parse_create_table_column_codec() {
-    clickhouse().verified_stmt("CREATE TABLE anomalies.metrics_volume (`ingested_at` DateTime64(8,'UTC') CODEC(DoubleDelta, ZSTD(1))) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', ingested_at) ORDER BY (workspace, integration_id, path, segment, scheduled_at) SETTINGS index_granularity = 8192");
+    clickhouse().verified_stmt("CREATE TABLE anomalies.metrics_volume (`ingested_at` DateTime64(8, 'UTC') CODEC(DoubleDelta, ZSTD(1))) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', ingested_at) ORDER BY (workspace, integration_id, path, segment, scheduled_at) SETTINGS index_granularity = 8192"    );
 }
 
 #[test]
 fn parse_create_table_index() {
-    clickhouse().verified_stmt("CREATE TABLE default.runs (`workspace` LowCardinality(String), `id` String, `comment` String, INDEX bloom_filter_id_index_4 id TYPE bloom_filter GRANULARITY 4, INDEX comment_lowercase(lower(comment)) TYPE inverted) ENGINE=ReplacingMergeTree(ingested_at) ORDER BY (workspace, created_at, id) SETTINGS index_granularity = 2048");
+    clickhouse().verified_stmt("CREATE TABLE default.runs (`workspace` LowCardinality(STRING), `id` STRING, `comment` STRING, INDEX bloom_filter_id_index_4 id TYPE bloom_filter GRANULARITY 4, INDEX comment_lowercase(lower(comment)) TYPE inverted) ENGINE=ReplacingMergeTree(ingested_at) ORDER BY (workspace, created_at, id) SETTINGS index_granularity = 2048");
 }
 
 #[test]
@@ -417,10 +417,10 @@ fn parse_create_table() {
         r#"CREATE TABLE "x" ("a" Nullable(DateTime64(8))) ENGINE=MergeTree ORDER BY ("x") AS SELECT * FROM "t" WHERE true"#,
     );
     clickhouse().verified_stmt(
-        r#"CREATE TABLE default.runs_buffer (`workspace` LowCardinality(String), `id` String, `assets` Array(String), `asset_types` Array(Int32), `target` Array(String), `target_type` Array(Int32), `extra_references` Array(String) DEFAULT [], `extra_reference_types` Array(Int32) DEFAULT [], `run_type` Int32, `run_status` Int32, `message` String, `created_at` DateTime64(8,'UTC'), `started_at` DateTime64(8,'UTC'), `finished_at` DateTime64(8,'UTC'), `meta` String, `exclude_status_update` Bool, `ingested_at` DateTime64(8,'UTC'), `parent_ids` Array(String), `skipped` Bool DEFAULT false) ENGINE=Buffer('default', 'runs', 4, 2, 5, 10000, 1000000, 2500000, 10000000)"#,
+        r#"CREATE TABLE default.runs_buffer (`workspace` LowCardinality(STRING), `id` STRING, `assets` Array(STRING), `asset_types` Array(Int32), `target` Array(STRING), `target_type` Array(Int32), `extra_references` Array(STRING) DEFAULT [], `extra_reference_types` Array(Int32) DEFAULT [], `run_type` Int32, `run_status` Int32, `message` STRING, `created_at` DateTime64(8, 'UTC'), `started_at` DateTime64(8, 'UTC'), `finished_at` DateTime64(8, 'UTC'), `meta` STRING, `exclude_status_update` BOOL, `ingested_at` DateTime64(8, 'UTC'), `parent_ids` Array(STRING), `skipped` BOOL DEFAULT false) ENGINE=Buffer('default', 'runs', 4, 2, 5, 10000, 1000000, 2500000, 10000000)"#,
     );
     clickhouse().verified_stmt(
-        r#"CREATE TABLE schema.schema_migrations (`version` Int64, `dirty` UInt8, `sequence` UInt64) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY (sequence) SETTINGS index_granularity = 8192"#,
+        r#"CREATE TABLE schema.schema_migrations (`version` INT64, `dirty` UInt8, `sequence` UInt64) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY (sequence) SETTINGS index_granularity = 8192"#,
     );
 }
 
@@ -497,19 +497,19 @@ fn parse_optimize_table() {
 #[test]
 fn parse_create_view() {
     clickhouse().verified_stmt(
-        r#"CREATE MATERIALIZED VIEW foo (`baz` String) AS SELECT bar AS baz FROM in"#,
+        r#"CREATE MATERIALIZED VIEW foo (`baz` STRING) AS SELECT bar AS baz FROM in"#,
     );
     clickhouse().verified_stmt(
-        r#"CREATE MATERIALIZED VIEW foo TO out (`baz` String) AS SELECT bar AS baz FROM in"#,
+        r#"CREATE MATERIALIZED VIEW foo TO out (`baz` STRING) AS SELECT bar AS baz FROM in"#,
     );
-    clickhouse().verified_stmt(r#"CREATE VIEW foo (`baz` String) AS SELECT bar AS baz FROM in"#);
+    clickhouse().verified_stmt(r#"CREATE VIEW foo (`baz` STRING) AS SELECT bar AS baz FROM in"#);
     clickhouse().verified_stmt(
-        r#"CREATE MATERIALIZED VIEW foo (`baz` String) AS SELECT bar AS baz FROM in"#,
+        r#"CREATE MATERIALIZED VIEW foo (`baz` STRING) AS SELECT bar AS baz FROM in"#,
     );
     clickhouse().verified_stmt(
-        r#"CREATE MATERIALIZED VIEW foo TO out (`baz` String) AS SELECT bar AS baz FROM in"#,
+        r#"CREATE MATERIALIZED VIEW foo TO out (`baz` STRING) AS SELECT bar AS baz FROM in"#,
     );
-    clickhouse().verified_stmt(r#"CREATE VIEW analytics.runs_audit_ingest_daily (`count` UInt64, `ts` DateTime('UTC')) AS SELECT count(*) AS count, toStartOfDay(ingested_at) AS ts FROM analytics.runs_int_runs GROUP BY ts ORDER BY ts DESC"#);
+    clickhouse().verified_stmt("CREATE VIEW analytics.runs_audit_ingest_daily (`count` UInt64, `ts` DATETIME('UTC')) AS SELECT count(*) AS count, toStartOfDay(ingested_at) AS ts FROM analytics.runs_int_runs GROUP BY ts ORDER BY ts DESC");
 }
 
 #[test]
@@ -585,7 +585,7 @@ fn parse_alter_table_attach_and_detach_partition() {
 #[test]
 fn parse_create_materialized_view() {
     clickhouse().verified_stmt(
-        r#"CREATE MATERIALIZED VIEW foo (`baz` String) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', created_at) ORDER BY (workspace, asset) SETTINGS index_granularity = 8192 AS SELECT bar AS baz FROM in"#,
+        r#"CREATE MATERIALIZED VIEW foo (`baz` STRING) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', created_at) ORDER BY (workspace, asset) SETTINGS index_granularity = 8192 AS SELECT bar AS baz FROM in"#,
     );
 }
 
@@ -613,10 +613,7 @@ fn parse_create_table_with_variant_default_expressions() {
                 vec![
                     ColumnDef {
                         name: Ident::new("a").empty_span(),
-                        data_type: DataType::Custom(
-                            ObjectName(vec![Ident::new("DATETIME")]),
-                            vec![]
-                        ),
+                        data_type: DataType::Datetime(None, None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -640,10 +637,7 @@ fn parse_create_table_with_variant_default_expressions() {
                     },
                     ColumnDef {
                         name: Ident::new("b").empty_span(),
-                        data_type: DataType::Custom(
-                            ObjectName(vec![Ident::new("DATETIME")]),
-                            vec![]
-                        ),
+                        data_type: DataType::Datetime(None, None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -667,10 +661,7 @@ fn parse_create_table_with_variant_default_expressions() {
                     },
                     ColumnDef {
                         name: Ident::new("c").empty_span(),
-                        data_type: DataType::Custom(
-                            ObjectName(vec![Ident::new("DATETIME")]),
-                            vec![]
-                        ),
+                        data_type: DataType::Datetime(None, None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -683,7 +674,7 @@ fn parse_create_table_with_variant_default_expressions() {
                     },
                     ColumnDef {
                         name: Ident::new("d").empty_span(),
-                        data_type: DataType::Custom(ObjectName(vec![Ident::new("STRING")]), vec![]),
+                        data_type: DataType::String(None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -709,6 +700,228 @@ fn parse_create_table_with_variant_default_expressions() {
                     }
                 ]
             )
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn column_def(name: Ident, data_type: DataType) -> ColumnDef {
+    ColumnDef {
+        name: name.empty_span(),
+        data_type,
+        collation: None,
+        codec: None,
+        options: vec![],
+        column_options: vec![],
+        mask: None,
+        column_location: None,
+    }
+}
+
+#[test]
+fn parse_clickhouse_data_types() {
+    let sql = concat!(
+        "CREATE TABLE table (",
+        "a1 UInt8, a2 UInt16, a3 UInt32, a4 UInt64, a5 UInt128, a6 UInt256,",
+        " b1 Int8, b2 Int16, b3 Int32, b4 Int64, b5 Int128, b6 Int256,",
+        " c1 Float32, c2 Float64,",
+        " d1 Date32, d2 DateTime64(3), d3 DateTime64(3, 'UTC'),",
+        " e1 FixedString(255),",
+        " f1 LowCardinality(Int32)",
+        ") ORDER BY (a1)",
+    );
+    // ClickHouse has a case-sensitive definition of data type, but canonical representation is not
+    let canonical_sql = sql
+        .replace(" Int8", " INT8")
+        .replace(" Int64", " INT64")
+        .replace(" Float64", " FLOAT64");
+
+    match clickhouse_and_generic().one_statement_parses_to(sql, &canonical_sql) {
+        Statement::CreateTable { name, columns, .. } => {
+            assert_eq!(name, ObjectName(vec!["table".into()]));
+            assert_eq!(
+                columns,
+                vec![
+                    column_def("a1".into(), DataType::UInt8),
+                    column_def("a2".into(), DataType::UInt16),
+                    column_def("a3".into(), DataType::UInt32),
+                    column_def("a4".into(), DataType::UInt64),
+                    column_def("a5".into(), DataType::UInt128),
+                    column_def("a6".into(), DataType::UInt256),
+                    column_def("b1".into(), DataType::Int8(None)),
+                    column_def("b2".into(), DataType::Int16),
+                    column_def("b3".into(), DataType::Int32),
+                    column_def("b4".into(), DataType::Int64),
+                    column_def("b5".into(), DataType::Int128),
+                    column_def("b6".into(), DataType::Int256),
+                    column_def("c1".into(), DataType::Float32),
+                    column_def("c2".into(), DataType::Float64),
+                    column_def("d1".into(), DataType::Date32),
+                    column_def("d2".into(), DataType::Datetime64(3, None)),
+                    column_def("d3".into(), DataType::Datetime64(3, Some("UTC".into()))),
+                    column_def("e1".into(), DataType::FixedString(255)),
+                    column_def(
+                        "f1".into(),
+                        DataType::LowCardinality(Box::new(DataType::Int32))
+                    ),
+                ]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn parse_create_table_with_nullable() {
+    let sql = r#"CREATE TABLE table (k UInt8, a Nullable(String), b Nullable(DateTime64(9, 'UTC')), c Nullable(DateTime64(9)), d Date32 NULL) ENGINE=MergeTree ORDER BY (k)"#;
+    // ClickHouse has a case-sensitive definition of data type, but canonical representation is not
+    let canonical_sql = sql.replace("String", "STRING");
+
+    match clickhouse_and_generic().one_statement_parses_to(sql, &canonical_sql) {
+        Statement::CreateTable { name, columns, .. } => {
+            assert_eq!(name, ObjectName(vec!["table".into()]));
+            assert_eq!(
+                columns,
+                vec![
+                    column_def("k".into(), DataType::UInt8),
+                    column_def(
+                        Ident::new("a"),
+                        DataType::Nullable(Box::new(DataType::String(None)))
+                    ),
+                    column_def(
+                        Ident::new("b"),
+                        DataType::Nullable(Box::new(DataType::Datetime64(
+                            9,
+                            Some("UTC".to_string())
+                        )))
+                    ),
+                    column_def(
+                        "c".into(),
+                        DataType::Nullable(Box::new(DataType::Datetime64(9, None)))
+                    ),
+                    ColumnDef {
+                        name: Ident::new("d").empty_span(),
+                        data_type: DataType::Date32,
+                        collation: None,
+                        codec: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Null
+                        }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    }
+                ]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn parse_create_table_with_nested_data_types() {
+    let sql = concat!(
+        "CREATE TABLE table (",
+        " i Nested(a Array(Int16), b LowCardinality(String)),",
+        " k Array(Tuple(FixedString(128), Int128)),",
+        " l Tuple(a DateTime64(9), b Array(UUID)),",
+        " m Map(String, UInt16)",
+        ") ENGINE=MergeTree ORDER BY (k)"
+    );
+
+    match clickhouse().one_statement_parses_to(sql, "") {
+        Statement::CreateTable { name, columns, .. } => {
+            assert_eq!(name, ObjectName(vec!["table".into()]));
+            assert_eq!(
+                columns,
+                vec![
+                    ColumnDef {
+                        name: Ident::new("i").empty_span(),
+                        data_type: DataType::Nested(vec![
+                            column_def(
+                                "a".into(),
+                                DataType::Array(ArrayElemTypeDef::Parenthesis(Box::new(
+                                    DataType::Int16
+                                ),))
+                            ),
+                            column_def(
+                                "b".into(),
+                                DataType::LowCardinality(Box::new(DataType::String(None)))
+                            )
+                        ]),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("k").empty_span(),
+                        data_type: DataType::Array(ArrayElemTypeDef::Parenthesis(Box::new(
+                            DataType::Tuple(vec![
+                                StructField {
+                                    field_name: None,
+                                    field_type: DataType::FixedString(128),
+                                    options: vec![],
+                                    colon: false,
+                                },
+                                StructField {
+                                    field_name: None,
+                                    field_type: DataType::Int128,
+                                    options: vec![],
+                                    colon: false,
+                                }
+                            ])
+                        ))),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("l").empty_span(),
+                        data_type: DataType::Tuple(vec![
+                            StructField {
+                                field_name: Some(Ident::new("a").empty_span()),
+                                field_type: DataType::Datetime64(9, None),
+                                options: vec![],
+                                colon: false,
+                            },
+                            StructField {
+                                field_name: Some(Ident::new("b").empty_span()),
+                                field_type: DataType::Array(ArrayElemTypeDef::Parenthesis(
+                                    Box::new(DataType::Uuid)
+                                )),
+                                options: vec![],
+                                colon: false,
+                            },
+                        ]),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("m").empty_span(),
+                        data_type: DataType::Map(
+                            Box::new(DataType::String(None)),
+                            Box::new(DataType::UInt16)
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                ]
+            );
         }
         _ => unreachable!(),
     }
@@ -1026,33 +1239,35 @@ fn parse_create_view_if_not_exists() {
 }
 
 #[test]
-fn parse_create_table_comment(){
+fn parse_create_table_comment() {
     clickhouse().verified_stmt(
-        "CREATE TABLE analytics.f_entity_controls_by_type (`path` String) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
+        "CREATE TABLE analytics.f_entity_controls_by_type (`path` STRING) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
     );
     clickhouse().one_statement_parses_to(
         "CREATE TABLE analytics.f_entity_controls_by_type
 (
-    `path` String
+    `path` STRING
 )
 SETTINGS index_granularity = 8192
 COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
-        "CREATE TABLE analytics.f_entity_controls_by_type (`path` String) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' SETTINGS index_granularity = 8192"
+        "CREATE TABLE analytics.f_entity_controls_by_type (`path` STRING) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' SETTINGS index_granularity = 8192"
     );
 }
 
 #[test]
-fn parse_create_view_comment(){
+fn parse_create_view_comment() {
     clickhouse().one_statement_parses_to(
-        "CREATE VIEW foo (col String) AS (SELECT * FROM bar) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
-        "CREATE VIEW foo (col String) COMMENT='Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' AS (SELECT * FROM bar)"
+        "CREATE VIEW foo (col STRING) AS (SELECT * FROM bar) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
+        "CREATE VIEW foo (col STRING) COMMENT='Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' AS (SELECT * FROM bar)"
     );
 }
-
 
 #[test]
 fn parse_in_with_dangling_comma() {
-    clickhouse().one_statement_parses_to("SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test',)", "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test')");
+    clickhouse().one_statement_parses_to(
+        "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test',)",
+        "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test')",
+    );
 }
 
 fn clickhouse() -> TestedDialects {

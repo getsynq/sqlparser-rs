@@ -4158,7 +4158,7 @@ fn parse_literal_datetime() {
     let select = verified_only_select(sql);
     assert_eq!(
         &Expr::TypedString {
-            data_type: DataType::Datetime(None),
+            data_type: DataType::Datetime(None, None),
             value: "1999-01-01 01:23:34.45".into(),
         },
         expr_from_projection(only(&select.projection)),
@@ -7630,7 +7630,6 @@ fn parse_position() {
         expr_from_projection(only(&select.projection))
     );
 }
-
 
 #[test]
 fn parse_position_negative() {

@@ -428,12 +428,12 @@ fn parse_typed_struct_syntax() {
     assert_eq!(
         &Expr::Struct {
             values: vec![Expr::TypedString {
-                data_type: DataType::Datetime(None),
+                data_type: DataType::Datetime(None, None),
                 value: "1999-01-01 01:23:34.45".to_string(),
             },],
             fields: vec![StructField {
                 field_name: None,
-                field_type: DataType::Datetime(None),
+                field_type: DataType::Datetime(None, None),
                 colon: false,
                 options: vec![],
             }],

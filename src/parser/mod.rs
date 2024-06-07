@@ -1772,7 +1772,7 @@ impl<'a> Parser<'a> {
     /// ```
     fn parse_bigquery_struct_literal(&mut self) -> Result<Expr, ParserError> {
         let (fields, trailing_bracket) =
-            self.parse_struct_type_def(Self::parse_big_query_struct_field_def, Keyword::STRUCT)?;
+            self.parse_struct_type_def(Self::parse_struct_field_def, Keyword::STRUCT)?;
         if trailing_bracket.0 {
             return parser_err!(
                 "unmatched > in STRUCT literal",
@@ -1871,13 +1871,16 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    /// Parse a field definition in a BigQuery struct.
+    /// Parse a field definition in a struct [1] or tuple [2].
     /// Syntax:
     ///
     /// ```sql
     /// [field_name] field_type
     /// ```
-    fn parse_big_query_struct_field_def(
+    ///
+    /// [1]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#declaring_a_struct_type
+    /// [2]: https://clickhouse.com/docs/en/sql-reference/data-types/tuple
+    fn parse_struct_field_def(
         &mut self,
     ) -> Result<(StructField, MatchedTrailingBracket), ParserError> {
         let field_name: Option<WithSpan<Ident>> = if let Token::Word(_) = self.peek_token().token {
@@ -1928,6 +1931,47 @@ impl<'a> Parser<'a> {
             },
             trailing_bracket,
         ))
+    }
+
+    /// Parse clickhouse map [1]
+    /// Syntax
+    /// ```sql
+    /// Map(key_data_type, value_data_type)
+    /// ```
+    ///
+    /// [1]: https://clickhouse.com/docs/en/sql-reference/data-types/map
+    fn parse_click_house_map_def(&mut self) -> Result<(DataType, DataType), ParserError> {
+        self.expect_keyword(Keyword::MAP)?;
+        self.expect_token(&Token::LParen)?;
+        let key_data_type = self.parse_data_type()?;
+        self.expect_token(&Token::Comma)?;
+        let value_data_type = self.parse_data_type()?;
+        self.expect_token(&Token::RParen)?;
+
+        Ok((key_data_type, value_data_type))
+    }
+
+    /// Parse clickhouse tuple [1]
+    /// Syntax
+    /// ```sql
+    /// Tuple([field_name] field_type, ...)
+    /// ```
+    ///
+    /// [1]: https://clickhouse.com/docs/en/sql-reference/data-types/tuple
+    fn parse_click_house_tuple_def(&mut self) -> Result<Vec<StructField>, ParserError> {
+        self.expect_keyword(Keyword::TUPLE)?;
+        self.expect_token(&Token::LParen)?;
+        let mut field_defs = vec![];
+        loop {
+            let (def, _) = self.parse_struct_field_def()?;
+            field_defs.push(def);
+            if !self.consume_token(&Token::Comma) {
+                break;
+            }
+        }
+        self.expect_token(&Token::RParen)?;
+
+        Ok(field_defs)
     }
 
     /// For nested types that use the angle bracket syntax, this matches either
@@ -2387,7 +2431,7 @@ impl<'a> Parser<'a> {
             self.options.trailing_commas = true;
             let in_list = Expr::InList {
                 expr: Box::new(expr),
-                list: self.parse_comma_separated0(Parser::parse_expr,Token::RParen)?,
+                list: self.parse_comma_separated0(Parser::parse_expr, Token::RParen)?,
                 negated,
             };
             self.options.trailing_commas = old_value;
@@ -5928,16 +5972,6 @@ impl<'a> Parser<'a> {
     fn parse_data_type_helper(
         &mut self,
     ) -> Result<(DataType, MatchedTrailingBracket), ParserError> {
-        if dialect_of!(self is ClickHouseDialect) {
-            // ClickHouse allows to specify data type as Nullable(DateTime64(8))
-            let type_name = self.parse_object_name(false)?;
-            return if let Some(modifiers) = self.parse_clickhouse_type_modifiers()? {
-                Ok((DataType::Custom(type_name, modifiers), false.into()))
-            } else {
-                Ok((DataType::Custom(type_name, vec![]), false.into()))
-            };
-        }
-
         let next_token = self.next_token();
         let mut trailing_bracket = false.into();
         let mut data = match next_token.token {
@@ -5947,6 +5981,7 @@ impl<'a> Parser<'a> {
                 Keyword::FLOAT => Ok(DataType::Float(self.parse_optional_precision()?)),
                 Keyword::REAL => Ok(DataType::Real),
                 Keyword::FLOAT4 => Ok(DataType::Float4),
+                Keyword::FLOAT32 => Ok(DataType::Float32),
                 Keyword::FLOAT64 => Ok(DataType::Float64),
                 Keyword::FLOAT8 => Ok(DataType::Float8),
                 Keyword::DOUBLE => {
@@ -6004,7 +6039,19 @@ impl<'a> Parser<'a> {
                         Ok(DataType::Int4(optional_precision?))
                     }
                 }
+                Keyword::INT8 => {
+                    let optional_precision = self.parse_optional_precision();
+                    if self.parse_keyword(Keyword::UNSIGNED) {
+                        Ok(DataType::UnsignedInt8(optional_precision?))
+                    } else {
+                        Ok(DataType::Int8(optional_precision?))
+                    }
+                }
+                Keyword::INT16 => Ok(DataType::Int16),
+                Keyword::INT32 => Ok(DataType::Int32),
                 Keyword::INT64 => Ok(DataType::Int64),
+                Keyword::INT128 => Ok(DataType::Int128),
+                Keyword::INT256 => Ok(DataType::Int256),
                 Keyword::INTEGER => {
                     let optional_precision = self.parse_optional_precision();
                     if self.parse_keyword(Keyword::UNSIGNED) {
@@ -6021,14 +6068,12 @@ impl<'a> Parser<'a> {
                         Ok(DataType::BigInt(optional_precision?))
                     }
                 }
-                Keyword::INT8 => {
-                    let optional_precision = self.parse_optional_precision();
-                    if self.parse_keyword(Keyword::UNSIGNED) {
-                        Ok(DataType::UnsignedInt8(optional_precision?))
-                    } else {
-                        Ok(DataType::Int8(optional_precision?))
-                    }
-                }
+                Keyword::UINT8 => Ok(DataType::UInt8),
+                Keyword::UINT16 => Ok(DataType::UInt16),
+                Keyword::UINT32 => Ok(DataType::UInt32),
+                Keyword::UINT64 => Ok(DataType::UInt64),
+                Keyword::UINT128 => Ok(DataType::UInt128),
+                Keyword::UINT256 => Ok(DataType::UInt256),
                 Keyword::VARCHAR => Ok(DataType::Varchar(self.parse_optional_character_length()?)),
                 Keyword::NVARCHAR => Ok(DataType::Nvarchar(self.parse_optional_precision()?)),
                 Keyword::CHARACTER => {
@@ -6062,7 +6107,19 @@ impl<'a> Parser<'a> {
                 Keyword::BYTES => Ok(DataType::Bytes(self.parse_optional_precision()?)),
                 Keyword::UUID => Ok(DataType::Uuid),
                 Keyword::DATE => Ok(DataType::Date),
-                Keyword::DATETIME => Ok(DataType::Datetime(self.parse_optional_precision()?)),
+                Keyword::DATE32 => Ok(DataType::Date32),
+                Keyword::DATETIME => {
+                    if dialect_of!(self is ClickHouseDialect) {
+                        Ok(DataType::Datetime(None, self.parse_optional_timezone()?))
+                    } else {
+                        Ok(DataType::Datetime(self.parse_optional_precision()?, None))
+                    }
+                }
+                Keyword::DATETIME64 => {
+                    self.prev_token();
+                    let (precision, time_zone) = self.parse_datetime_64()?;
+                    Ok(DataType::Datetime64(precision, time_zone))
+                }
                 Keyword::TIMESTAMP => {
                     let precision = self.parse_optional_precision()?;
                     let tz = if self.parse_keyword(Keyword::WITH) {
@@ -6104,6 +6161,12 @@ impl<'a> Parser<'a> {
                 Keyword::JSON => Ok(DataType::JSON),
                 Keyword::REGCLASS => Ok(DataType::Regclass),
                 Keyword::STRING => Ok(DataType::String(self.parse_optional_precision()?)),
+                Keyword::FIXEDSTRING => {
+                    self.expect_token(&Token::LParen)?;
+                    let character_length = self.parse_literal_uint()?;
+                    self.expect_token(&Token::RParen)?;
+                    Ok(DataType::FixedString(character_length))
+                }
                 Keyword::TEXT => Ok(DataType::Text),
                 Keyword::BYTEA => Ok(DataType::Bytea),
                 Keyword::NUMERIC => Ok(DataType::Numeric(
@@ -6126,6 +6189,10 @@ impl<'a> Parser<'a> {
                 Keyword::ARRAY => {
                     if dialect_of!(self is SnowflakeDialect) {
                         Ok(DataType::Array(ArrayElemTypeDef::None))
+                    } else if dialect_of!(self is ClickHouseDialect) {
+                        Ok(self.parse_sub_type(|internal_type| {
+                            DataType::Array(ArrayElemTypeDef::Parenthesis(internal_type))
+                        })?)
                     } else {
                         self.expect_token(&Token::Lt)?;
                         let (inside_type, _trailing_bracket) = self.parse_data_type_helper()?;
@@ -6137,19 +6204,15 @@ impl<'a> Parser<'a> {
                 }
                 Keyword::MAP if dialect_of!(self is DatabricksDialect) => {
                     self.prev_token();
-                    let (field_defs, _trailing_bracket) = self.parse_struct_type_def(
-                        Self::parse_big_query_struct_field_def,
-                        Keyword::MAP,
-                    )?;
+                    let (field_defs, _trailing_bracket) =
+                        self.parse_struct_type_def(Self::parse_struct_field_def, Keyword::MAP)?;
                     trailing_bracket = _trailing_bracket;
                     Ok(DataType::DatabricksMap(field_defs))
                 }
                 Keyword::STRUCT if dialect_of!(self is BigQueryDialect) => {
                     self.prev_token();
-                    let (field_defs, _trailing_bracket) = self.parse_struct_type_def(
-                        Self::parse_big_query_struct_field_def,
-                        Keyword::STRUCT,
-                    )?;
+                    let (field_defs, _trailing_bracket) =
+                        self.parse_struct_type_def(Self::parse_struct_field_def, Keyword::STRUCT)?;
                     trailing_bracket = _trailing_bracket;
                     Ok(DataType::Struct(field_defs))
                 }
@@ -6161,6 +6224,31 @@ impl<'a> Parser<'a> {
                     )?;
                     trailing_bracket = _trailing_bracket;
                     Ok(DataType::Struct(field_defs))
+                }
+                Keyword::NULLABLE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    Ok(self.parse_sub_type(DataType::Nullable)?)
+                }
+                Keyword::LOWCARDINALITY if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    Ok(self.parse_sub_type(DataType::LowCardinality)?)
+                }
+                Keyword::MAP if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    self.prev_token();
+                    let (key_data_type, value_data_type) = self.parse_click_house_map_def()?;
+                    Ok(DataType::Map(
+                        Box::new(key_data_type),
+                        Box::new(value_data_type),
+                    ))
+                }
+                Keyword::NESTED if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    self.expect_token(&Token::LParen)?;
+                    let field_defs = self.parse_comma_separated(Parser::parse_column_def)?;
+                    self.expect_token(&Token::RParen)?;
+                    Ok(DataType::Nested(field_defs))
+                }
+                Keyword::TUPLE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    self.prev_token();
+                    let field_defs = self.parse_click_house_tuple_def()?;
+                    Ok(DataType::Tuple(field_defs))
                 }
                 _ => {
                     self.prev_token();
@@ -6546,6 +6634,39 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse_optional_timezone(&mut self) -> Result<Option<String>, ParserError> {
+        if self.consume_token(&Token::LParen) {
+            if self.consume_token(&Token::RParen) {
+                return Ok(None);
+            }
+            let n = self.parse_literal_string()?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(n))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Parse datetime64 [1]
+    /// Syntax
+    /// ```sql
+    /// DateTime64(precision[, timezone])
+    /// ```
+    ///
+    /// [1]: https://clickhouse.com/docs/en/sql-reference/data-types/datetime64
+    pub fn parse_datetime_64(&mut self) -> Result<(u64, Option<String>), ParserError> {
+        self.expect_keyword(Keyword::DATETIME64)?;
+        self.expect_token(&Token::LParen)?;
+        let precision = self.parse_literal_uint()?;
+        let time_zone = if self.consume_token(&Token::Comma) {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+        self.expect_token(&Token::RParen)?;
+        Ok((precision, time_zone))
+    }
+
     pub fn parse_optional_character_length(
         &mut self,
     ) -> Result<Option<CharacterLength>, ParserError> {
@@ -6674,6 +6795,17 @@ impl<'a> Parser<'a> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Parse a parenthesized sub data type
+    fn parse_sub_type<F>(&mut self, parent_type: F) -> Result<DataType, ParserError>
+    where
+        F: FnOnce(Box<DataType>) -> DataType,
+    {
+        self.expect_token(&Token::LParen)?;
+        let inside_type = self.parse_data_type()?;
+        self.expect_token(&Token::RParen)?;
+        Ok(parent_type(inside_type.into()))
     }
 
     pub fn parse_delete(&mut self) -> Result<Statement, ParserError> {
