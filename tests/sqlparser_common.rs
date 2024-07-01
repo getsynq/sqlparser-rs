@@ -4181,6 +4181,7 @@ fn parse_interval() {
     verified_only_select("SELECT INTERVAL '1' MINUTE TO SECOND");
     verified_only_select("SELECT INTERVAL '1 YEAR'");
     verified_only_select("SELECT INTERVAL '1 YEAR' AS one_year");
+    verified_only_select("SELECT date_sub(now(), INTERVAL 10 DAY)");
     one_statement_parses_to(
         "SELECT INTERVAL '1 YEAR' one_year",
         "SELECT INTERVAL '1 YEAR' AS one_year",
