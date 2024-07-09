@@ -701,7 +701,11 @@ fn parse_create_table_with_variant_default_expressions() {
                     },
                     ColumnDef {
                         name: Ident::new("x").empty_span(),
-                        data_type: DataType::Enum8(vec![EnumTypeValue::NameWithValue("hello".to_string(), 1), EnumTypeValue::Name("world".to_string()), EnumTypeValue::NameWithValue("foo".to_string(), -3)]),
+                        data_type: DataType::Enum8(vec![
+                            EnumTypeValue::NameWithValue("hello".to_string(), 1),
+                            EnumTypeValue::Name("world".to_string()),
+                            EnumTypeValue::NameWithValue("foo".to_string(), -3)
+                        ]),
                         collation: None,
                         codec: None,
                         options: vec![],
@@ -1279,6 +1283,38 @@ fn parse_in_with_dangling_comma() {
         "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test',)",
         "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test')",
     );
+}
+
+#[test]
+fn test_query_with_format_clause() {
+    let format_options = vec!["TabSeparated", "JSONCompact", "NULL"];
+    for format in &format_options {
+        let sql = format!("SELECT * FROM t FORMAT {}", format);
+        match clickhouse_and_generic().verified_stmt(&sql) {
+            Statement::Query(query) => {
+                if *format == "NULL" {
+                    assert_eq!(query.format_clause, Some(FormatClause::Null));
+                } else {
+                    assert_eq!(
+                        query.format_clause,
+                        Some(FormatClause::Identifier(Ident::new(*format).empty_span()))
+                    );
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    let invalid_cases = [
+        "SELECT * FROM t FORMAT",
+        "SELECT * FROM t FORMAT TabSeparated JSONCompact",
+        "SELECT * FROM t FORMAT TabSeparated TabSeparated",
+    ];
+    for sql in &invalid_cases {
+        clickhouse_and_generic()
+            .parse_sql_statements(sql)
+            .expect_err("Expected: FORMAT {identifier}, found: ");
+    }
 }
 
 fn clickhouse() -> TestedDialects {

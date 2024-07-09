@@ -792,7 +792,6 @@ pub enum ArrayElemTypeDef {
     Parenthesis(Box<DataType>),
 }
 
-
 /// String enum values with optional integer value.
 ///
 /// [1]: https://clickhouse.com/docs/en/sql-reference/data-types/enum
@@ -812,8 +811,8 @@ impl fmt::Display for EnumTypeValue {
             Self::Name(n) => {
                 write!(f, "'{}'", escape_single_quote_string(n))
             }
-            Self::NameWithValue(n,v) => {
-                write!(f, "'{}' = {}", escape_single_quote_string(n),v)
+            Self::NameWithValue(n, v) => {
+                write!(f, "'{}' = {}", escape_single_quote_string(n), v)
             }
         }
     }

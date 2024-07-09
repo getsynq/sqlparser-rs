@@ -45,6 +45,15 @@ pub struct Query {
     pub fetch: Option<Fetch>,
     /// `FOR { UPDATE | SHARE } [ OF table_name ] [ SKIP LOCKED | NOWAIT ]`
     pub locks: Vec<LockClause>,
+    /// ClickHouse syntax: `SELECT * FROM t SETTINGS key1 = value1, key2 = value2`
+    ///
+    /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select#settings-in-select-query)
+    pub settings: Option<Vec<Setting>>,
+    /// `SELECT * FROM t FORMAT JSONCompact`
+    ///
+    /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/select/format)
+    /// (ClickHouse-specific)
+    pub format_clause: Option<FormatClause>,
 }
 
 impl fmt::Display for Query {
@@ -79,6 +88,9 @@ impl fmt::Display for Query {
         }
         if !self.locks.is_empty() {
             write!(f, " {}", display_separated(&self.locks, " "))?;
+        }
+        if let Some(ref format) = self.format_clause {
+            write!(f, " {}", format)?;
         }
         Ok(())
     }
@@ -702,6 +714,20 @@ impl fmt::Display for TableWithJoins {
             write!(f, "{join}")?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Setting {
+    pub key: WithSpan<Ident>,
+    pub value: Value,
+}
+
+impl fmt::Display for Setting {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} = {}", self.key, self.value)
     }
 }
 
@@ -1573,6 +1599,26 @@ impl fmt::Display for GroupByExpr {
                 let col_names = display_comma_separated(col_names);
                 write!(f, "GROUP BY ({col_names})")
             }
+        }
+    }
+}
+
+/// FORMAT identifier or FORMAT NULL clause, specific to ClickHouse.
+///
+/// [ClickHouse]: <https://clickhouse.com/docs/en/sql-reference/statements/select/format>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum FormatClause {
+    Identifier(WithSpan<Ident>),
+    Null,
+}
+
+impl fmt::Display for FormatClause {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FormatClause::Identifier(ident) => write!(f, "FORMAT {}", ident),
+            FormatClause::Null => write!(f, "FORMAT NULL"),
         }
     }
 }

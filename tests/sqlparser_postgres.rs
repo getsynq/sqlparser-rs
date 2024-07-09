@@ -1075,6 +1075,8 @@ fn parse_copy_to() {
                 offset: None,
                 fetch: None,
                 locks: vec![],
+                settings: None,
+                format_clause: None,
             })),
             to: true,
             target: CopyTarget::File {
@@ -2183,6 +2185,8 @@ fn parse_array_subquery_expr() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         })),
         expr_from_projection(only(&select.projection)),
     );
@@ -3726,4 +3730,27 @@ fn parse_join_constraint_unnest_alias() {
             })),
         }]
     );
+}
+
+#[test]
+fn parse_create_table_with_options() {
+    let sql = "CREATE TABLE t (c INT) WITH (foo = 'bar', a = 123)";
+    match pg().verified_stmt(sql) {
+        Statement::CreateTable { with_options, .. } => {
+            assert_eq!(
+                vec![
+                    SqlOption {
+                        name: Ident::new("foo").empty_span(),
+                        value: Expr::Value(Value::SingleQuotedString("bar".into())),
+                    },
+                    SqlOption {
+                        name: Ident::new("a").empty_span(),
+                        value: Expr::Value(number("123")),
+                    },
+                ],
+                with_options
+            );
+        }
+        _ => unreachable!(),
+    }
 }

@@ -433,7 +433,10 @@ fn parse_create_table_set_enum() {
                     },
                     ColumnDef {
                         name: Ident::new("baz").empty_span(),
-                        data_type: DataType::Enum(vec![EnumTypeValue::Name("a".to_string()), EnumTypeValue::Name("b".to_string())]),
+                        data_type: DataType::Enum(vec![
+                            EnumTypeValue::Name("a".to_string()),
+                            EnumTypeValue::Name("b".to_string())
+                        ]),
                         collation: None,
                         codec: None,
                         options: vec![],
@@ -620,6 +623,8 @@ fn parse_escaped_quote_identifiers_with_escape() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         }))
     );
 }
@@ -671,6 +676,8 @@ fn parse_escaped_quote_identifiers_with_no_escape() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         }))
     );
 }
@@ -719,6 +726,8 @@ fn parse_escaped_backticks_with_escape() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         }))
     );
 }
@@ -767,6 +776,8 @@ fn parse_escaped_backticks_with_no_escape() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         }))
     );
 }
@@ -1088,6 +1099,8 @@ fn parse_simple_insert() {
                     offset: None,
                     fetch: None,
                     locks: vec![],
+                    settings: None,
+                    format_clause: None,
                 }),
                 source
             );
@@ -1124,6 +1137,8 @@ fn parse_empty_row_insert() {
                     offset: None,
                     fetch: None,
                     locks: vec![],
+                    settings: None,
+                    format_clause: None,
                 }),
                 source
             );
@@ -1183,6 +1198,8 @@ fn parse_insert_with_on_duplicate_update() {
                     offset: None,
                     fetch: None,
                     locks: vec![],
+                    settings: None,
+                    format_clause: None,
                 }),
                 source
             );
@@ -1564,6 +1581,8 @@ fn parse_substring_in_select() {
                     offset: None,
                     fetch: None,
                     locks: vec![],
+                    settings: None,
+                    format_clause: None,
                 }),
                 query
             );
@@ -1858,6 +1877,8 @@ fn parse_hex_string_introducer() {
             offset: None,
             fetch: None,
             locks: vec![],
+            settings: None,
+            format_clause: None,
         }))
     )
 }

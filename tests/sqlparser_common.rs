@@ -286,6 +286,8 @@ fn parse_update_set_from() {
                         offset: None,
                         fetch: None,
                         locks: vec![],
+                        settings: None,
+                        format_clause: None,
                     }),
                     alias: Some(TableAlias {
                         name: Ident::new("t2").empty_span(),
@@ -3039,6 +3041,8 @@ fn parse_create_table_as_table() {
         offset: None,
         fetch: None,
         locks: vec![],
+        settings: None,
+        format_clause: None,
     });
 
     match verified_stmt(sql1) {
@@ -3063,6 +3067,8 @@ fn parse_create_table_as_table() {
         offset: None,
         fetch: None,
         locks: vec![],
+        settings: None,
+        format_clause: None,
     });
 
     match verified_stmt(sql2) {
@@ -4467,6 +4473,8 @@ fn parse_interval_and_or_xor() {
         offset: None,
         fetch: None,
         locks: vec![],
+        settings: None,
+        format_clause: None,
     }))];
 
     assert_eq!(actual_ast, expected_ast);
@@ -7162,6 +7170,8 @@ fn parse_merge() {
                         offset: None,
                         fetch: None,
                         locks: vec![],
+                        settings: None,
+                        format_clause: None,
                     }),
                     alias: Some(TableAlias {
                         name: Ident {
@@ -8568,6 +8578,8 @@ fn parse_unload() {
                 fetch: None,
                 locks: vec![],
                 order_by: None,
+                settings: None,
+                format_clause: None,
             }),
             to: Ident {
                 value: "s3://...".to_string(),

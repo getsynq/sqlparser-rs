@@ -417,6 +417,7 @@ define_keywords!(
     MASK,
     MATCH,
     MATCHED,
+    MATCH_RECOGNIZE,
     MATERIALIZED,
     MAX,
     MAXVALUE,
@@ -528,6 +529,7 @@ define_keywords!(
     PRECISION,
     PREPARE,
     PRESERVE,
+    PREWHERE,
     PRIMARY,
     PRIOR,
     PRIVILEGES,
@@ -804,6 +806,17 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     // for Snowflake TABLESAMPLE
     Keyword::TABLESAMPLE,
     Keyword::SAMPLE,
+    // for Clickhouse PREWHERE
+    Keyword::PREWHERE,
+    // for ClickHouse SELECT * FROM t SETTINGS ...
+    Keyword::SETTINGS,
+    // for ClickHouse SELECT * FROM t FORMAT...
+    Keyword::FORMAT,
+    // for Snowflake START WITH .. CONNECT BY
+    Keyword::START,
+    Keyword::CONNECT,
+    // Reserved for snowflake MATCH_RECOGNIZE
+    Keyword::MATCH_RECOGNIZE,
 ];
 
 /// Can't be used as a column alias, so that `SELECT <expr> alias`

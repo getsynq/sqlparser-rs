@@ -29,7 +29,8 @@ use serde::{Deserialize, Serialize};
 use sqlparser_derive::{Visit, VisitMut};
 
 pub use self::data_type::{
-    ArrayElemTypeDef, CharLengthUnits, CharacterLength, DataType, ExactNumberInfo, TimezoneInfo, EnumTypeValue,
+    ArrayElemTypeDef, CharLengthUnits, CharacterLength, DataType, EnumTypeValue, ExactNumberInfo,
+    TimezoneInfo,
 };
 pub use self::dcl::{AlterRoleOperation, ResetConfig, RoleOption, SetConfigValue};
 pub use self::ddl::{
@@ -40,13 +41,13 @@ pub use self::ddl::{
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
-    AggregateItem, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch, GroupByExpr,
-    IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint, JoinOperator, LateralView,
-    LockClause, LockType, NamedWindowDefinition, NonBlock, Offset, OffsetRows, OrderBy,
-    OrderByExpr, Query, RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem, SamplingMethod,
-    Select, SelectInto, SelectItem, SelectionCount, SetExpr, SetOperator, SetQuantifier, Table,
-    TableAlias, TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top, ValueTableMode,
-    Values, WildcardAdditionalOptions, With, WithFill,
+    AggregateItem, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch, FormatClause,
+    GroupByExpr, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint, JoinOperator,
+    LateralView, LockClause, LockType, NamedWindowDefinition, NonBlock, Offset, OffsetRows,
+    OrderBy, OrderByExpr, Query, RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem,
+    SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr, SetOperator,
+    SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed, TableVersion,
+    TableWithJoins, Top, ValueTableMode, Values, WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,

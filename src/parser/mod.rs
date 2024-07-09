@@ -5902,10 +5902,14 @@ impl<'a> Parser<'a> {
 
     /// Parse an literal integer/long
     pub fn parse_literal_int(&mut self) -> Result<i64, ParserError> {
-        let neg = if self.consume_token(&Token::Minus) { -1 } else { 1 };
+        let neg = if self.consume_token(&Token::Minus) {
+            -1
+        } else {
+            1
+        };
         let next_token = self.next_token();
         match next_token.token {
-            Token::Number(s, _) => s.parse::<i64>().map(|n| n*neg).map_err(|e| {
+            Token::Number(s, _) => s.parse::<i64>().map(|n| n * neg).map_err(|e| {
                 ParserError::ParserError(format!("Could not parse '{s}' as i64: {e}"))
             }),
             _ => self.expected("literal int", next_token),
@@ -6307,7 +6311,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_enum_values(&mut self) -> Result<Vec<EnumTypeValue>, ParserError> {
         self.expect_token(&Token::LParen)?;
-        let mut values:Vec<EnumTypeValue> = Vec::new();
+        let mut values: Vec<EnumTypeValue> = Vec::new();
         loop {
             let next_token = self.next_token();
             let name = match next_token.token {
@@ -6317,7 +6321,10 @@ impl<'a> Parser<'a> {
             let next_token = self.next_token();
             match next_token.token {
                 Token::Eq => {
-                    values.push(EnumTypeValue::NameWithValue(name, self.parse_literal_int()?));
+                    values.push(EnumTypeValue::NameWithValue(
+                        name,
+                        self.parse_literal_int()?,
+                    ));
                     if self.consume_token(&Token::RParen) {
                         break;
                     }
@@ -6328,8 +6335,8 @@ impl<'a> Parser<'a> {
                 Token::Comma => values.push(EnumTypeValue::Name(name)),
                 Token::RParen => {
                     values.push(EnumTypeValue::Name(name));
-                    break
-                },
+                    break;
+                }
                 _ => self.expected(", or }", next_token)?,
             }
         }
@@ -6977,6 +6984,8 @@ impl<'a> Parser<'a> {
                 offset: None,
                 fetch: None,
                 locks: vec![],
+                settings: None,
+                format_clause: None,
             })
         } else if self.parse_keyword(Keyword::UPDATE) {
             Ok(Query {
@@ -6988,6 +6997,8 @@ impl<'a> Parser<'a> {
                 offset: None,
                 fetch: None,
                 locks: vec![],
+                settings: None,
+                format_clause: None,
             })
         } else {
             let body = self.parse_boxed_query_body(0)?;
@@ -7042,6 +7053,8 @@ impl<'a> Parser<'a> {
                     vec![]
                 };
 
+            let settings = self.parse_settings()?;
+
             let fetch = if self.parse_keyword(Keyword::FETCH) {
                 Some(self.parse_fetch()?)
             } else {
@@ -7052,6 +7065,18 @@ impl<'a> Parser<'a> {
             while self.parse_keyword(Keyword::FOR) {
                 locks.push(self.parse_lock()?);
             }
+            let format_clause = if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                && self.parse_keyword(Keyword::FORMAT)
+            {
+                if self.parse_keyword(Keyword::NULL) {
+                    Some(FormatClause::Null)
+                } else {
+                    let ident = self.parse_identifier(false)?;
+                    Some(FormatClause::Identifier(ident))
+                }
+            } else {
+                None
+            };
 
             Ok(Query {
                 with,
@@ -7062,8 +7087,27 @@ impl<'a> Parser<'a> {
                 offset,
                 fetch,
                 locks,
+                settings,
+                format_clause,
             })
         }
+    }
+
+    fn parse_settings(&mut self) -> Result<Option<Vec<Setting>>, ParserError> {
+        let settings = if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::SETTINGS)
+        {
+            let key_values = self.parse_comma_separated(|p| {
+                let key = p.parse_identifier(false)?;
+                p.expect_token(&Token::Eq)?;
+                let value = p.parse_value()?;
+                Ok(Setting { key, value })
+            })?;
+            Some(key_values)
+        } else {
+            None
+        };
+        Ok(settings)
     }
 
     /// Parse a CTE (`alias [( col1, col2, ... )] AS (subquery)`)
@@ -7973,6 +8017,8 @@ impl<'a> Parser<'a> {
                     offset: None,
                     fetch: None,
                     locks: vec![],
+                    settings: None,
+                    format_clause: None,
                 }),
                 alias,
             })
