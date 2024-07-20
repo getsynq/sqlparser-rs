@@ -280,7 +280,7 @@ fn parse_update_set_from() {
                             qualify: None,
                             value_table_mode: None,
                         }))),
-                        order_by: vec![],
+                        order_by: None,
                         limit: None,
                         limit_by: vec![],
                         offset: None,
@@ -1874,19 +1874,22 @@ fn parse_select_order_by() {
                     expr: Expr::Identifier(Ident::new("lname").empty_span()),
                     asc: Some(true),
                     nulls_first: None,
+                    with_fill: None,
                 },
                 OrderByExpr {
                     expr: Expr::Identifier(Ident::new("fname").empty_span()),
                     asc: Some(false),
                     nulls_first: None,
+                    with_fill: None,
                 },
                 OrderByExpr {
                     expr: Expr::Identifier(Ident::new("id").empty_span()),
                     asc: None,
                     nulls_first: None,
+                    with_fill: None,
                 },
             ],
-            select.order_by
+            select.order_by.expect("ORDER BY expected").exprs
         );
     }
     chk("SELECT id, fname, lname FROM customer WHERE id < 5 ORDER BY lname ASC, fname DESC, id");
@@ -1906,14 +1909,16 @@ fn parse_select_order_by_limit() {
                 expr: Expr::Identifier(Ident::new("lname").empty_span()),
                 asc: Some(true),
                 nulls_first: None,
+                with_fill: None,
             },
             OrderByExpr {
                 expr: Expr::Identifier(Ident::new("fname").empty_span()),
                 asc: Some(false),
                 nulls_first: None,
+                with_fill: None,
             },
         ],
-        select.order_by
+        select.order_by.expect("ORDER BY expected").exprs
     );
     assert_eq!(Some(Expr::Value(number("2"))), select.limit);
 }
@@ -1929,14 +1934,16 @@ fn parse_select_order_by_nulls_order() {
                 expr: Expr::Identifier(Ident::new("lname").empty_span()),
                 asc: Some(true),
                 nulls_first: Some(true),
+                with_fill: None,
             },
             OrderByExpr {
                 expr: Expr::Identifier(Ident::new("fname").empty_span()),
                 asc: Some(false),
                 nulls_first: Some(false),
+                with_fill: None,
             },
         ],
-        select.order_by
+        select.order_by.expect("ORDER BY expeccted").exprs
     );
     assert_eq!(Some(Expr::Value(number("2"))), select.limit);
 }
@@ -2016,6 +2023,7 @@ fn parse_select_qualify() {
                         expr: Expr::Identifier(Ident::new("o").empty_span()),
                         asc: None,
                         nulls_first: None,
+                        with_fill: None,
                     }],
                     window_frame: None,
                 })),
@@ -2346,6 +2354,7 @@ fn parse_listagg() {
             ),
             asc: None,
             nulls_first: None,
+            with_fill: None,
         },
         OrderByExpr {
             expr: Expr::Identifier(
@@ -2357,6 +2366,7 @@ fn parse_listagg() {
             ),
             asc: None,
             nulls_first: None,
+            with_fill: None,
         },
     ];
     assert_eq!(
@@ -3023,7 +3033,7 @@ fn parse_create_table_as_table() {
             table_name: Some("old_table".to_string()),
             schema_name: None,
         }))),
-        order_by: vec![],
+        order_by: None,
         limit: None,
         limit_by: vec![],
         offset: None,
@@ -3047,7 +3057,7 @@ fn parse_create_table_as_table() {
             table_name: Some("old_table".to_string()),
             schema_name: Some("schema_name".to_string()),
         }))),
-        order_by: vec![],
+        order_by: None,
         limit: None,
         limit_by: vec![],
         offset: None,
@@ -3892,6 +3902,7 @@ fn parse_window_functions() {
                     expr: Expr::Identifier(Ident::new("dt").empty_span()),
                     asc: Some(false),
                     nulls_first: None,
+                    with_fill: None,
                 }],
                 window_frame: None,
             })),
@@ -4039,6 +4050,7 @@ fn test_parse_named_window() {
                         ),
                         asc: None,
                         nulls_first: None,
+                        with_fill: None,
                     }],
                     window_frame: None,
                 },
@@ -4449,7 +4461,7 @@ fn parse_interval_and_or_xor() {
             qualify: None,
             value_table_mode: None,
         }))),
-        order_by: vec![],
+        order_by: None,
         limit: None,
         limit_by: vec![],
         offset: None,
@@ -6759,11 +6771,13 @@ fn parse_create_index() {
             expr: Expr::Identifier(Ident::new("name").empty_span()),
             asc: None,
             nulls_first: None,
+            with_fill: None,
         },
         OrderByExpr {
             expr: Expr::Identifier(Ident::new("age").empty_span()),
             asc: Some(false),
             nulls_first: None,
+            with_fill: None,
         },
     ];
     match verified_stmt(sql) {
@@ -6793,11 +6807,13 @@ fn test_create_index_with_using_function() {
             expr: Expr::Identifier(Ident::new("name").empty_span()),
             asc: None,
             nulls_first: None,
+            with_fill: None,
         },
         OrderByExpr {
             expr: Expr::Identifier(Ident::new("age").empty_span()),
             asc: Some(false),
             nulls_first: None,
+            with_fill: None,
         },
     ];
     match verified_stmt(sql) {
@@ -7140,7 +7156,7 @@ fn parse_merge() {
                             qualify: None,
                             value_table_mode: None,
                         }))),
-                        order_by: vec![],
+                        order_by: None,
                         limit: None,
                         limit_by: vec![],
                         offset: None,
@@ -8226,6 +8242,7 @@ fn parse_within_group() {
                 expr: Expr::Identifier(Ident::new("sort_expression").empty_span()),
                 asc: None,
                 nulls_first: None,
+                with_fill: None,
             }]),
         })
     );
@@ -8513,5 +8530,67 @@ fn parse_binary_operators_without_whitespace() {
     all_dialects().one_statement_parses_to(
         "SELECT tbl1.field%tbl2.field FROM tbl1 JOIN tbl2 ON tbl1.id = tbl2.entity_id",
         "SELECT tbl1.field % tbl2.field FROM tbl1 JOIN tbl2 ON tbl1.id = tbl2.entity_id",
+    );
+}
+
+#[test]
+fn parse_unload() {
+    let unload = verified_stmt("UNLOAD(SELECT cola FROM tab) TO 's3://...' WITH (format = 'AVRO')");
+    assert_eq!(
+        unload,
+        Statement::Unload {
+            query: Box::new(Query {
+                body: Box::new(SetExpr::Select(Box::new(Select {
+                    distinct: None,
+                    top: None,
+                    projection: vec![UnnamedExpr(
+                        Expr::Identifier(Ident::new("cola").empty_span()).empty_span()
+                    )
+                    .empty_span(),],
+                    into: None,
+                    from: vec![TableWithJoins {
+                        relation: TableFactor::Table {
+                            name: ObjectName(vec![Ident::new("tab")]),
+                            alias: None,
+                            args: None,
+                            with_hints: vec![],
+                            version: None,
+                            partitions: vec![],
+                        },
+                        joins: vec![],
+                    }],
+                    lateral_views: vec![],
+                    selection: None,
+                    group_by: GroupByExpr::Expressions(vec![]),
+                    cluster_by: vec![],
+                    distribute_by: vec![],
+                    sort_by: vec![],
+                    having: None,
+                    named_window: vec![],
+                    qualify: None,
+                    value_table_mode: None,
+                }))),
+                with: None,
+                limit: None,
+                limit_by: vec![],
+                offset: None,
+                fetch: None,
+                locks: vec![],
+                order_by: None,
+            }),
+            to: Ident {
+                value: "s3://...".to_string(),
+                quote_style: Some('\'')
+            }
+            .empty_span(),
+            with: vec![SqlOption {
+                name: Ident {
+                    value: "format".to_string(),
+                    quote_style: None
+                }
+                .empty_span(),
+                value: Expr::Value(Value::SingleQuotedString("AVRO".to_string()))
+            }]
+        }
     );
 }

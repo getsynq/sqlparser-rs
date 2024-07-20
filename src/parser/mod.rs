@@ -2524,6 +2524,56 @@ impl<'a> Parser<'a> {
         self.peek_nth_token(0)
     }
 
+    /// Returns the `N` next non-whitespace tokens that have not yet been
+    /// processed.
+    ///
+    /// Example:
+    /// ```rust
+    /// # use sqlparser::dialect::GenericDialect;
+    /// # use sqlparser::parser::Parser;
+    /// # use sqlparser::keywords::Keyword;
+    /// # use sqlparser::tokenizer::{Token, Word};
+    /// let dialect = GenericDialect {};
+    /// let mut parser = Parser::new(&dialect).try_with_sql("ORDER BY foo, bar").unwrap();
+    ///
+    /// // Note that Rust infers the number of tokens to peek based on the
+    /// // length of the slice pattern!
+    /// assert!(matches!(
+    ///     parser.peek_tokens(),
+    ///     [
+    ///         Token::Word(Word { keyword: Keyword::ORDER, .. }),
+    ///         Token::Word(Word { keyword: Keyword::BY, .. }),
+    ///     ]
+    /// ));
+    /// ```
+    pub fn peek_tokens<const N: usize>(&self) -> [Token; N] {
+        self.peek_tokens_with_location()
+            .map(|with_loc| with_loc.token)
+    }
+
+    /// Returns the `N` next non-whitespace tokens with locations that have not
+    /// yet been processed.
+    ///
+    /// See [`Self::peek_token`] for an example.
+    pub fn peek_tokens_with_location<const N: usize>(&self) -> [TokenWithLocation; N] {
+        let mut index = self.index;
+        core::array::from_fn(|_| loop {
+            let token = self.tokens.get(index);
+            index += 1;
+            if let Some(TokenWithLocation {
+                token: Token::Whitespace(_),
+                span: _,
+            }) = token
+            {
+                continue;
+            }
+            break token.cloned().unwrap_or(TokenWithLocation {
+                token: Token::EOF,
+                span: Span::default(),
+            });
+        })
+    }
+
     /// Return nth non-whitespace token that has not yet been processed
     pub fn peek_nth_token(&self, mut n: usize) -> TokenWithLocation {
         let mut index = self.index;
@@ -2781,6 +2831,29 @@ impl<'a> Parser<'a> {
         Ok(ret)
     }
 
+    /// Parse the comma of a comma-separated syntax element.
+    /// Returns true if there is a next element
+    fn is_parse_comma_separated_end(&mut self) -> bool {
+        if !self.consume_token(&Token::Comma) {
+            true
+        } else if self.options.trailing_commas {
+            let token = self.peek_token().token;
+            match token {
+                Token::Word(ref kw)
+                    if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&kw.keyword) =>
+                {
+                    true
+                }
+                Token::RParen | Token::SemiColon | Token::EOF | Token::RBracket | Token::RBrace => {
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
     /// Parse a comma-separated list of 1+ items accepted by `F`
     pub fn parse_comma_separated<T, F>(&mut self, mut f: F) -> Result<Vec<T>, ParserError>
     where
@@ -2789,27 +2862,62 @@ impl<'a> Parser<'a> {
         let mut values = vec![];
         loop {
             values.push(f(self)?);
-            if !self.consume_token(&Token::Comma) {
+            if self.is_parse_comma_separated_end() {
                 break;
-            } else if self.options.trailing_commas {
-                match self.peek_token().token {
-                    Token::Word(kw)
-                        if keywords::RESERVED_FOR_COLUMN_ALIAS
-                            .iter()
-                            .any(|d| kw.keyword == *d) =>
-                    {
-                        break;
-                    }
-                    Token::RParen
-                    | Token::SemiColon
-                    | Token::EOF
-                    | Token::RBracket
-                    | Token::RBrace => break,
-                    _ => continue,
-                }
             }
         }
         Ok(values)
+    }
+
+    /// Parse a keyword-separated list of 1+ items accepted by `F`
+    pub fn parse_keyword_separated<T, F>(
+        &mut self,
+        keyword: Keyword,
+        mut f: F,
+    ) -> Result<Vec<T>, ParserError>
+    where
+        F: FnMut(&mut Parser<'a>) -> Result<T, ParserError>,
+    {
+        let mut values = vec![];
+        loop {
+            values.push(f(self)?);
+            if !self.parse_keyword(keyword) {
+                break;
+            }
+        }
+        Ok(values)
+    }
+
+    pub fn parse_parenthesized<T, F>(&mut self, mut f: F) -> Result<T, ParserError>
+    where
+        F: FnMut(&mut Parser<'a>) -> Result<T, ParserError>,
+    {
+        self.expect_token(&Token::LParen)?;
+        let res = f(self)?;
+        self.expect_token(&Token::RParen)?;
+        Ok(res)
+    }
+
+    /// Parse a comma-separated list of 0+ items accepted by `F`
+    /// * `end_token` - expected end token for the closure (e.g. [Token::RParen], [Token::RBrace] ...)
+    pub fn parse_comma_separated0<T, F>(
+        &mut self,
+        f: F,
+        end_token: Token,
+    ) -> Result<Vec<T>, ParserError>
+    where
+        F: FnMut(&mut Parser<'a>) -> Result<T, ParserError>,
+    {
+        if self.peek_token().token == end_token {
+            return Ok(vec![]);
+        }
+
+        if self.options.trailing_commas && self.peek_tokens() == [Token::Comma, end_token] {
+            let _ = self.consume_token(&Token::Comma);
+            return Ok(vec![]);
+        }
+
+        self.parse_comma_separated(f)
     }
 
     /// Run a parser method `f`, reverting back to the current position
@@ -6660,7 +6768,7 @@ impl<'a> Parser<'a> {
                 body: self.parse_insert_setexpr_boxed()?,
                 limit: None,
                 limit_by: vec![],
-                order_by: vec![],
+                order_by: None,
                 offset: None,
                 fetch: None,
                 locks: vec![],
@@ -6671,7 +6779,7 @@ impl<'a> Parser<'a> {
                 body: self.parse_update_setexpr_boxed()?,
                 limit: None,
                 limit_by: vec![],
-                order_by: vec![],
+                order_by: None,
                 offset: None,
                 fetch: None,
                 locks: vec![],
@@ -6680,9 +6788,19 @@ impl<'a> Parser<'a> {
             let body = self.parse_boxed_query_body(0)?;
 
             let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
-                self.parse_comma_separated(Parser::parse_order_by_expr)?
+                let order_by_exprs = self.parse_comma_separated(Parser::parse_order_by_expr)?;
+                let interpolate = if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                    self.parse_interpolations()?
+                } else {
+                    None
+                };
+
+                Some(OrderBy {
+                    exprs: order_by_exprs,
+                    interpolate,
+                })
             } else {
-                vec![]
+                None
             };
 
             let mut limit = None;
@@ -7620,6 +7738,39 @@ impl<'a> Parser<'a> {
                 // appearing alone in parentheses (e.g. `FROM (mytable)`)
                 self.expected("joined table", self.peek_token())
             }
+        } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | GenericDialect)
+            && matches!(
+                self.peek_tokens(),
+                [
+                    Token::Word(Word {
+                        keyword: Keyword::VALUES,
+                        ..
+                    }),
+                    Token::LParen
+                ]
+            )
+        {
+            self.expect_keyword(Keyword::VALUES)?;
+
+            // Snowflake and Databricks allow syntax like below:
+            // SELECT * FROM VALUES (1, 'a'), (2, 'b') AS t (col1, col2)
+            // where there are no parentheses around the VALUES clause.
+            let values = SetExpr::Values(self.parse_values(false)?);
+            let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+            Ok(TableFactor::Derived {
+                lateral: false,
+                subquery: Box::new(Query {
+                    with: None,
+                    body: Box::new(values),
+                    order_by: None,
+                    limit: None,
+                    limit_by: vec![],
+                    offset: None,
+                    fetch: None,
+                    locks: vec![],
+                }),
+                alias,
+            })
         } else if dialect_of!(self is BigQueryDialect | PostgreSqlDialect | GenericDialect)
             && self.parse_keyword(Keyword::UNNEST)
         {
@@ -8590,11 +8741,76 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let with_fill = if dialect_of!(self is ClickHouseDialect | GenericDialect)
+            && self.parse_keywords(&[Keyword::WITH, Keyword::FILL])
+        {
+            Some(self.parse_with_fill()?)
+        } else {
+            None
+        };
+
         Ok(OrderByExpr {
             expr,
             asc,
             nulls_first,
+            with_fill,
         })
+    }
+
+    // Parse a WITH FILL clause (ClickHouse dialect)
+    // that follow the WITH FILL keywords in a ORDER BY clause
+    pub fn parse_with_fill(&mut self) -> Result<WithFill, ParserError> {
+        let from = if self.parse_keyword(Keyword::FROM) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        let to = if self.parse_keyword(Keyword::TO) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        let step = if self.parse_keyword(Keyword::STEP) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        Ok(WithFill { from, to, step })
+    }
+
+    // Parse a set of comma seperated INTERPOLATE expressions (ClickHouse dialect)
+    // that follow the INTERPOLATE keyword in an ORDER BY clause with the WITH FILL modifier
+    pub fn parse_interpolations(&mut self) -> Result<Option<Interpolate>, ParserError> {
+        if !self.parse_keyword(Keyword::INTERPOLATE) {
+            return Ok(None);
+        }
+
+        if self.consume_token(&Token::LParen) {
+            let interpolations =
+                self.parse_comma_separated0(|p| p.parse_interpolation(), Token::RParen)?;
+            self.expect_token(&Token::RParen)?;
+            // INTERPOLATE () and INTERPOLATE ( ... ) variants
+            return Ok(Some(Interpolate {
+                exprs: Some(interpolations),
+            }));
+        }
+
+        // INTERPOLATE
+        Ok(Some(Interpolate { exprs: None }))
+    }
+
+    // Parse a INTERPOLATE expression (ClickHouse dialect)
+    pub fn parse_interpolation(&mut self) -> Result<InterpolateExpr, ParserError> {
+        let column = self.parse_identifier(false)?;
+        let expr = if self.parse_keyword(Keyword::AS) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        Ok(InterpolateExpr { column, expr })
     }
 
     /// Parse a TOP clause, MSSQL equivalent of LIMIT,

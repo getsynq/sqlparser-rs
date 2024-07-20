@@ -41,12 +41,12 @@ pub use self::ddl::{
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
     AggregateItem, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch, GroupByExpr,
-    IdentWithAlias, Join, JoinConstraint, JoinOperator, LateralView, LockClause, LockType,
-    NamedWindowDefinition, NonBlock, Offset, OffsetRows, OrderByExpr, Query, RenameSelectItem,
-    ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem,
-    SelectionCount, SetExpr, SetOperator, SetQuantifier, Table, TableAlias, TableFactor,
-    TableSampleSeed, TableVersion, TableWithJoins, Top, ValueTableMode, Values,
-    WildcardAdditionalOptions, With,
+    IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint, JoinOperator, LateralView,
+    LockClause, LockType, NamedWindowDefinition, NonBlock, Offset, OffsetRows, OrderBy,
+    OrderByExpr, Query, RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem, SamplingMethod,
+    Select, SelectInto, SelectItem, SelectionCount, SetExpr, SetOperator, SetQuantifier, Table,
+    TableAlias, TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top, ValueTableMode,
+    Values, WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,
