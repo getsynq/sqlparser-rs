@@ -20,7 +20,7 @@ use sqlparser::ast::Ident;
 use sqlparser::ast::SelectItem::UnnamedExpr;
 use sqlparser::ast::TableFactor::Table;
 use sqlparser::ast::*;
-use sqlparser::dialect::ClickHouseDialect;
+use sqlparser::dialect::{ClickHouseDialect, GenericDialect};
 use test_utils::*;
 
 #[macro_use]
@@ -456,6 +456,175 @@ fn parse_limit_by() {
 }
 
 #[test]
+fn parse_create_table_with_variant_default_expressions() {
+    let sql = concat!(
+        "CREATE TABLE table (",
+        "a DATETIME MATERIALIZED now(),",
+        " b DATETIME EPHEMERAL now(),",
+        " c DATETIME EPHEMERAL,",
+        " d STRING ALIAS toString(c)",
+        ") ENGINE=MergeTree"
+    );
+    match clickhouse().verified_stmt(sql) {
+        Statement::CreateTable { columns, .. } => {
+            assert_eq!(
+                columns,
+                vec![
+                    ColumnDef {
+                        name: Ident::new("a").empty_span(),
+                        data_type: DataType::Custom(
+                            ObjectName(vec![Ident::new("DATETIME")]),
+                            vec![]
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Materialized(Expr::Function(Function {
+                                name: ObjectName(vec![Ident::new("now")]),
+                                args: vec![],
+                                null_treatment: None,
+                                over: None,
+                                distinct: false,
+                                special: false,
+                                order_by: vec![],
+                                limit: None,
+                                within_group: None,
+                                on_overflow: None,
+                            }))
+                        }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("b").empty_span(),
+                        data_type: DataType::Custom(
+                            ObjectName(vec![Ident::new("DATETIME")]),
+                            vec![]
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Ephemeral(Some(Expr::Function(Function {
+                                name: ObjectName(vec![Ident::new("now")]),
+                                args: vec![],
+                                null_treatment: None,
+                                over: None,
+                                distinct: false,
+                                special: false,
+                                order_by: vec![],
+                                limit: None,
+                                within_group: None,
+                                on_overflow: None,
+                            })))
+                        }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("c").empty_span(),
+                        data_type: DataType::Custom(
+                            ObjectName(vec![Ident::new("DATETIME")]),
+                            vec![]
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Ephemeral(None)
+                        }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("d").empty_span(),
+                        data_type: DataType::Custom(ObjectName(vec![Ident::new("STRING")]), vec![]),
+                        collation: None,
+                        codec: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Alias(Expr::Function(Function {
+                                name: ObjectName(vec![Ident::new("toString")]),
+                                args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                                    Expr::Identifier(Ident::new("c").empty_span())
+                                ))],
+                                null_treatment: None,
+                                over: None,
+                                distinct: false,
+                                special: false,
+                                order_by: vec![],
+                                limit: None,
+                                within_group: None,
+                                on_overflow: None,
+                            }))
+                        }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    }
+                ]
+            )
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn parse_create_view_with_fields_data_types() {
+    match clickhouse().verified_stmt(r#"CREATE VIEW v (i "int", f "String") AS SELECT * FROM t"#) {
+        Statement::CreateView {
+            name,
+            columns_with_types,
+            ..
+        } => {
+            assert_eq!(name, ObjectName(vec!["v".into()]));
+            assert_eq!(
+                columns_with_types,
+                vec![
+                    ColumnDef {
+                        name: Ident::new("i").empty_span(),
+                        data_type: DataType::Custom(
+                            ObjectName(vec![Ident {
+                                value: "int".into(),
+                                quote_style: Some('"')
+                            }]),
+                            vec![]
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("f").empty_span(),
+                        data_type: DataType::Custom(
+                            ObjectName(vec![Ident {
+                                value: "String".into(),
+                                quote_style: Some('"')
+                            }]),
+                            vec![]
+                        ),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                ]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_array_accessor() {
     clickhouse().one_statement_parses_to(
         r#"SELECT baz.1 AS b1 FROM foo AS f"#,
@@ -549,6 +718,13 @@ fn parse_create_view_if_not_exists() {
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],
+        options: None,
+    }
+}
+
+fn clickhouse_and_generic() -> TestedDialects {
+    TestedDialects {
+        dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],
         options: None,
     }
 }
