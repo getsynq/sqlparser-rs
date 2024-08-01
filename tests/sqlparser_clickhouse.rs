@@ -528,6 +528,24 @@ fn parse_in_array_square_syntax_empty() {
     );
 }
 
+#[test]
+fn parse_add_column_after() {
+    clickhouse().verified_stmt(
+        "ALTER TABLE raw_relationships ADD COLUMN IF NOT EXISTS owned_by_proto TEXT AFTER used_by_proto",
+    );
+}
+
+#[test]
+fn parse_create_view_if_not_exists() {
+    clickhouse().verified_stmt(
+        "CREATE VIEW IF NOT EXISTS latest_schemas_mv AS SELECT * FROM latest_schemas",
+    );
+
+    clickhouse().verified_stmt(
+        "CREATE MATERIALIZED VIEW IF NOT EXISTS latest_schemas_mv TO latest_schemas AS SELECT * FROM latest_schemas",
+    );
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],

@@ -2489,6 +2489,7 @@ fn parse_create_table() {
                         }],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
@@ -2501,6 +2502,7 @@ fn parse_create_table() {
                         }],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
@@ -2510,6 +2512,7 @@ fn parse_create_table() {
                         options: vec![],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("constrained").empty_span(),
@@ -2540,6 +2543,7 @@ fn parse_create_table() {
                         ],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("ref").empty_span(),
@@ -2560,6 +2564,7 @@ fn parse_create_table() {
                         }],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("ref2").empty_span(),
@@ -2577,6 +2582,7 @@ fn parse_create_table() {
                         },],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                 ]
             );
@@ -2696,6 +2702,7 @@ fn parse_create_table_hive_array() {
                             options: vec![],
                             column_options: vec![],
                             mask: None,
+                            column_location: None,
                         },
                         ColumnDef {
                             name: Ident::new("val").empty_span(),
@@ -2705,6 +2712,7 @@ fn parse_create_table_hive_array() {
                             options: vec![],
                             column_options: vec![],
                             mask: None,
+                            column_location: None,
                         },
                     ],
                 )
@@ -3070,6 +3078,7 @@ fn parse_create_external_table() {
                         }],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
@@ -3082,6 +3091,7 @@ fn parse_create_external_table() {
                         }],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
@@ -3091,6 +3101,7 @@ fn parse_create_external_table() {
                         options: vec![],
                         column_options: vec![],
                         mask: None,
+                        column_location: None,
                     },
                 ]
             );
@@ -3150,6 +3161,7 @@ fn parse_create_or_replace_external_table() {
                     }],
                     column_options: vec![],
                     mask: None,
+                    column_location: None,
                 },]
             );
             assert!(constraints.is_empty());
@@ -5709,6 +5721,7 @@ fn parse_create_view() {
     let sql = "CREATE VIEW myschema.myview AS SELECT foo FROM bar";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists: false,
             name,
             columns,
             query,
@@ -5779,6 +5792,7 @@ fn parse_create_view_with_columns() {
     let sql = "CREATE VIEW v (has, cols) AS SELECT 1, 2";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists,
             name,
             columns,
             or_replace,
@@ -5798,6 +5812,62 @@ fn parse_create_view_with_columns() {
             comment,
             view_options,
         } => {
+            assert_eq!(false, if_not_exists);
+            assert_eq!("v", name.to_string());
+            assert_eq!(
+                columns,
+                vec![
+                    Ident::new("has").empty_span(),
+                    Ident::new("cols").empty_span(),
+                ]
+            );
+            assert_eq!(with_options, vec![]);
+            assert_eq!("SELECT 1, 2", query.to_string());
+            assert!(!materialized);
+            assert!(!or_replace);
+            assert_eq!(engine, None);
+            assert_eq!(cluster_by, vec![]);
+            assert_eq!(primary_key, None);
+            assert_eq!(order_by, None);
+            assert_eq!(table_ttl, None);
+            assert_eq!(clickhouse_settings, None);
+            assert_eq!(destination_table, None);
+            assert_eq!(columns_with_types, vec![]);
+            assert_eq!(late_binding, false);
+            assert_eq!(auto_refresh, None);
+            assert_eq!(comment, None);
+            assert_eq!(view_options, vec![]);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn parse_create_view_if_not_exists() {
+    let sql = "CREATE VIEW IF NOT EXISTS v (has, cols) AS SELECT 1, 2";
+    match verified_stmt(sql) {
+        Statement::CreateView {
+            if_not_exists,
+            name,
+            columns,
+            or_replace,
+            with_options,
+            query,
+            materialized,
+            engine,
+            cluster_by,
+            primary_key,
+            order_by,
+            table_ttl,
+            clickhouse_settings,
+            destination_table,
+            columns_with_types,
+            late_binding,
+            auto_refresh,
+            comment,
+            view_options,
+        } => {
+            assert_eq!(true, if_not_exists);
             assert_eq!("v", name.to_string());
             assert_eq!(
                 columns,
@@ -5832,6 +5902,7 @@ fn parse_create_or_replace_view() {
     let sql = "CREATE OR REPLACE VIEW v AS SELECT 1";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists,
             name,
             columns,
             or_replace,
@@ -5851,6 +5922,7 @@ fn parse_create_or_replace_view() {
             comment,
             view_options,
         } => {
+            assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
             assert_eq!(columns, vec![]);
             assert_eq!(with_options, vec![]);
@@ -5883,6 +5955,7 @@ fn parse_create_or_replace_materialized_view() {
     let sql = "CREATE OR REPLACE MATERIALIZED VIEW v AS SELECT 1";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists,
             name,
             columns,
             or_replace,
@@ -5902,6 +5975,7 @@ fn parse_create_or_replace_materialized_view() {
             comment,
             view_options,
         } => {
+            assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
             assert_eq!(columns, vec![]);
             assert_eq!(with_options, vec![]);
@@ -5930,6 +6004,7 @@ fn parse_create_materialized_view() {
     let sql = "CREATE MATERIALIZED VIEW myschema.myview AS SELECT foo FROM bar";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists,
             name,
             or_replace,
             columns,
@@ -5949,6 +6024,7 @@ fn parse_create_materialized_view() {
             comment,
             view_options,
         } => {
+            assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
             assert_eq!(Vec::<WithSpan<Ident>>::new(), columns);
             assert_eq!("SELECT foo FROM bar", query.to_string());
@@ -5977,6 +6053,7 @@ fn parse_create_materialized_view_with_cluster_by() {
     let sql = "CREATE MATERIALIZED VIEW myschema.myview CLUSTER BY (foo) AS SELECT foo FROM bar";
     match verified_stmt(sql) {
         Statement::CreateView {
+            if_not_exists,
             name,
             or_replace,
             columns,
@@ -5996,6 +6073,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             comment,
             view_options,
         } => {
+            assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
             assert_eq!(Vec::<WithSpan<Ident>>::new(), columns);
             assert_eq!("SELECT foo FROM bar", query.to_string());

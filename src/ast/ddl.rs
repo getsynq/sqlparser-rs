@@ -557,6 +557,23 @@ impl fmt::Display for ProcedureParam {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ColumnLocation {
+    First,
+    After(WithSpan<Ident>),
+}
+
+impl fmt::Display for ColumnLocation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::First => write!(f, "FIRST"),
+            Self::After(ident) => write!(f, "AFTER {ident}"),
+        }
+    }
+}
+
 /// SQL column definition
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -569,6 +586,7 @@ pub struct ColumnDef {
     pub options: Vec<ColumnOptionDef>,
     pub column_options: Vec<SqlOption>,
     pub mask: Option<ObjectName>,
+    pub column_location: Option<ColumnLocation>,
 }
 
 impl fmt::Display for ColumnDef {
@@ -592,6 +610,9 @@ impl fmt::Display for ColumnDef {
         }
         if let Some(mask) = &self.mask {
             write!(f, " MASK {mask}")?;
+        }
+        if let Some(column_location) = &self.column_location {
+            write!(f, " {column_location}")?;
         }
         Ok(())
     }

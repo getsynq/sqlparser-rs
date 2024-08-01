@@ -3372,6 +3372,8 @@ impl<'a> Parser<'a> {
     pub fn parse_create_view(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
         let materialized = self.parse_keyword(Keyword::MATERIALIZED);
         self.expect_keyword(Keyword::VIEW)?;
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+
         // Many dialects support `OR ALTER` right after `CREATE`, but we don't (yet).
         // ANSI SQL and Postgres support RECURSIVE here, but we don't support it either.
         let name = self.parse_object_name(false)?;
@@ -3507,6 +3509,7 @@ impl<'a> Parser<'a> {
             ]);
 
         Ok(Statement::CreateView {
+            if_not_exists,
             name,
             columns,
             query,
@@ -4529,6 +4532,19 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let column_location = if dialect_of!(self is ClickHouseDialect) {
+            if self.parse_keyword(Keyword::FIRST) {
+                Some(ColumnLocation::First)
+            } else if self.parse_keyword(Keyword::AFTER) {
+                let column_name = self.parse_identifier(false)?;
+                Some(ColumnLocation::After(column_name))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(ColumnDef {
             name,
             data_type,
@@ -4537,6 +4553,7 @@ impl<'a> Parser<'a> {
             options,
             column_options,
             mask,
+            column_location,
         })
     }
 
@@ -4930,7 +4947,7 @@ impl<'a> Parser<'a> {
                 } else {
                     let column_keyword = self.parse_keyword(Keyword::COLUMN);
 
-                    let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect)
+                    let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect | ClickHouseDialect)
                     {
                         self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS])
                             || if_not_exists

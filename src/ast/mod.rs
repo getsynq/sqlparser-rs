@@ -33,9 +33,9 @@ pub use self::data_type::{
 };
 pub use self::dcl::{AlterRoleOperation, ResetConfig, RoleOption, SetConfigValue};
 pub use self::ddl::{
-    AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnOption,
-    ColumnOptionDef, ConstraintProperty, GeneratedAs, IndexType, KeyOrIndexDisplay, ProcedureParam,
-    ReferentialAction, TableConstraint, UserDefinedTypeCompositeAttributeDef,
+    AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
+    ColumnOption, ColumnOptionDef, ConstraintProperty, GeneratedAs, IndexType, KeyOrIndexDisplay,
+    ProcedureParam, ReferentialAction, TableConstraint, UserDefinedTypeCompositeAttributeDef,
     UserDefinedTypeRepresentation,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
@@ -1602,6 +1602,7 @@ pub enum Statement {
     /// CREATE VIEW
     /// ```
     CreateView {
+        if_not_exists: bool,
         or_replace: bool,
         materialized: bool,
         /// View name
@@ -2664,6 +2665,7 @@ impl fmt::Display for Statement {
                 Ok(())
             }
             Statement::CreateView {
+                if_not_exists,
                 name,
                 or_replace,
                 columns,
@@ -2685,8 +2687,9 @@ impl fmt::Display for Statement {
             } => {
                 write!(
                     f,
-                    "CREATE {or_replace}{materialized}VIEW {name}",
+                    "CREATE {or_replace}{materialized}VIEW {if_not_exists}{name}",
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                     materialized = if *materialized { "MATERIALIZED " } else { "" },
                     name = name
                 )?;
