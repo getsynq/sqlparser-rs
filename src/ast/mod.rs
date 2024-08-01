@@ -1511,6 +1511,20 @@ pub enum Statement {
         /// RETURNING
         returning: Option<Vec<WithSpan<SelectItem>>>,
     },
+    /// ```sql
+    /// INSTALL
+    /// ```
+    Install {
+        /// Only for DuckDB
+        extension_name: WithSpan<Ident>,
+    },
+    /// ```sql
+    /// LOAD
+    /// ```
+    Load {
+        /// Only for DuckDB
+        extension_name: WithSpan<Ident>,
+    },
     // TODO: Support ROW FORMAT
     Directory {
         overwrite: bool,
@@ -2231,6 +2245,46 @@ pub enum Statement {
         name: ObjectName,
         representation: UserDefinedTypeRepresentation,
     },
+    /// ```sql
+    /// PRAGMA <schema-name>.<pragma-name> = <pragma-value>
+    /// ```
+    Pragma {
+        name: ObjectName,
+        value: Option<Value>,
+        is_eq: bool,
+    },
+    /// ```sql
+    /// LOCK TABLES <table_name> [READ [LOCAL] | [LOW_PRIORITY] WRITE]
+    /// ```
+    /// Note: this is a MySQL-specific statement. See <https://dev.mysql.com/doc/refman/8.0/en/lock-tables.html>
+    LockTables { tables: Vec<LockTable> },
+    /// ```sql
+    /// UNLOCK TABLES
+    /// ```
+    /// Note: this is a MySQL-specific statement. See <https://dev.mysql.com/doc/refman/8.0/en/lock-tables.html>
+    UnlockTables,
+    /// ```sql
+    /// UNLOAD(statement) TO <destination> [ WITH options ]
+    /// ```
+    /// See Redshift <https://docs.aws.amazon.com/redshift/latest/dg/r_UNLOAD.html> and
+    // Athena <https://docs.aws.amazon.com/athena/latest/ug/unload.html>
+    Unload {
+        query: Box<Query>,
+        to: WithSpan<Ident>,
+        with: Vec<SqlOption>,
+    },
+    /// ```sql
+    /// OPTIMIZE TABLE [db.]name [ON CLUSTER cluster] [PARTITION partition | PARTITION ID 'partition_id'] [FINAL] [DEDUPLICATE [BY expression]]
+    /// ```
+    ///
+    /// See ClickHouse <https://clickhouse.com/docs/en/sql-reference/statements/optimize>
+    OptimizeTable {
+        name: ObjectName,
+        on_cluster: Option<WithSpan<Ident>>,
+        partition: Option<Partition>,
+        include_final: bool,
+        deduplicate: Option<Deduplicate>,
+    },
 }
 
 impl fmt::Display for Statement {
@@ -2475,6 +2529,14 @@ impl fmt::Display for Statement {
 
                 Ok(())
             }
+
+            Statement::Install {
+                extension_name: name,
+            } => write!(f, "INSTALL {name}"),
+
+            Statement::Load {
+                extension_name: name,
+            } => write!(f, "LOAD {name}"),
 
             Statement::Call(function) => write!(f, "CALL {function}"),
 
@@ -3709,6 +3771,55 @@ impl fmt::Display for Statement {
                 representation,
             } => {
                 write!(f, "CREATE TYPE {name} AS {representation}")
+            }
+            Statement::Pragma { name, value, is_eq } => {
+                write!(f, "PRAGMA {name}")?;
+                if value.is_some() {
+                    let val = value.as_ref().unwrap();
+                    if *is_eq {
+                        write!(f, " = {val}")?;
+                    } else {
+                        write!(f, "({val})")?;
+                    }
+                }
+                Ok(())
+            }
+            Statement::LockTables { tables } => {
+                write!(f, "LOCK TABLES {}", display_comma_separated(tables))
+            }
+            Statement::UnlockTables => {
+                write!(f, "UNLOCK TABLES")
+            }
+            Statement::Unload { query, to, with } => {
+                write!(f, "UNLOAD({query}) TO {to}")?;
+
+                if !with.is_empty() {
+                    write!(f, " WITH ({})", display_comma_separated(with))?;
+                }
+
+                Ok(())
+            }
+            Statement::OptimizeTable {
+                name,
+                on_cluster,
+                partition,
+                include_final,
+                deduplicate,
+            } => {
+                write!(f, "OPTIMIZE TABLE {name}")?;
+                if let Some(on_cluster) = on_cluster {
+                    write!(f, " ON CLUSTER {on_cluster}", on_cluster = on_cluster)?;
+                }
+                if let Some(partition) = partition {
+                    write!(f, " {partition}", partition = partition)?;
+                }
+                if *include_final {
+                    write!(f, " FINAL")?;
+                }
+                if let Some(deduplicate) = deduplicate {
+                    write!(f, " {deduplicate}")?;
+                }
+                Ok(())
             }
         }
     }
@@ -5203,6 +5314,61 @@ impl fmt::Display for SearchModifier {
             }
             Self::WithQueryExpansion => {
                 write!(f, "WITH QUERY EXPANSION")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct LockTable {
+    pub table: Ident,
+    pub alias: Option<Ident>,
+    pub lock_type: LockTableType,
+}
+
+impl fmt::Display for LockTable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            table: tbl_name,
+            alias,
+            lock_type,
+        } = self;
+
+        write!(f, "{tbl_name} ")?;
+        if let Some(alias) = alias {
+            write!(f, "AS {alias} ")?;
+        }
+        write!(f, "{lock_type}")?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum LockTableType {
+    Read { local: bool },
+    Write { low_priority: bool },
+}
+
+impl fmt::Display for LockTableType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Read { local } => {
+                write!(f, "READ")?;
+                if *local {
+                    write!(f, " LOCAL")?;
+                }
+            }
+            Self::Write { low_priority } => {
+                if *low_priority {
+                    write!(f, "LOW_PRIORITY ")?;
+                }
+                write!(f, "WRITE")?;
             }
         }
 

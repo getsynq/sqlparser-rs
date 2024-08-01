@@ -958,7 +958,7 @@ impl fmt::Display for UserDefinedTypeCompositeAttributeDef {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum Partition {
-    Identifier(Ident),
+    Identifier(WithSpan<Ident>),
     Expr(Expr),
     /// ClickHouse supports PART expr which represents physical partition in disk.
     /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/alter/partition#attach-partitionpart)

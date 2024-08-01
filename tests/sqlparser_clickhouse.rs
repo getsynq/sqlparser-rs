@@ -21,7 +21,7 @@ use sqlparser::ast::SelectItem::UnnamedExpr;
 use sqlparser::ast::TableFactor::Table;
 use sqlparser::ast::*;
 use sqlparser::dialect::{ClickHouseDialect, GenericDialect};
-use sqlparser::parser;
+use sqlparser::parser::ParserError;
 use test_utils::*;
 
 #[macro_use]
@@ -425,6 +425,76 @@ fn parse_create_table() {
 }
 
 #[test]
+fn parse_optimize_table() {
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE db.t0");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 ON CLUSTER 'cluster'");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 ON CLUSTER 'cluster' FINAL");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 FINAL DEDUPLICATE");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 DEDUPLICATE");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 DEDUPLICATE BY id");
+    clickhouse_and_generic().verified_stmt("OPTIMIZE TABLE t0 FINAL DEDUPLICATE BY id");
+    clickhouse_and_generic()
+        .verified_stmt("OPTIMIZE TABLE t0 PARTITION tuple('2023-04-22') DEDUPLICATE BY id");
+    match clickhouse_and_generic().verified_stmt(
+        "OPTIMIZE TABLE t0 ON CLUSTER cluster PARTITION ID '2024-07' FINAL DEDUPLICATE BY id",
+    ) {
+        Statement::OptimizeTable {
+            name,
+            on_cluster,
+            partition,
+            include_final,
+            deduplicate,
+            ..
+        } => {
+            assert_eq!(name.to_string(), "t0");
+            assert_eq!(on_cluster, Some(Ident::new("cluster").empty_span()));
+            assert_eq!(
+                partition,
+                Some(Partition::Identifier(
+                    Ident::with_quote('\'', "2024-07").empty_span()
+                ))
+            );
+            assert!(include_final);
+            assert_eq!(
+                deduplicate,
+                Some(Deduplicate::ByExpression(Identifier(
+                    Ident::new("id").empty_span()
+                )))
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // negative cases
+    assert_eq!(
+        clickhouse_and_generic()
+            .parse_sql_statements("OPTIMIZE TABLE t0 DEDUPLICATE BY")
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected an expression:, found: EOF\nNear `OPTIMIZE TABLE t0 DEDUPLICATE BY`"
+                .to_string()
+        )
+    );
+    assert_eq!(
+        clickhouse_and_generic()
+            .parse_sql_statements("OPTIMIZE TABLE t0 PARTITION")
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected an expression:, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION`".to_string()
+        )
+    );
+    assert_eq!(
+        clickhouse_and_generic()
+            .parse_sql_statements("OPTIMIZE TABLE t0 PARTITION ID")
+            .unwrap_err(),
+        ParserError::ParserError(
+            "Expected identifier, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION ID`".to_string()
+        )
+    );
+}
+
+#[test]
 fn parse_create_view() {
     clickhouse().verified_stmt(
         r#"CREATE MATERIALIZED VIEW foo (`baz` String) AS SELECT bar AS baz FROM in"#,
@@ -496,13 +566,13 @@ fn parse_alter_table_attach_and_detach_partition() {
             clickhouse_and_generic()
                 .parse_sql_statements(format!("ALTER TABLE t0 {operation} PARTITION").as_str())
                 .unwrap_err(),
-            parser::ParserError::ParserError(format!("Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PARTITION`").to_string())
+            ParserError::ParserError(format!("Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PARTITION`").to_string())
         );
         assert_eq!(
             clickhouse_and_generic()
                 .parse_sql_statements(format!("ALTER TABLE t0 {operation} PART").as_str())
                 .unwrap_err(),
-            parser::ParserError::ParserError(
+            ParserError::ParserError(
                 format!(
                     "Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PART`"
                 )

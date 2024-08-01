@@ -513,6 +513,21 @@ impl<'a> Parser<'a> {
                 Keyword::EXECUTE => Ok(self.parse_execute()?),
                 Keyword::PREPARE => Ok(self.parse_prepare()?),
                 Keyword::MERGE => Ok(self.parse_merge()?),
+                // `PRAGMA` is sqlite specific https://www.sqlite.org/pragma.html
+                Keyword::PRAGMA => Ok(self.parse_pragma()?),
+                Keyword::UNLOAD => Ok(self.parse_unload()?),
+                // `INSTALL` is duckdb specific https://duckdb.org/docs/extensions/overview
+                Keyword::INSTALL if dialect_of!(self is DuckDbDialect | GenericDialect) => {
+                    Ok(self.parse_install()?)
+                }
+                // `LOAD` is duckdb specific https://duckdb.org/docs/extensions/overview
+                Keyword::LOAD if dialect_of!(self is DuckDbDialect | GenericDialect) => {
+                    Ok(self.parse_load()?)
+                }
+                // `OPTIMIZE` is clickhouse specific https://clickhouse.tech/docs/en/sql-reference/statements/optimize/
+                Keyword::OPTIMIZE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    Ok(self.parse_optimize_table()?)
+                }
                 _ => self.expected("an SQL statement", next_token),
             },
             Token::LParen => {
@@ -4108,6 +4123,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_optional_on_cluster(&mut self) -> Result<Option<WithSpan<Ident>>, ParserError> {
+        if self.parse_keywords(&[Keyword::ON, Keyword::CLUSTER]) {
+            Ok(Some(self.parse_identifier(false)?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn parse_create_table(
         &mut self,
         or_replace: bool,
@@ -4958,6 +4981,13 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::Eq)?;
         let value = self.parse_expr()?;
         Ok(SqlOption { name, value })
+    }
+
+    pub fn parse_partition(&mut self) -> Result<Partition, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let partitions = self.parse_comma_separated(Parser::parse_expr)?;
+        self.expect_token(&Token::RParen)?;
+        Ok(Partition::Partitions(partitions))
     }
 
     pub fn parse_alter_table_operation(&mut self) -> Result<AlterTableOperation, ParserError> {
@@ -8797,6 +8827,23 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn parse_unload(&mut self) -> Result<Statement, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let query = self.parse_boxed_query()?;
+        self.expect_token(&Token::RParen)?;
+
+        self.expect_keyword(Keyword::TO)?;
+        let to = self.parse_identifier(false)?;
+
+        let with_options = self.parse_options(Keyword::WITH)?;
+
+        Ok(Statement::Unload {
+            query,
+            to,
+            with: with_options,
+        })
+    }
+
     pub fn parse_merge_clauses(&mut self) -> Result<Vec<MergeClause>, ParserError> {
         let mut clauses: Vec<MergeClause> = vec![];
         loop {
@@ -8892,6 +8939,84 @@ impl<'a> Parser<'a> {
             source,
             on: Box::new(on),
             clauses,
+        })
+    }
+
+    // PRAGMA [schema-name '.'] pragma-name [('=' pragma-value) | '(' pragma-value ')']
+    pub fn parse_pragma(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_object_name(true)?;
+        if self.consume_token(&Token::LParen) {
+            let value = self.parse_number_value()?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Statement::Pragma {
+                name,
+                value: Some(value),
+                is_eq: false,
+            })
+        } else if self.consume_token(&Token::Eq) {
+            Ok(Statement::Pragma {
+                name,
+                value: Some(self.parse_number_value()?),
+                is_eq: true,
+            })
+        } else {
+            Ok(Statement::Pragma {
+                name,
+                value: None,
+                is_eq: false,
+            })
+        }
+    }
+
+    /// `INSTALL [extension_name]`
+    pub fn parse_install(&mut self) -> Result<Statement, ParserError> {
+        let extension_name = self.parse_identifier(false)?;
+
+        Ok(Statement::Install { extension_name })
+    }
+
+    /// `LOAD [extension_name]`
+    pub fn parse_load(&mut self) -> Result<Statement, ParserError> {
+        let extension_name = self.parse_identifier(false)?;
+        Ok(Statement::Load { extension_name })
+    }
+
+    /// ```sql
+    /// OPTIMIZE TABLE [db.]name [ON CLUSTER cluster] [PARTITION partition | PARTITION ID 'partition_id'] [FINAL] [DEDUPLICATE [BY expression]]
+    /// ```
+    /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/optimize)
+    pub fn parse_optimize_table(&mut self) -> Result<Statement, ParserError> {
+        self.expect_keyword(Keyword::TABLE)?;
+        let name = self.parse_object_name(false)?;
+        let on_cluster = self.parse_optional_on_cluster()?;
+
+        let partition = if self.parse_keyword(Keyword::PARTITION) {
+            if self.parse_keyword(Keyword::ID) {
+                Some(Partition::Identifier(self.parse_identifier(false)?))
+            } else {
+                Some(Partition::Expr(self.parse_expr()?))
+            }
+        } else {
+            None
+        };
+
+        let include_final = self.parse_keyword(Keyword::FINAL);
+        let deduplicate = if self.parse_keyword(Keyword::DEDUPLICATE) {
+            if self.parse_keyword(Keyword::BY) {
+                Some(Deduplicate::ByExpression(self.parse_expr()?))
+            } else {
+                Some(Deduplicate::All)
+            }
+        } else {
+            None
+        };
+
+        Ok(Statement::OptimizeTable {
+            name,
+            on_cluster,
+            partition,
+            include_final,
+            deduplicate,
         })
     }
 
