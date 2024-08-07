@@ -14,13 +14,14 @@
 //! Test SQL syntax specific to ClickHouse.
 
 #[cfg(test)]
-use pretty_assertions::assert_eq;
+use assert_eq;
 use sqlparser::ast::Expr::{ArrayIndex, BinaryOp, Identifier};
 use sqlparser::ast::Ident;
 use sqlparser::ast::SelectItem::UnnamedExpr;
 use sqlparser::ast::TableFactor::Table;
 use sqlparser::ast::*;
 use sqlparser::dialect::{ClickHouseDialect, GenericDialect};
+use sqlparser::parser;
 use test_utils::*;
 
 #[macro_use]
@@ -439,6 +440,76 @@ fn parse_create_view() {
         r#"CREATE MATERIALIZED VIEW foo TO out (`baz` String) AS SELECT bar AS baz FROM in"#,
     );
     clickhouse().verified_stmt(r#"CREATE VIEW analytics.runs_audit_ingest_daily (`count` UInt64, `ts` DateTime('UTC')) AS SELECT count(*) AS count, toStartOfDay(ingested_at) AS ts FROM analytics.runs_int_runs GROUP BY ts ORDER BY ts DESC"#);
+}
+
+#[test]
+fn parse_alter_table_attach_and_detach_partition() {
+    for operation in &["ATTACH", "DETACH"] {
+        match clickhouse_and_generic()
+            .verified_stmt(format!("ALTER TABLE t0 {operation} PARTITION part").as_str())
+        {
+            Statement::AlterTable {
+                name, operations, ..
+            } => {
+                assert_eq!("t0", name.to_string());
+                assert_eq!(
+                    operations[0],
+                    if operation == &"ATTACH" {
+                        AlterTableOperation::AttachPartition {
+                            partition: Partition::Expr(Identifier(Ident::new("part").empty_span())),
+                        }
+                    } else {
+                        AlterTableOperation::DetachPartition {
+                            partition: Partition::Expr(Identifier(Ident::new("part").empty_span())),
+                        }
+                    }
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        match clickhouse_and_generic()
+            .verified_stmt(format!("ALTER TABLE t1 {operation} PART part").as_str())
+        {
+            Statement::AlterTable {
+                name, operations, ..
+            } => {
+                assert_eq!("t1", name.to_string());
+                assert_eq!(
+                    operations[0],
+                    if operation == &"ATTACH" {
+                        AlterTableOperation::AttachPartition {
+                            partition: Partition::Part(Identifier(Ident::new("part").empty_span())),
+                        }
+                    } else {
+                        AlterTableOperation::DetachPartition {
+                            partition: Partition::Part(Identifier(Ident::new("part").empty_span())),
+                        }
+                    }
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // negative cases
+        assert_eq!(
+            clickhouse_and_generic()
+                .parse_sql_statements(format!("ALTER TABLE t0 {operation} PARTITION").as_str())
+                .unwrap_err(),
+            parser::ParserError::ParserError(format!("Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PARTITION`").to_string())
+        );
+        assert_eq!(
+            clickhouse_and_generic()
+                .parse_sql_statements(format!("ALTER TABLE t0 {operation} PART").as_str())
+                .unwrap_err(),
+            parser::ParserError::ParserError(
+                format!(
+                    "Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PART`"
+                )
+                .to_string()
+            )
+        );
+    }
 }
 
 #[test]

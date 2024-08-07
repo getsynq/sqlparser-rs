@@ -5128,6 +5128,18 @@ impl<'a> Parser<'a> {
             self.prev_token();
             let options = self.parse_options(Keyword::OPTIONS)?;
             AlterTableOperation::SetOptions { options }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::ATTACH)
+        {
+            AlterTableOperation::AttachPartition {
+                partition: self.parse_part_or_partition()?,
+            }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::DETACH)
+        {
+            AlterTableOperation::DetachPartition {
+                partition: self.parse_part_or_partition()?,
+            }
         } else {
             return self.expected(
                 "ADD, RENAME, PARTITION, SWAP or DROP after ALTER TABLE",
@@ -5135,6 +5147,16 @@ impl<'a> Parser<'a> {
             );
         };
         Ok(operation)
+    }
+
+    fn parse_part_or_partition(&mut self) -> Result<Partition, ParserError> {
+        let keyword = self.expect_one_of_keywords(&[Keyword::PART, Keyword::PARTITION])?;
+        match keyword {
+            Keyword::PART => Ok(Partition::Part(self.parse_expr()?)),
+            Keyword::PARTITION => Ok(Partition::Expr(self.parse_expr()?)),
+            // unreachable because expect_one_of_keywords used above
+            _ => unreachable!(),
+        }
     }
 
     pub fn parse_alter(&mut self) -> Result<Statement, ParserError> {
