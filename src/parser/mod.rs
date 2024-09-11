@@ -4381,7 +4381,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let comment = if self.parse_keyword(Keyword::COMMENT) {
+        let mut comment = if self.parse_keyword(Keyword::COMMENT) {
             let _ = self.consume_token(&Token::Eq);
             let next_token = self.next_token();
             match next_token.token {
@@ -4465,6 +4465,17 @@ impl<'a> Parser<'a> {
             Some(self.parse_comma_separated(Parser::parse_sql_option)?)
         } else {
             None
+        };
+
+        comment = if self.parse_keyword(Keyword::COMMENT) {
+            let _ = self.consume_token(&Token::Eq);
+            let next_token = self.next_token();
+            match next_token.token {
+                Token::SingleQuotedString(str) => Some(str),
+                _ => self.expected("comment", next_token)?,
+            }
+        } else {
+            comment
         };
 
         let table_options = self.parse_options(Keyword::OPTIONS)?;

@@ -1025,6 +1025,23 @@ fn parse_create_view_if_not_exists() {
     );
 }
 
+#[test]
+fn parse_create_table_comment(){
+    clickhouse().verified_stmt(
+        "CREATE TABLE analytics.f_entity_controls_by_type (`path` String) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
+    );
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE analytics.f_entity_controls_by_type
+(
+    `path` String
+)
+SETTINGS index_granularity = 8192
+COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
+        "CREATE TABLE analytics.f_entity_controls_by_type (`path` String) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' SETTINGS index_granularity = 8192"
+    );
+}
+
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],
