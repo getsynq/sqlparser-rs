@@ -2383,11 +2383,15 @@ impl<'a> Parser<'a> {
                 negated,
             }
         } else {
-            Expr::InList {
+            let old_value = self.options.trailing_commas;
+            self.options.trailing_commas = true;
+            let in_list = Expr::InList {
                 expr: Box::new(expr),
-                list: self.parse_comma_separated(Parser::parse_expr)?,
+                list: self.parse_comma_separated0(Parser::parse_expr,Token::RParen)?,
                 negated,
-            }
+            };
+            self.options.trailing_commas = old_value;
+            in_list
         };
         self.expect_token(&Token::RParen)?;
         Ok(in_op)

@@ -1042,6 +1042,11 @@ COMMENT 'Information about all entity controls by type.\nThe table contains one 
 }
 
 
+#[test]
+fn parse_in_with_dangling_comma() {
+    clickhouse().one_statement_parses_to("SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test',)", "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test')");
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],
