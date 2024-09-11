@@ -433,7 +433,7 @@ fn parse_create_table_set_enum() {
                     },
                     ColumnDef {
                         name: Ident::new("baz").empty_span(),
-                        data_type: DataType::Enum(vec!["a".to_string(), "b".to_string()]),
+                        data_type: DataType::Enum(vec![EnumTypeValue::Name("a".to_string()), EnumTypeValue::Name("b".to_string())]),
                         collation: None,
                         codec: None,
                         options: vec![],

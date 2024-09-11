@@ -5900,6 +5900,18 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse an literal integer/long
+    pub fn parse_literal_int(&mut self) -> Result<i64, ParserError> {
+        let neg = if self.consume_token(&Token::Minus) { -1 } else { 1 };
+        let next_token = self.next_token();
+        match next_token.token {
+            Token::Number(s, _) => s.parse::<i64>().map(|n| n*neg).map_err(|e| {
+                ParserError::ParserError(format!("Could not parse '{s}' as i64: {e}"))
+            }),
+            _ => self.expected("literal int", next_token),
+        }
+    }
+
     pub fn parse_function_definition(&mut self) -> Result<FunctionDefinition, ParserError> {
         let peek_token = self.peek_token();
         match peek_token.token {
@@ -6184,7 +6196,9 @@ impl<'a> Parser<'a> {
                 Keyword::BIGDECIMAL => Ok(DataType::BigDecimal(
                     self.parse_exact_number_optional_precision_scale()?,
                 )),
-                Keyword::ENUM => Ok(DataType::Enum(self.parse_string_values()?)),
+                Keyword::ENUM => Ok(DataType::Enum(self.parse_enum_values()?)),
+                Keyword::ENUM8 => Ok(DataType::Enum8(self.parse_enum_values()?)),
+                Keyword::ENUM16 => Ok(DataType::Enum16(self.parse_enum_values()?)),
                 Keyword::SET => Ok(DataType::Set(self.parse_string_values()?)),
                 Keyword::ARRAY => {
                     if dialect_of!(self is SnowflakeDialect) {
@@ -6285,6 +6299,37 @@ impl<'a> Parser<'a> {
             match next_token.token {
                 Token::Comma => (),
                 Token::RParen => break,
+                _ => self.expected(", or }", next_token)?,
+            }
+        }
+        Ok(values)
+    }
+
+    pub fn parse_enum_values(&mut self) -> Result<Vec<EnumTypeValue>, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let mut values:Vec<EnumTypeValue> = Vec::new();
+        loop {
+            let next_token = self.next_token();
+            let name = match next_token.token {
+                Token::SingleQuotedString(value) => value,
+                _ => self.expected("a string", next_token)?,
+            };
+            let next_token = self.next_token();
+            match next_token.token {
+                Token::Eq => {
+                    values.push(EnumTypeValue::NameWithValue(name, self.parse_literal_int()?));
+                    if self.consume_token(&Token::RParen) {
+                        break;
+                    }
+                    if self.consume_token(&Token::Comma) {
+                        continue;
+                    }
+                }
+                Token::Comma => values.push(EnumTypeValue::Name(name)),
+                Token::RParen => {
+                    values.push(EnumTypeValue::Name(name));
+                    break
+                },
                 _ => self.expected(", or }", next_token)?,
             }
         }

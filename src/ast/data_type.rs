@@ -294,7 +294,12 @@ pub enum DataType {
     /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/nested-data-structures/nested
     Nested(Vec<ColumnDef>),
     /// Enums
-    Enum(Vec<String>),
+    Enum(Vec<EnumTypeValue>),
+    /// Enum8
+    ///
+    /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/enum
+    Enum8(Vec<EnumTypeValue>),
+    Enum16(Vec<EnumTypeValue>),
     /// Set
     Set(Vec<String>),
     /// Struct
@@ -497,15 +502,15 @@ impl fmt::Display for DataType {
                 }
             }
             DataType::Enum(vals) => {
-                write!(f, "ENUM(")?;
-                for (i, v) in vals.iter().enumerate() {
-                    if i != 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "'{}'", escape_single_quote_string(v))?;
-                }
-                write!(f, ")")
+                write!(f, "ENUM({})", display_comma_separated(vals))
             }
+            DataType::Enum8(vals) => {
+                write!(f, "ENUM8({})", display_comma_separated(vals))
+            }
+            DataType::Enum16(vals) => {
+                write!(f, "ENUM16({})", display_comma_separated(vals))
+            }
+
             DataType::Set(vals) => {
                 write!(f, "SET(")?;
                 for (i, v) in vals.iter().enumerate() {
@@ -785,4 +790,31 @@ pub enum ArrayElemTypeDef {
     SquareBracket(Box<DataType>),
     /// `Array(Int64)`
     Parenthesis(Box<DataType>),
+}
+
+
+/// String enum values with optional integer value.
+///
+/// [1]: https://clickhouse.com/docs/en/sql-reference/data-types/enum
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum EnumTypeValue {
+    /// 'world'
+    Name(String),
+    /// 'hello'=1
+    NameWithValue(String, i64),
+}
+
+impl fmt::Display for EnumTypeValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Name(n) => {
+                write!(f, "'{}'", escape_single_quote_string(n))
+            }
+            Self::NameWithValue(n,v) => {
+                write!(f, "'{}' = {}", escape_single_quote_string(n),v)
+            }
+        }
+    }
 }

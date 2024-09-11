@@ -603,7 +603,8 @@ fn parse_create_table_with_variant_default_expressions() {
         "a DATETIME MATERIALIZED now(),",
         " b DATETIME EPHEMERAL now(),",
         " c DATETIME EPHEMERAL,",
-        " d STRING ALIAS toString(c)",
+        " d STRING ALIAS toString(c),",
+        " x ENUM8('hello' = 1, 'world', 'foo' = -3)",
         ") ENGINE=MergeTree"
     );
     match clickhouse().verified_stmt(sql) {
@@ -694,6 +695,16 @@ fn parse_create_table_with_variant_default_expressions() {
                                 on_overflow: None,
                             }))
                         }],
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("x").empty_span(),
+                        data_type: DataType::Enum8(vec![EnumTypeValue::NameWithValue("hello".to_string(), 1), EnumTypeValue::Name("world".to_string()), EnumTypeValue::NameWithValue("foo".to_string(), -3)]),
+                        collation: None,
+                        codec: None,
+                        options: vec![],
                         column_options: vec![],
                         mask: None,
                         column_location: None,
