@@ -1041,6 +1041,14 @@ COMMENT 'Information about all entity controls by type.\nThe table contains one 
     );
 }
 
+#[test]
+fn parse_create_view_comment(){
+    clickhouse().one_statement_parses_to(
+        "CREATE VIEW foo (col String) AS (SELECT * FROM bar) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
+        "CREATE VIEW foo (col String) COMMENT='Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' AS (SELECT * FROM bar)"
+    );
+}
+
 
 #[test]
 fn parse_in_with_dangling_comma() {
