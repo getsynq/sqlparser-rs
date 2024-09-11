@@ -2526,7 +2526,10 @@ fn parse_create_table() {
                             },
                             ColumnOptionDef {
                                 name: Some("pkey".into()),
-                                option: ColumnOption::Unique { is_primary: true },
+                                option: ColumnOption::Unique {
+                                    is_primary: true,
+                                    characteristics: vec![],
+                                },
                             },
                             ColumnOptionDef {
                                 name: None,
@@ -2534,7 +2537,10 @@ fn parse_create_table() {
                             },
                             ColumnOptionDef {
                                 name: None,
-                                option: ColumnOption::Unique { is_primary: false },
+                                option: ColumnOption::Unique {
+                                    is_primary: false,
+                                    characteristics: vec![],
+                                },
                             },
                             ColumnOptionDef {
                                 name: None,
@@ -2560,6 +2566,7 @@ fn parse_create_table() {
                                 ],
                                 on_delete: None,
                                 on_update: None,
+                                characteristics: vec![],
                             },
                         }],
                         column_options: vec![],
@@ -2578,6 +2585,7 @@ fn parse_create_table() {
                                 referred_columns: vec![],
                                 on_delete: Some(ReferentialAction::Cascade),
                                 on_update: Some(ReferentialAction::NoAction),
+                                characteristics: vec![],
                             },
                         },],
                         column_options: vec![],
@@ -2596,7 +2604,7 @@ fn parse_create_table() {
                         referred_columns: vec![Ident::new("lat").empty_span()],
                         on_delete: Some(ReferentialAction::Restrict),
                         on_update: None,
-                        constraint_properties: vec![],
+                        characteristics: vec![],
                     },
                     TableConstraint::ForeignKey {
                         name: Some("fkey2".into()),
@@ -2605,7 +2613,7 @@ fn parse_create_table() {
                         referred_columns: vec![Ident::new("lat").empty_span()],
                         on_delete: Some(ReferentialAction::NoAction),
                         on_update: Some(ReferentialAction::Restrict),
-                        constraint_properties: vec![],
+                        characteristics: vec![],
                     },
                     TableConstraint::ForeignKey {
                         name: None,
@@ -2614,7 +2622,7 @@ fn parse_create_table() {
                         referred_columns: vec![Ident::new("lat").empty_span()],
                         on_delete: Some(ReferentialAction::Cascade),
                         on_update: Some(ReferentialAction::SetDefault),
-                        constraint_properties: vec![],
+                        characteristics: vec![],
                     },
                     TableConstraint::ForeignKey {
                         name: None,
@@ -2623,7 +2631,7 @@ fn parse_create_table() {
                         referred_columns: vec![Ident::new("longitude").empty_span()],
                         on_delete: None,
                         on_update: Some(ReferentialAction::SetNull),
-                        constraint_properties: vec![],
+                        characteristics: vec![],
                     },
                 ]
             );
@@ -2643,6 +2651,134 @@ fn parse_create_table() {
         .unwrap_err()
         .to_string()
         .contains("Expected constraint details after CONSTRAINT <name>"));
+}
+
+#[test]
+fn parse_create_table_with_constraint_characteristics() {
+    let sql = "CREATE TABLE uk_cities (\
+               name VARCHAR(100) NOT NULL,\
+               lat DOUBLE NULL,\
+               lng DOUBLE,
+               constraint fkey foreign key (lat) references othertable3 (lat) on delete restrict deferrable initially deferred,\
+               constraint fkey2 foreign key (lat) references othertable4(lat) on delete no action on update restrict deferrable initially immediate, \
+               foreign key (lat) references othertable4(lat) on update set default on delete cascade not deferrable initially deferred not enforced
+               )";
+    let ast = one_statement_parses_to(
+        sql,
+        "CREATE TABLE uk_cities (\
+         name VARCHAR(100) NOT NULL, \
+         lat DOUBLE NULL, \
+         lng DOUBLE, \
+         CONSTRAINT fkey FOREIGN KEY (lat) REFERENCES othertable3(lat) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED, \
+         CONSTRAINT fkey2 FOREIGN KEY (lat) REFERENCES othertable4(lat) ON DELETE NO ACTION ON UPDATE RESTRICT DEFERRABLE INITIALLY IMMEDIATE, \
+         FOREIGN KEY (lat) REFERENCES othertable4(lat) ON DELETE CASCADE ON UPDATE SET DEFAULT NOT DEFERRABLE INITIALLY DEFERRED NOT ENFORCED)",
+    );
+    match ast {
+        Statement::CreateTable {
+            name,
+            columns,
+            constraints,
+            with_options,
+            if_not_exists: false,
+            external: false,
+            file_format: None,
+            location: None,
+            ..
+        } => {
+            assert_eq!("uk_cities", name.to_string());
+            assert_eq!(
+                columns,
+                vec![
+                    ColumnDef {
+                        name: Ident::new("name").empty_span(),
+                        data_type: DataType::Varchar(Some(CharacterLength::IntegerLength {
+                            length: 100,
+                            unit: None,
+                        })),
+                        collation: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::NotNull,
+                        }],
+                        codec: None,
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("lat").empty_span(),
+                        data_type: DataType::Double,
+                        collation: None,
+                        options: vec![ColumnOptionDef {
+                            name: None,
+                            option: ColumnOption::Null,
+                        }],
+                        codec: None,
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                    ColumnDef {
+                        name: Ident::new("lng").empty_span(),
+                        data_type: DataType::Double,
+                        collation: None,
+                        options: vec![],
+                        codec: None,
+                        column_options: vec![],
+                        mask: None,
+                        column_location: None,
+                    },
+                ]
+            );
+            assert_eq!(
+                constraints,
+                vec![
+                    TableConstraint::ForeignKey {
+                        name: Some(Ident::new("fkey")),
+                        columns: vec![Ident::new("lat").empty_span()],
+                        foreign_table: ObjectName(vec!["othertable3".into()]),
+                        referred_columns: vec![Ident::new("lat").empty_span()],
+                        on_delete: Some(ReferentialAction::Restrict),
+                        on_update: None,
+                        characteristics: vec![
+                            ConstraintCharacteristics::Deferrable,
+                            ConstraintCharacteristics::Initially,
+                            ConstraintCharacteristics::Deferred,
+                        ],
+                    },
+                    TableConstraint::ForeignKey {
+                        name: Some(Ident::new("fkey2")),
+                        columns: vec![Ident::new("lat").empty_span()],
+                        foreign_table: ObjectName(vec!["othertable4".into()]),
+                        referred_columns: vec![Ident::new("lat").empty_span()],
+                        on_delete: Some(ReferentialAction::NoAction),
+                        on_update: Some(ReferentialAction::Restrict),
+                        characteristics: vec![
+                            ConstraintCharacteristics::Deferrable,
+                            ConstraintCharacteristics::Initially,
+                            ConstraintCharacteristics::Immediate,
+                        ],
+                    },
+                    TableConstraint::ForeignKey {
+                        name: None,
+                        columns: vec![Ident::new("lat").empty_span()],
+                        foreign_table: ObjectName(vec!["othertable4".into()]),
+                        referred_columns: vec![Ident::new("lat").empty_span()],
+                        on_delete: Some(ReferentialAction::Cascade),
+                        on_update: Some(ReferentialAction::SetDefault),
+                        characteristics: vec![
+                            ConstraintCharacteristics::NotDeferrable,
+                            ConstraintCharacteristics::Initially,
+                            ConstraintCharacteristics::Deferred,
+                            ConstraintCharacteristics::NotEnforced,
+                        ],
+                    },
+                ]
+            );
+            assert_eq!(with_options, vec![]);
+        }
+        _ => unreachable!(),
+    }
 }
 
 #[test]

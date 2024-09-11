@@ -4575,9 +4575,17 @@ impl<'a> Parser<'a> {
         } else if self.parse_keyword(Keyword::DEFAULT) {
             Ok(Some(ColumnOption::Default(self.parse_expr()?)))
         } else if self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY]) {
-            Ok(Some(ColumnOption::Unique { is_primary: true }))
+            let characteristics = self.parse_constraint_characteristics()?;
+            Ok(Some(ColumnOption::Unique {
+                is_primary: true,
+                characteristics,
+            }))
         } else if self.parse_keyword(Keyword::UNIQUE) {
-            Ok(Some(ColumnOption::Unique { is_primary: false }))
+            let characteristics = self.parse_constraint_characteristics()?;
+            Ok(Some(ColumnOption::Unique {
+                is_primary: false,
+                characteristics,
+            }))
         } else if self.parse_keyword(Keyword::REFERENCES) {
             let foreign_table = self.parse_object_name(false)?;
             // PostgreSQL allows omitting the column list and
@@ -4596,11 +4604,13 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
+            let characteristics = self.parse_constraint_characteristics()?;
             Ok(Some(ColumnOption::ForeignKey {
                 foreign_table,
                 referred_columns,
                 on_delete,
                 on_update,
+                characteristics,
             }))
         } else if self.parse_keyword(Keyword::CHECK) {
             self.expect_token(&Token::LParen)?;
@@ -4699,33 +4709,36 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_constraint_properties(&mut self) -> Result<Vec<ConstraintProperty>, ParserError> {
-        let mut constraint_properties = Vec::new();
-        if dialect_of!(self is SnowflakeDialect) {
-            loop {
-                if self.parse_keyword(Keyword::RELY) {
-                    constraint_properties.push(ConstraintProperty::Rely);
-                } else if self.parse_keyword(Keyword::NORELY) {
-                    constraint_properties.push(ConstraintProperty::NoRely);
-                } else if self.parse_keyword(Keyword::VALIDATE) {
-                    constraint_properties.push(ConstraintProperty::Validate);
-                } else if self.parse_keyword(Keyword::NOVALIDATE) {
-                    constraint_properties.push(ConstraintProperty::NoValidate);
-                } else {
-                    break;
-                }
+    pub fn parse_constraint_characteristics(
+        &mut self,
+    ) -> Result<Vec<ConstraintCharacteristics>, ParserError> {
+        let mut characteristics = Vec::new();
+        loop {
+            if self.parse_keyword(Keyword::RELY) {
+                characteristics.push(ConstraintCharacteristics::Rely);
+            } else if self.parse_keyword(Keyword::NORELY) {
+                characteristics.push(ConstraintCharacteristics::NoRely);
+            } else if self.parse_keyword(Keyword::VALIDATE) {
+                characteristics.push(ConstraintCharacteristics::Validate);
+            } else if self.parse_keyword(Keyword::NOVALIDATE) {
+                characteristics.push(ConstraintCharacteristics::NoValidate);
+            } else if self.parse_keywords(&[Keyword::NOT, Keyword::ENFORCED]) {
+                characteristics.push(ConstraintCharacteristics::NotEnforced)
+            } else if self.parse_keywords(&[Keyword::NOT, Keyword::DEFERRABLE]) {
+                characteristics.push(ConstraintCharacteristics::NotDeferrable)
+            } else if self.parse_keyword(Keyword::DEFERRABLE) {
+                characteristics.push(ConstraintCharacteristics::Deferrable);
+            } else if self.parse_keyword(Keyword::INITIALLY) {
+                characteristics.push(ConstraintCharacteristics::Initially);
+            } else if self.parse_keyword(Keyword::DEFERRED) {
+                characteristics.push(ConstraintCharacteristics::Deferred);
+            } else if self.parse_keyword(Keyword::IMMEDIATE) {
+                characteristics.push(ConstraintCharacteristics::Immediate);
+            } else {
+                break;
             }
         }
-        if dialect_of!(self is BigQueryDialect) {
-            loop {
-                if self.parse_keywords(&[Keyword::NOT, Keyword::ENFORCED]) {
-                    constraint_properties.push(ConstraintProperty::NotEnforced)
-                } else {
-                    break;
-                }
-            }
-        }
-        Ok(constraint_properties)
+        Ok(characteristics)
     }
 
     pub fn parse_optional_table_constraint(
@@ -4752,12 +4765,12 @@ impl<'a> Parser<'a> {
                     .or(name);
 
                 let columns = self.parse_parenthesized_column_list(Mandatory, false)?;
-                let constraint_properties = self.parse_constraint_properties()?;
+                let constraint_properties = self.parse_constraint_characteristics()?;
                 Ok(Some(TableConstraint::Unique {
                     name,
                     columns,
                     is_primary,
-                    constraint_properties,
+                    characteristics: constraint_properties,
                 }))
             }
             Token::Word(w) if w.keyword == Keyword::FOREIGN => {
@@ -4779,7 +4792,7 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
-                let constraint_properties = self.parse_constraint_properties()?;
+                let constraint_properties = self.parse_constraint_characteristics()?;
                 Ok(Some(TableConstraint::ForeignKey {
                     name,
                     columns,
@@ -4787,7 +4800,7 @@ impl<'a> Parser<'a> {
                     referred_columns,
                     on_delete,
                     on_update,
-                    constraint_properties,
+                    characteristics: constraint_properties,
                 }))
             }
             Token::Word(w) if w.keyword == Keyword::CHECK => {

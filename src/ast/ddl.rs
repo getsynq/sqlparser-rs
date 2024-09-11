@@ -298,7 +298,7 @@ pub enum TableConstraint {
         columns: Vec<WithSpan<Ident>>,
         /// Whether this is a `PRIMARY KEY` or just a `UNIQUE` constraint
         is_primary: bool,
-        constraint_properties: Vec<ConstraintProperty>,
+        characteristics: Vec<ConstraintCharacteristics>,
     },
     /// A referential integrity constraint (`[ CONSTRAINT <name> ] FOREIGN KEY (<columns>)
     /// REFERENCES <foreign_table> (<referred_columns>)
@@ -312,7 +312,7 @@ pub enum TableConstraint {
         referred_columns: Vec<WithSpan<Ident>>,
         on_delete: Option<ReferentialAction>,
         on_update: Option<ReferentialAction>,
-        constraint_properties: Vec<ConstraintProperty>,
+        characteristics: Vec<ConstraintCharacteristics>,
     },
     /// `[ CONSTRAINT <name> ] CHECK (<expr>)`
     Check {
@@ -375,7 +375,7 @@ impl fmt::Display for TableConstraint {
                 name,
                 columns,
                 is_primary,
-                constraint_properties,
+                characteristics,
             } => {
                 write!(
                     f,
@@ -384,8 +384,8 @@ impl fmt::Display for TableConstraint {
                     if *is_primary { "PRIMARY KEY" } else { "UNIQUE" },
                     display_comma_separated(columns),
                 )?;
-                if !constraint_properties.is_empty() {
-                    write!(f, " {}", display_separated(constraint_properties, " "))?;
+                if !characteristics.is_empty() {
+                    write!(f, " {}", display_separated(characteristics, " "))?;
                 }
                 Ok(())
             }
@@ -396,7 +396,7 @@ impl fmt::Display for TableConstraint {
                 referred_columns,
                 on_delete,
                 on_update,
-                constraint_properties,
+                characteristics,
             } => {
                 write!(
                     f,
@@ -412,8 +412,8 @@ impl fmt::Display for TableConstraint {
                 if let Some(action) = on_update {
                     write!(f, " ON UPDATE {action}")?;
                 }
-                if !constraint_properties.is_empty() {
-                    write!(f, " {}", display_separated(constraint_properties, " "))?;
+                if !characteristics.is_empty() {
+                    write!(f, " {}", display_separated(characteristics, " "))?;
                 }
                 Ok(())
             }
@@ -663,6 +663,7 @@ pub enum ColumnOption {
     /// `{ PRIMARY KEY | UNIQUE }`
     Unique {
         is_primary: bool,
+        characteristics: Vec<ConstraintCharacteristics>,
     },
     /// A referential integrity constraint (`[FOREIGN KEY REFERENCES
     /// <foreign_table> (<referred_columns>)
@@ -674,6 +675,7 @@ pub enum ColumnOption {
         referred_columns: Vec<WithSpan<Ident>>,
         on_delete: Option<ReferentialAction>,
         on_update: Option<ReferentialAction>,
+        characteristics: Vec<ConstraintCharacteristics>,
     },
     /// `CHECK (<expr>)`
     Check(Expr),
@@ -700,14 +702,22 @@ impl fmt::Display for ColumnOption {
             Null => write!(f, "NULL"),
             NotNull => write!(f, "NOT NULL"),
             Default(expr) => write!(f, "DEFAULT {expr}"),
-            Unique { is_primary } => {
-                write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })
+            Unique {
+                is_primary,
+                characteristics,
+            } => {
+                write!(f, "{}", if *is_primary { "PRIMARY KEY" } else { "UNIQUE" })?;
+                if !characteristics.is_empty() {
+                    write!(f, " {}", display_separated(characteristics, " "))?;
+                }
+                Ok(())
             }
             ForeignKey {
                 foreign_table,
                 referred_columns,
                 on_delete,
                 on_update,
+                characteristics,
             } => {
                 write!(f, "REFERENCES {foreign_table}")?;
                 if !referred_columns.is_empty() {
@@ -718,6 +728,9 @@ impl fmt::Display for ColumnOption {
                 }
                 if let Some(action) = on_update {
                     write!(f, " ON UPDATE {action}")?;
+                }
+                if !characteristics.is_empty() {
+                    write!(f, " {}", display_separated(characteristics, " "))?;
                 }
                 Ok(())
             }
@@ -826,22 +839,32 @@ impl fmt::Display for ReferentialAction {
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
-pub enum ConstraintProperty {
+pub enum ConstraintCharacteristics {
     Validate,
     NoValidate,
     Rely,
     NoRely,
     NotEnforced,
+    NotDeferrable,
+    Deferrable,
+    Initially,
+    Deferred,
+    Immediate,
 }
 
-impl fmt::Display for ConstraintProperty {
+impl fmt::Display for ConstraintCharacteristics {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match self {
-            ConstraintProperty::Validate => "VALIDATE",
-            ConstraintProperty::NoValidate => "NOVALIDATE",
-            ConstraintProperty::Rely => "RELY",
-            ConstraintProperty::NoRely => "NORELY",
-            ConstraintProperty::NotEnforced => "NOT ENFORCED",
+            ConstraintCharacteristics::Validate => "VALIDATE",
+            ConstraintCharacteristics::NoValidate => "NOVALIDATE",
+            ConstraintCharacteristics::Rely => "RELY",
+            ConstraintCharacteristics::NoRely => "NORELY",
+            ConstraintCharacteristics::NotEnforced => "NOT ENFORCED",
+            ConstraintCharacteristics::NotDeferrable => "NOT DEFERRABLE",
+            ConstraintCharacteristics::Deferrable => "DEFERRABLE",
+            ConstraintCharacteristics::Initially => "INITIALLY",
+            ConstraintCharacteristics::Deferred => "DEFERRED",
+            ConstraintCharacteristics::Immediate => "IMMEDIATE",
         })
     }
 }

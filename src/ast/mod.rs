@@ -34,9 +34,9 @@ pub use self::data_type::{
 pub use self::dcl::{AlterRoleOperation, ResetConfig, RoleOption, SetConfigValue};
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
-    ColumnOption, ColumnOptionDef, ConstraintProperty, GeneratedAs, IndexType, KeyOrIndexDisplay,
-    ProcedureParam, ReferentialAction, TableConstraint, UserDefinedTypeCompositeAttributeDef,
-    UserDefinedTypeRepresentation,
+    ColumnOption, ColumnOptionDef, ConstraintCharacteristics, GeneratedAs, IndexType,
+    KeyOrIndexDisplay, ProcedureParam, ReferentialAction, TableConstraint,
+    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -4427,6 +4427,7 @@ pub enum HiveDistributionStyle {
     PARTITIONED {
         columns: Vec<ColumnDef>,
     },
+    #[allow(non_camel_case_types)]
     PARTITIONED_NAMES {
         columns: Vec<WithSpan<Ident>>,
     },

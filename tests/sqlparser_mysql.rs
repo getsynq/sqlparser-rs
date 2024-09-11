@@ -281,7 +281,10 @@ fn parse_create_table_auto_increment() {
                     options: vec![
                         ColumnOptionDef {
                             name: None,
-                            option: ColumnOption::Unique { is_primary: true },
+                            option: ColumnOption::Unique {
+                                is_primary: true,
+                                characteristics: vec![],
+                            },
                         },
                         ColumnOptionDef {
                             name: None,
@@ -318,7 +321,7 @@ fn parse_create_table_unique_key() {
                     name: Some(Ident::new("bar_key")),
                     columns: vec![Ident::new("bar").empty_span()],
                     is_primary: false,
-                    constraint_properties: vec![],
+                    characteristics: vec![],
                 }],
                 constraints
             );
@@ -332,7 +335,10 @@ fn parse_create_table_unique_key() {
                         options: vec![
                             ColumnOptionDef {
                                 name: None,
-                                option: ColumnOption::Unique { is_primary: true },
+                                option: ColumnOption::Unique {
+                                    is_primary: true,
+                                    characteristics: vec![],
+                                },
                             },
                             ColumnOptionDef {
                                 name: None,
@@ -554,7 +560,10 @@ fn parse_quote_identifiers() {
                     codec: None,
                     options: vec![ColumnOptionDef {
                         name: None,
-                        option: ColumnOption::Unique { is_primary: true },
+                        option: ColumnOption::Unique {
+                            is_primary: true,
+                            characteristics: vec![],
+                        },
                     }],
                     column_options: vec![],
                     mask: None,
