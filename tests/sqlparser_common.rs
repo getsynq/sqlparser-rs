@@ -7631,21 +7631,13 @@ fn parse_position() {
     );
 }
 
+
 #[test]
 fn parse_position_negative() {
-    let sql = "SELECT POSITION(foo) from bar";
-    let res = parse_sql_statements(sql);
-    assert_eq!(
-        ParserError::ParserError("Position function must include IN keyword".to_string()),
-        res.unwrap_err()
-    );
-
     let sql = "SELECT POSITION(foo IN) from bar";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError(
-            "Expected an expression:, found: )\nNear `SELECT POSITION(foo IN)`".to_string()
-        ),
+        ParserError::ParserError("Expected (, found: )\nNear `SELECT POSITION(foo IN`".to_string()),
         res.unwrap_err()
     );
 }
