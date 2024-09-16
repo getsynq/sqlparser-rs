@@ -5062,15 +5062,11 @@ impl<'a> Parser<'a> {
                 }))
             }
             Token::Word(w)
-                if (w.keyword == Keyword::INDEX || w.keyword == Keyword::KEY)
-                    && dialect_of!(self is ClickHouseDialect) =>
+                if (w.keyword == Keyword::INDEX) && dialect_of!(self is ClickHouseDialect) =>
             {
-                let index_expr = self.parse_expr()?;
+                let name = self.parse_identifier(false)?;
 
-                let column = match self.peek_token().token {
-                    Token::Word(word) if word.keyword == Keyword::TYPE => None,
-                    _ => Some(self.parse_identifier(false)?),
-                };
+                let index_expr = self.parse_expr()?;
 
                 let index_type = if self.parse_keyword(Keyword::TYPE) {
                     Some(self.parse_object_name(false)?)
@@ -5085,8 +5081,8 @@ impl<'a> Parser<'a> {
                 };
 
                 Ok(Some(TableConstraint::ClickhouseIndex {
+                    name,
                     index_expr,
-                    column,
                     index_type,
                     granularity,
                 }))

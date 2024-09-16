@@ -215,7 +215,7 @@ fn parse_create_table_column_codec() {
 
 #[test]
 fn parse_create_table_index() {
-    clickhouse().verified_stmt("CREATE TABLE default.runs (`workspace` LowCardinality(STRING), `id` STRING, `comment` STRING, INDEX bloom_filter_id_index_4 id TYPE bloom_filter GRANULARITY 4, INDEX comment_lowercase(lower(comment)) TYPE inverted) ENGINE=ReplacingMergeTree(ingested_at) ORDER BY (workspace, created_at, id) SETTINGS index_granularity = 2048");
+    clickhouse().verified_stmt("CREATE TABLE default.runs (`workspace` LowCardinality(STRING), `id` STRING, `comment` STRING, INDEX bloom_filter_id_index_4 id TYPE bloom_filter GRANULARITY 4, INDEX comment_lowercase (lower(comment)) TYPE inverted) ENGINE=ReplacingMergeTree(ingested_at) ORDER BY (workspace, created_at, id) SETTINGS index_granularity = 2048");
 }
 
 #[test]
@@ -1324,6 +1324,23 @@ fn test_create_table_projection() {
         Statement::CreateTable { projections, .. } => {
             assert_eq!(projections.len(), 1);
             assert_eq!(projections[0].name, Ident::new("by_id").empty_span());
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn test_create_table_index_expression() {
+    let sql = "CREATE TABLE default.statuses (INDEX idx_created_at DATE(created_at) TYPE MinMax GRANULARITY 1)";
+    match clickhouse().verified_stmt(sql) {
+        Statement::CreateTable { constraints, .. } => {
+            assert_eq!(constraints.len(), 1);
+            match &constraints[0] {
+                TableConstraint::ClickhouseIndex { name, .. } => {
+                    assert_eq!(*name, Ident::new("idx_created_at").empty_span());
+                }
+                _ => unreachable!(),
+            }
         }
         _ => unreachable!(),
     }

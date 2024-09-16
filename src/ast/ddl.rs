@@ -360,8 +360,8 @@ pub enum TableConstraint {
         columns: Vec<WithSpan<Ident>>,
     },
     ClickhouseIndex {
+        name: WithSpan<Ident>,
         index_expr: Expr,
-        column: Option<WithSpan<Ident>>,
         index_type: Option<ObjectName>,
         granularity: Option<Value>,
     },
@@ -460,15 +460,12 @@ impl fmt::Display for TableConstraint {
                 Ok(())
             }
             TableConstraint::ClickhouseIndex {
+                name,
                 index_expr,
-                column,
                 index_type,
                 granularity,
             } => {
-                write!(f, "INDEX {index_expr}")?;
-                if let Some(column) = column {
-                    write!(f, " {column}")?;
-                }
+                write!(f, "INDEX {name} {index_expr}")?;
                 if let Some(index_type) = index_type {
                     write!(f, " TYPE {index_type}")?;
                 }
