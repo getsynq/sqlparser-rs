@@ -1346,6 +1346,12 @@ fn test_create_table_index_expression() {
     }
 }
 
+#[test]
+fn test_months_interval() {
+    let sql = "SELECT dateSub(now(), INTERVAL 3 MONTHS)";
+    clickhouse().verified_only_select(sql);
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],

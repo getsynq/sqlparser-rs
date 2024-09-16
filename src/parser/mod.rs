@@ -1536,6 +1536,7 @@ impl<'a> Parser<'a> {
             Token::Word(w) => match w.keyword {
                 Keyword::YEAR => Ok(DateTimeField::Year),
                 Keyword::MONTH => Ok(DateTimeField::Month),
+                Keyword::MONTHS => Ok(DateTimeField::Months),
                 Keyword::WEEK => {
                     let week_day = if dialect_of!(self is BigQueryDialect | GenericDialect)
                         && self.consume_token(&Token::LParen)
@@ -1694,6 +1695,7 @@ impl<'a> Parser<'a> {
                 if [
                     Keyword::YEAR,
                     Keyword::MONTH,
+                    Keyword::MONTHS,
                     Keyword::WEEK,
                     Keyword::DAY,
                     Keyword::HOUR,

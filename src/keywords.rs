@@ -440,6 +440,7 @@ define_keywords!(
     MODIFIES,
     MODULE,
     MONTH,
+    MONTHS,
     MSCK,
     MULTISET,
     MUTATION,

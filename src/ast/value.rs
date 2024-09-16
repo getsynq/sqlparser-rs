@@ -166,6 +166,7 @@ impl fmt::Display for DollarQuotedString {
 pub enum DateTimeField {
     Year,
     Month,
+    Months,
     /// Week optionally followed by a WEEKDAY.
     ///
     /// ```sql
@@ -221,6 +222,7 @@ impl fmt::Display for DateTimeField {
         match self {
             DateTimeField::Year => write!(f, "YEAR"),
             DateTimeField::Month => write!(f, "MONTH"),
+            DateTimeField::Months => write!(f, "MONTHS"),
             DateTimeField::Week(week_day) => {
                 write!(f, "WEEK")?;
                 if let Some(week_day) = week_day {
