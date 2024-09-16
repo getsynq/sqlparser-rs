@@ -1352,6 +1352,22 @@ fn test_months_interval() {
     clickhouse().verified_only_select(sql);
 }
 
+#[test]
+fn test_aggregate_function_column() {
+    let funcs = vec!["AggregateFunction", "SimpleAggregateFunction"];
+    for func in &funcs {
+        clickhouse().verified_stmt(&format!("CREATE TABLE t (column1 {}(uniq, UInt64))", func));
+        clickhouse().verified_stmt(&format!(
+            "CREATE TABLE t (column1 {}(uniq, Array(UInt64)))",
+            func
+        ));
+        clickhouse().verified_stmt(&format!(
+            "CREATE TABLE t (column1 {}(uniq, Array(Tuple(DateTime64(8, 'UTC'), Int32))))",
+            func
+        ));
+    }
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],

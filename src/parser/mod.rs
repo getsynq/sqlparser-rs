@@ -6281,6 +6281,27 @@ impl<'a> Parser<'a> {
                 Keyword::LOWCARDINALITY if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     Ok(self.parse_sub_type(DataType::LowCardinality)?)
                 }
+                Keyword::AGGREGATEFUNCTION if dialect_of!(self is ClickHouseDialect | GenericDialect) =>
+                {
+                    self.expect_token(&Token::LParen)?;
+                    let function = self.parse_object_name(false)?;
+                    self.expect_token(&Token::Comma)?;
+                    let inside_type = self.parse_data_type()?;
+                    self.expect_token(&Token::RParen)?;
+                    Ok(DataType::AggregateFunction(function, inside_type.into()))
+                }
+                Keyword::SIMPLEAGGREGATEFUNCTION if dialect_of!(self is ClickHouseDialect | GenericDialect) =>
+                {
+                    self.expect_token(&Token::LParen)?;
+                    let function = self.parse_object_name(false)?;
+                    self.expect_token(&Token::Comma)?;
+                    let inside_type = self.parse_data_type()?;
+                    self.expect_token(&Token::RParen)?;
+                    Ok(DataType::SimpleAggregateFunction(
+                        function,
+                        inside_type.into(),
+                    ))
+                }
                 Keyword::MAP if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     self.prev_token();
                     let (key_data_type, value_data_type) = self.parse_click_house_map_def()?;

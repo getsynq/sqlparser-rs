@@ -317,6 +317,14 @@ pub enum DataType {
     ///
     /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/lowcardinality
     LowCardinality(Box<DataType>),
+    /// AggregateFunction(name, types_of_arguments...)
+    ///
+    /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction
+    AggregateFunction(ObjectName, Box<DataType>),
+    /// SimpleAggregateFunction(name, types_of_arguments...)
+    ///
+    /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction
+    SimpleAggregateFunction(ObjectName, Box<DataType>),
     /// No type specified - only used with
     /// [`SQLiteDialect`](crate::dialect::SQLiteDialect), from statements such
     /// as `CREATE TABLE t1 (a)`.
@@ -555,6 +563,15 @@ impl fmt::Display for DataType {
                 write!(f, "Nested({})", display_comma_separated(fields))
             }
             DataType::Unspecified => Ok(()),
+            DataType::AggregateFunction(function, types_of_arguments) => {
+                write!(f, "AggregateFunction({function}, {types_of_arguments})")
+            }
+            DataType::SimpleAggregateFunction(function, types_of_arguments) => {
+                write!(
+                    f,
+                    "SimpleAggregateFunction({function}, {types_of_arguments})"
+                )
+            }
         }
     }
 }
