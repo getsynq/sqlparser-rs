@@ -6,14 +6,14 @@ use crate::ast::{SortKey, WithSpan};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "visitor")]
-use sqlparser_derive::{Visit, VisitMut};
-
 use crate::ast::{
     ColumnDef, DistributionStyle, EngineSpec, Expr, FileFormat, HiveDistributionStyle, HiveFormat,
     Ident, ObjectName, OnCommit, Query, SqlOption, Statement, TableConstraint,
 };
 use crate::parser::ParserError;
+use sqlparser::ast::TableProjection;
+#[cfg(feature = "visitor")]
+use sqlparser_derive::{Visit, VisitMut};
 
 /// Builder for create table statement variant ([1]).
 ///
@@ -62,6 +62,7 @@ pub struct CreateTableBuilder {
     pub dist_key: Option<WithSpan<Ident>>,
     pub sort_key: Option<SortKey>,
     pub table_options: Vec<SqlOption>,
+    pub projections: Vec<TableProjection>,
     pub table_properties: Vec<SqlOption>,
     pub with_options: Vec<SqlOption>,
     pub file_format: Option<FileFormat>,
@@ -105,6 +106,7 @@ impl CreateTableBuilder {
             dist_key: None,
             sort_key: None,
             table_options: vec![],
+            projections: vec![],
             table_properties: vec![],
             with_options: vec![],
             file_format: None,
@@ -197,6 +199,11 @@ impl CreateTableBuilder {
 
     pub fn table_options(mut self, table_options: Vec<SqlOption>) -> Self {
         self.table_options = table_options;
+        self
+    }
+
+    pub fn projections(mut self, projections: Vec<TableProjection>) -> Self {
+        self.projections = projections;
         self
     }
 
@@ -330,6 +337,7 @@ impl CreateTableBuilder {
             dist_key: self.dist_key,
             sort_key: self.sort_key,
             table_options: self.table_options,
+            projections: self.projections,
             table_properties: self.table_properties,
             with_options: self.with_options,
             file_format: self.file_format,
@@ -380,6 +388,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 dist_key,
                 sort_key,
                 table_options,
+                projections,
                 table_properties,
                 with_options,
                 file_format,
@@ -419,6 +428,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 dist_key,
                 sort_key,
                 table_options,
+                projections,
                 table_properties,
                 with_options,
                 file_format,

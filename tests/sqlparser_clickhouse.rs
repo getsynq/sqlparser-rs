@@ -1317,6 +1317,18 @@ fn test_query_with_format_clause() {
     }
 }
 
+#[test]
+fn test_create_table_projection() {
+    let sql = "CREATE TABLE default.runs (`workspace` LowCardinality(STRING), `id` STRING, `created_at` DateTime64(8, 'UTC'), PROJECTION by_id (SELECT * ORDER BY workspace, id))";
+    match clickhouse().verified_stmt(sql) {
+        Statement::CreateTable { projections, .. } => {
+            assert_eq!(projections.len(), 1);
+            assert_eq!(projections[0].name, Ident::new("by_id").empty_span());
+        }
+        _ => unreachable!(),
+    }
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],

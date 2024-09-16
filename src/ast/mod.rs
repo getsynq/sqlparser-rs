@@ -37,7 +37,7 @@ pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnOption, ColumnOptionDef, ConstraintCharacteristics, Deduplicate, GeneratedAs, IndexType,
     KeyOrIndexDisplay, Partition, ProcedureParam, ReferentialAction, TableConstraint,
-    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
+    TableProjection, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -1669,6 +1669,7 @@ pub enum Statement {
         sort_key: Option<SortKey>,
         table_properties: Vec<SqlOption>,
         table_options: Vec<SqlOption>,
+        projections: Vec<TableProjection>,
         with_options: Vec<SqlOption>,
         file_format: Option<FileFormat>,
         location: Option<String>,
@@ -2824,6 +2825,7 @@ impl fmt::Display for Statement {
                 columns,
                 constraints,
                 table_options,
+                projections,
                 table_properties,
                 with_options,
                 or_replace,
@@ -2892,12 +2894,17 @@ impl fmt::Display for Statement {
                         on_cluster.replace('{', "'{").replace('}', "}'")
                     )?;
                 }
-                if !columns.is_empty() || !constraints.is_empty() {
+                if !columns.is_empty() || !constraints.is_empty() || !projections.is_empty() {
                     write!(f, " ({}", display_comma_separated(columns))?;
                     if !columns.is_empty() && !constraints.is_empty() {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{})", display_comma_separated(constraints))?;
+                    write!(f, "{}", display_comma_separated(constraints))?;
+                    if (!columns.is_empty() || !constraints.is_empty()) && !projections.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", display_comma_separated(projections))?;
+                    write!(f, ")")?;
                 } else if query.is_none() && like.is_none() && clone.is_none() {
                     // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
                     write!(f, " ()")?;

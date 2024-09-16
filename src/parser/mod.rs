@@ -3481,7 +3481,7 @@ impl<'a> Parser<'a> {
         self.expect_keyword(Keyword::TABLE)?;
         let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
         let table_name = self.parse_object_name(false)?;
-        let (columns, constraints) = self.parse_columns()?;
+        let (columns, constraints, _) = self.parse_columns()?;
 
         let hive_distribution = self.parse_hive_distribution()?;
         let hive_formats = self.parse_hive_formats()?;
@@ -3561,7 +3561,7 @@ impl<'a> Parser<'a> {
         };
 
         let (columns, columns_with_types) = if dialect_of!(self is ClickHouseDialect) {
-            let (cols, _) = self.parse_columns()?;
+            let (cols, _, _) = self.parse_columns()?;
             (vec![], cols)
         } else {
             (
@@ -4354,7 +4354,7 @@ impl<'a> Parser<'a> {
         };
 
         // parse optional column list (schema)
-        let (columns, constraints) = self.parse_columns()?;
+        let (columns, constraints, projections) = self.parse_columns()?;
 
         let using = if self.parse_keyword(Keyword::USING) {
             Some(self.parse_object_name(false)?)
@@ -4626,6 +4626,7 @@ impl<'a> Parser<'a> {
             .clickhouse_settings(clickhouse_settings)
             .using(using)
             .table_options(table_options)
+            .projections(projections)
             .build())
     }
 
@@ -4651,15 +4652,20 @@ impl<'a> Parser<'a> {
         Ok(Some(params))
     }
 
-    pub fn parse_columns(&mut self) -> Result<(Vec<ColumnDef>, Vec<TableConstraint>), ParserError> {
+    pub fn parse_columns(
+        &mut self,
+    ) -> Result<(Vec<ColumnDef>, Vec<TableConstraint>, Vec<TableProjection>), ParserError> {
         let mut columns = vec![];
         let mut constraints = vec![];
+        let mut projections = vec![];
         if !self.consume_token(&Token::LParen) || self.consume_token(&Token::RParen) {
-            return Ok((columns, constraints));
+            return Ok((columns, constraints, projections));
         }
 
         loop {
-            if let Some(constraint) = self.parse_optional_table_constraint()? {
+            if let Some(projection) = self.parse_optional_table_projection()? {
+                projections.push(projection);
+            } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 constraints.push(constraint);
             } else if let Token::Word(_) = self.peek_token().token {
                 columns.push(self.parse_column_def()?);
@@ -4675,7 +4681,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok((columns, constraints))
+        Ok((columns, constraints, projections))
     }
 
     pub fn parse_procedure_param(&mut self) -> Result<ProcedureParam, ParserError> {
@@ -5129,6 +5135,34 @@ impl<'a> Parser<'a> {
                     Ok(None)
                 }
             }
+        }
+    }
+
+    pub fn parse_optional_table_projection(
+        &mut self,
+    ) -> Result<Option<TableProjection>, ParserError> {
+        if self.parse_keyword(Keyword::PROJECTION) {
+            let name = self.parse_identifier(false)?;
+            self.expect_token(&Token::LParen)?;
+            self.expect_keywords(&[Keyword::SELECT])?;
+            let select = self.parse_select()?;
+            let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                let order_by_exprs = self.parse_comma_separated(Parser::parse_order_by_expr)?;
+                Some(OrderBy {
+                    exprs: order_by_exprs,
+                    interpolate: None,
+                })
+            } else {
+                None
+            };
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(TableProjection {
+                name,
+                select,
+                order_by,
+            }))
+        } else {
+            Ok(None)
         }
     }
 

@@ -26,7 +26,8 @@ use sqlparser_derive::{Visit, VisitMut};
 
 use crate::ast::value::escape_single_quote_string;
 use crate::ast::{
-    display_comma_separated, display_separated, DataType, Expr, Ident, ObjectName, SequenceOptions,
+    display_comma_separated, display_separated, DataType, Expr, Ident, ObjectName, OrderBy, Select,
+    SequenceOptions,
 };
 use crate::tokenizer::Token;
 
@@ -995,5 +996,35 @@ impl fmt::Display for Deduplicate {
             Deduplicate::All => write!(f, "DEDUPLICATE"),
             Deduplicate::ByExpression(expr) => write!(f, "DEDUPLICATE BY {expr}"),
         }
+    }
+}
+
+/// DEDUPLICATE statement used in OPTIMIZE TABLE et al. such as in ClickHouse SQL
+/// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/optimize)
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct TableProjection {
+    pub name: WithSpan<Ident>,
+    pub select: Select,
+    pub order_by: Option<OrderBy>,
+}
+
+impl fmt::Display for TableProjection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "PROJECTION {name} ({query}",
+            name = self.name,
+            query = self.select
+        )?;
+        if let Some(ref order_by) = self.order_by {
+            write!(f, " ORDER BY")?;
+            if !order_by.exprs.is_empty() {
+                write!(f, " {}", display_comma_separated(&order_by.exprs))?;
+            }
+        }
+        write!(f, ")")?;
+        Ok(())
     }
 }
