@@ -667,6 +667,7 @@ define_keywords!(
     TABLE,
     TABLES,
     TABLESAMPLE,
+    TAG,
     TBLPROPERTIES,
     TEMP,
     TEMPORARY,

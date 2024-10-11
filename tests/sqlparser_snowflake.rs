@@ -1403,3 +1403,8 @@ fn test_alter_session() {
 fn test_column_with_masking() {
     snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32) WITH MASKING POLICY unknown_policy, EMPLOYEE_ID VARCHAR(16777216) WITH MASKING POLICY unknown_policy)");
 }
+
+#[test]
+fn test_table_with_tag() {
+    snowflake().one_statement_parses_to("CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG='#UNKNOWN_VALUE')", "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))");
+}
