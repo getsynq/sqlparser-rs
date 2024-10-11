@@ -1801,6 +1801,8 @@ pub enum Statement {
         name: ObjectName,
         set_options: Vec<SqlOption>,
     },
+    /// ALTER SCHEMA
+    AlterSession { session_operation: SessionOperation },
     /// ```sql
     /// ALTER ROLE
     /// ```
@@ -3293,6 +3295,9 @@ impl fmt::Display for Statement {
                     write!(f, " SET OPTIONS ({})", display_comma_separated(set_options))?;
                 }
                 Ok(())
+            }
+            Statement::AlterSession { session_operation } => {
+                write!(f, "ALTER SESSION {session_operation}")
             }
             Statement::AlterRole { name, operation } => {
                 write!(f, "ALTER ROLE {name} {operation}")
@@ -5325,6 +5330,28 @@ impl fmt::Display for SearchModifier {
             }
         }
 
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SessionOperation {
+    Unset(Vec<WithSpan<Ident>>),
+    Set(SqlOption),
+}
+
+impl fmt::Display for SessionOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionOperation::Unset(vars) => {
+                write!(f, "UNSET {}", display_comma_separated(vars))?;
+            }
+            SessionOperation::Set(options) => {
+                write!(f, "SET {options}")?;
+            }
+        }
         Ok(())
     }
 }

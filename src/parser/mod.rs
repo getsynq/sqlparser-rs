@@ -5408,6 +5408,7 @@ impl<'a> Parser<'a> {
             Keyword::INDEX,
             Keyword::ROLE,
             Keyword::SCHEMA,
+            Keyword::SESSION,
         ])?;
         match object_type {
             Keyword::VIEW => self.parse_alter_view(),
@@ -5443,6 +5444,7 @@ impl<'a> Parser<'a> {
             }
             Keyword::ROLE => self.parse_alter_role(),
             Keyword::SCHEMA => self.parse_alter_schema(),
+            Keyword::SESSION => self.parse_alter_session(),
             // unreachable because expect_one_of_keywords used above
             _ => unreachable!(),
         }
@@ -5513,6 +5515,20 @@ impl<'a> Parser<'a> {
         let set_options = self.parse_options(Keyword::OPTIONS)?;
 
         Ok(Statement::AlterSchema { name, set_options })
+    }
+
+    pub fn parse_alter_session(&mut self) -> Result<Statement, ParserError> {
+        let session_operation = if self.parse_keyword(Keyword::SET) {
+            let option = self.parse_sql_option()?;
+            SessionOperation::Set(option)
+        } else if self.parse_keyword(Keyword::UNSET) {
+            let vars = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+            SessionOperation::Unset(vars)
+        } else {
+            self.expected("SET or UNSET", self.peek_token())?
+        };
+
+        Ok(Statement::AlterSession { session_operation })
     }
 
     /// Parse a copy statement

@@ -1392,3 +1392,9 @@ fn parse_constraints() {
 fn test_sf_trailing_commas() {
     snowflake().verified_only_select_with_canonical("SELECT 1, 2, FROM t", "SELECT 1, 2 FROM t");
 }
+
+#[test]
+fn test_alter_session() {
+    snowflake().verified_stmt("ALTER SESSION SET LOCK_TIMEOUT = 3600");
+    snowflake().verified_stmt("ALTER SESSION UNSET LOCK_TIMEOUT");
+}

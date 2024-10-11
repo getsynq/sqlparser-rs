@@ -716,6 +716,7 @@ define_keywords!(
     UNLOGGED,
     UNNEST,
     UNPIVOT,
+    UNSET,
     UNSIGNED,
     UNTIL,
     UPDATE,
