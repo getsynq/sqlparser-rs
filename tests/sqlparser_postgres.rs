@@ -341,6 +341,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("store_id").empty_span(),
@@ -354,6 +355,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("first_name").empty_span(),
@@ -372,6 +374,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("last_name").empty_span(),
@@ -390,6 +393,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("email").empty_span(),
@@ -405,6 +409,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("address_id").empty_span(),
@@ -418,6 +423,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("activebool").empty_span(),
@@ -437,6 +443,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("create_date").empty_span(),
@@ -458,6 +465,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("last_update").empty_span(),
@@ -477,6 +485,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("active").empty_span(),
@@ -490,6 +499,7 @@ fn parse_create_table_with_defaults() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ]
             );
@@ -657,6 +667,7 @@ fn parse_alter_table_add_columns() {
                             column_options: vec![],
                             mask: None,
                             column_location: None,
+                            column_policy: None,
                         },
                     },
                     AlterTableOperation::AddColumn {
@@ -671,6 +682,7 @@ fn parse_alter_table_add_columns() {
                             column_options: vec![],
                             mask: None,
                             column_location: None,
+                            column_policy: None,
                         },
                     },
                 ]
@@ -3647,6 +3659,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("int4_col").empty_span(),
@@ -3657,6 +3670,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("int2_col").empty_span(),
@@ -3667,6 +3681,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("float8_col").empty_span(),
@@ -3677,6 +3692,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("float4_col").empty_span(),
@@ -3687,6 +3703,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bool_col").empty_span(),
@@ -3697,6 +3714,7 @@ fn parse_create_table_with_alias() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ]
             );

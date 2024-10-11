@@ -606,6 +606,7 @@ pub struct ColumnDef {
     pub column_options: Vec<SqlOption>,
     pub mask: Option<ObjectName>,
     pub column_location: Option<ColumnLocation>,
+    pub column_policy: Option<ColumnPolicy>,
 }
 
 impl fmt::Display for ColumnDef {
@@ -630,6 +631,11 @@ impl fmt::Display for ColumnDef {
         if let Some(mask) = &self.mask {
             write!(f, " MASK {mask}")?;
         }
+
+        if let Some(column_policy) = &self.column_policy {
+            write!(f, "{column_policy}")?;
+        }
+
         if let Some(column_location) = &self.column_location {
             write!(f, " {column_location}")?;
         }
@@ -1022,6 +1028,47 @@ impl fmt::Display for TableProjection {
             }
         }
         write!(f, ")")?;
+        Ok(())
+    }
+}
+
+/// Column policy that identify a security policy of access to a column.
+/// Syntax
+/// ```sql
+/// [ WITH ] MASKING POLICY <policy_name> [ USING ( <col_name> , <cond_col1> , ... ) ]
+/// [ WITH ] PROJECTION POLICY <policy_name>
+/// ```
+/// [Snowflake]: https://docs.snowflake.com/en/sql-reference/sql/create-table
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ColumnPolicy {
+    MaskingPolicy(ColumnPolicyProperty),
+    ProjectionPolicy(ColumnPolicyProperty),
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ColumnPolicyProperty {
+    pub with: bool,
+    pub policy_name: WithSpan<Ident>,
+    pub using_columns: Option<Vec<WithSpan<Ident>>>,
+}
+
+impl fmt::Display for ColumnPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (command, property) = match self {
+            ColumnPolicy::MaskingPolicy(property) => ("MASKING POLICY", property),
+            ColumnPolicy::ProjectionPolicy(property) => ("PROJECTION POLICY", property),
+        };
+        if property.with {
+            write!(f, " WITH ")?;
+        }
+        write!(f, "{command} {}", property.policy_name)?;
+        if let Some(using_columns) = &property.using_columns {
+            write!(f, " USING ({})", display_comma_separated(using_columns))?;
+        }
         Ok(())
     }
 }

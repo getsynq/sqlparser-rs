@@ -1398,3 +1398,8 @@ fn test_alter_session() {
     snowflake().verified_stmt("ALTER SESSION SET LOCK_TIMEOUT = 3600");
     snowflake().verified_stmt("ALTER SESSION UNSET LOCK_TIMEOUT");
 }
+
+#[test]
+fn test_column_with_masking() {
+    snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32) WITH MASKING POLICY unknown_policy, EMPLOYEE_ID VARCHAR(16777216) WITH MASKING POLICY unknown_policy)");
+}

@@ -4743,6 +4743,22 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let with = self.parse_keyword(Keyword::WITH);
+        let column_policy = if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            Some(parse_column_policy_property(self, with).map(|p| ColumnPolicy::MaskingPolicy(p))?)
+        } else if self.parse_keywords(&[Keyword::PROJECTION, Keyword::POLICY]) {
+            Some(
+                parse_column_policy_property(self, with)
+                    .map(|p| ColumnPolicy::ProjectionPolicy(p))?,
+            )
+        } else {
+            // needs to revert initial state of parser if dialect finds any matching
+            if with {
+                self.prev_token();
+            }
+            None
+        };
+
         let column_location = if dialect_of!(self is ClickHouseDialect) {
             if self.parse_keyword(Keyword::FIRST) {
                 Some(ColumnLocation::First)
@@ -4765,6 +4781,7 @@ impl<'a> Parser<'a> {
             column_options,
             mask,
             column_location,
+            column_policy,
         })
     }
 
@@ -9817,6 +9834,33 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::RParen)?;
         Ok(partitions)
     }
+}
+
+/// Parsing a policy property of column option
+/// Syntax:
+/// ```sql
+/// <policy_name> [ USING ( <col_name> , <cond_col1> , ... )
+/// ```
+/// [Snowflake]: https://docs.snowflake.com/en/sql-reference/sql/create-table
+fn parse_column_policy_property(
+    parser: &mut Parser,
+    with: bool,
+) -> Result<ColumnPolicyProperty, ParserError> {
+    let policy_name = parser.parse_identifier(false)?;
+    let using_columns = if parser.parse_keyword(Keyword::USING) {
+        parser.expect_token(&Token::LParen)?;
+        let columns = parser.parse_comma_separated(|p| p.parse_identifier(false))?;
+        parser.expect_token(&Token::RParen)?;
+        Some(columns)
+    } else {
+        None
+    };
+
+    Ok(ColumnPolicyProperty {
+        with,
+        policy_name,
+        using_columns,
+    })
 }
 
 impl Word {

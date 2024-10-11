@@ -2502,6 +2502,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
@@ -2515,6 +2516,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
@@ -2525,6 +2527,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("constrained").empty_span(),
@@ -2562,6 +2565,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("ref").empty_span(),
@@ -2584,6 +2588,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("ref2").empty_span(),
@@ -2603,6 +2608,7 @@ fn parse_create_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ]
             );
@@ -2716,6 +2722,7 @@ fn parse_create_table_with_constraint_characteristics() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
@@ -2729,6 +2736,7 @@ fn parse_create_table_with_constraint_characteristics() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
@@ -2739,6 +2747,7 @@ fn parse_create_table_with_constraint_characteristics() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ]
             );
@@ -2851,6 +2860,7 @@ fn parse_create_table_hive_array() {
                             column_options: vec![],
                             mask: None,
                             column_location: None,
+                            column_policy: None,
                         },
                         ColumnDef {
                             name: Ident::new("val").empty_span(),
@@ -2861,6 +2871,7 @@ fn parse_create_table_hive_array() {
                             column_options: vec![],
                             mask: None,
                             column_location: None,
+                            column_policy: None,
                         },
                     ],
                 )
@@ -3231,6 +3242,7 @@ fn parse_create_external_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
@@ -3244,6 +3256,7 @@ fn parse_create_external_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
@@ -3254,6 +3267,7 @@ fn parse_create_external_table() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ]
             );
@@ -3314,6 +3328,7 @@ fn parse_create_or_replace_external_table() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 },]
             );
             assert!(constraints.is_empty());

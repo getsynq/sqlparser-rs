@@ -296,6 +296,7 @@ fn parse_create_table_auto_increment() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 }],
                 columns
             );
@@ -350,6 +351,7 @@ fn parse_create_table_unique_key() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar").empty_span(),
@@ -363,6 +365,7 @@ fn parse_create_table_unique_key() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ],
                 columns
@@ -430,6 +433,7 @@ fn parse_create_table_set_enum() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("baz").empty_span(),
@@ -443,6 +447,7 @@ fn parse_create_table_set_enum() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     }
                 ],
                 columns
@@ -474,6 +479,7 @@ fn parse_create_table_engine_default_charset() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 },],
                 columns
             );
@@ -505,6 +511,7 @@ fn parse_create_table_collate() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 },],
                 columns
             );
@@ -541,6 +548,7 @@ fn parse_create_table_comment_character_set() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 },],
                 columns
             );
@@ -571,6 +579,7 @@ fn parse_quote_identifiers() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 }],
                 columns
             );
@@ -935,6 +944,7 @@ fn parse_create_table_with_minimum_display_width() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_smallint").empty_span(),
@@ -945,6 +955,7 @@ fn parse_create_table_with_minimum_display_width() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_mediumint").empty_span(),
@@ -955,6 +966,7 @@ fn parse_create_table_with_minimum_display_width() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_int").empty_span(),
@@ -965,6 +977,7 @@ fn parse_create_table_with_minimum_display_width() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_bigint").empty_span(),
@@ -975,6 +988,7 @@ fn parse_create_table_with_minimum_display_width() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     }
                 ],
                 columns
@@ -1001,6 +1015,7 @@ fn parse_create_table_unsigned() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_smallint").empty_span(),
@@ -1011,6 +1026,7 @@ fn parse_create_table_unsigned() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_mediumint").empty_span(),
@@ -1021,6 +1037,7 @@ fn parse_create_table_unsigned() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_int").empty_span(),
@@ -1031,6 +1048,7 @@ fn parse_create_table_unsigned() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                     ColumnDef {
                         name: Ident::new("bar_bigint").empty_span(),
@@ -1041,6 +1059,7 @@ fn parse_create_table_unsigned() {
                         column_options: vec![],
                         mask: None,
                         column_location: None,
+                        column_policy: None,
                     },
                 ],
                 columns
@@ -1658,6 +1677,7 @@ fn parse_table_colum_option_on_update() {
                     column_options: vec![],
                     mask: None,
                     column_location: None,
+                    column_policy: None,
                 }],
                 columns
             );
