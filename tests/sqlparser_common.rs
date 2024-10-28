@@ -4752,14 +4752,6 @@ fn parse_table_function() {
         _ => panic!("Expecting TableFactor::TableFunction"),
     }
 
-    let res = parse_sql_statements("SELECT * FROM TABLE '1' AS a");
-    assert_eq!(
-        ParserError::ParserError(
-            "Expected (, found: \'1\'\nNear `SELECT * FROM TABLE`".to_string()
-        ),
-        res.unwrap_err()
-    );
-
     let res = parse_sql_statements("SELECT * FROM TABLE (FUN(a) AS a");
     assert_eq!(
         ParserError::ParserError("Expected ), found: AS\nNear ` FROM TABLE (FUN(a)`".to_string()),

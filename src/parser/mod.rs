@@ -2802,6 +2802,31 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// If the current token is the `expected` keyword followed by
+    /// specified tokens, consume them and returns true.
+    /// Otherwise, no tokens are consumed and returns false.
+    ///
+    /// Note that if the length of `tokens` is too long, this function will
+    /// not be efficient as it does a loop on the tokens with `peek_nth_token`
+    /// each time.
+    pub fn parse_keyword_with_tokens(&mut self, expected: Keyword, tokens: &[Token]) -> bool {
+        match self.peek_token().token {
+            Token::Word(w) if expected == w.keyword => {
+                for (idx, token) in tokens.iter().enumerate() {
+                    if self.peek_nth_token(idx + 1).token != *token {
+                        return false;
+                    }
+                }
+                // consume all tokens
+                for _ in 0..(tokens.len() + 1) {
+                    self.next_token();
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Bail out if the current token is not one of the expected keywords, or consume it if it is
     pub fn expect_one_of_keywords(&mut self, keywords: &[Keyword]) -> Result<Keyword, ParserError> {
         if let Some(keyword) = self.parse_one_of_keywords(keywords) {
@@ -7961,9 +7986,8 @@ impl<'a> Parser<'a> {
                     alias,
                 })
             }
-        } else if self.parse_keyword(Keyword::TABLE) {
+        } else if self.parse_keyword_with_tokens(Keyword::TABLE, &[Token::LParen]) {
             // parse table function (SELECT * FROM TABLE (<expr>) [ AS <alias> ])
-            self.expect_token(&Token::LParen)?;
             let expr = self.parse_expr()?;
             self.expect_token(&Token::RParen)?;
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;

@@ -1503,3 +1503,8 @@ fn test_create_table_options_empty() {
         "CREATE OR REPLACE TABLE `myproject`.`mydataset`.`mytable` AS (SELECT * FROM `myproject`.`mydataset`.`othertable`)",
     );
 }
+
+#[test]
+fn test_table_cte() {
+    bigquery().verified_only_select("WITH table AS (SELECT * FROM tbl) SELECT * FROM table");
+}
