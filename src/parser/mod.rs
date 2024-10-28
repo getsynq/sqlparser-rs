@@ -4438,7 +4438,7 @@ impl<'a> Parser<'a> {
         let hive_formats = self.parse_hive_formats()?;
         // PostgreSQL supports `WITH ( options )`, before `AS`
 
-        let with_tag = if self.parse_keywords(&[Keyword::WITH, Keyword::TAG]) {
+        let _with_tag = if self.parse_keywords(&[Keyword::WITH, Keyword::TAG]) {
             self.expect_token(&Token::LParen)?;
             if !self.consume_token(&Token::RParen) {
                 let tags = self.parse_comma_separated(Parser::parse_sql_option)?;
