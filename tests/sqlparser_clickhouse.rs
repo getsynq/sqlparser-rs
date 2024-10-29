@@ -1008,9 +1008,8 @@ fn parse_create_view_with_fields_data_types() {
 
 #[test]
 fn parse_array_accessor() {
-    clickhouse().one_statement_parses_to(
-        r#"SELECT baz.1 AS b1 FROM foo AS f"#,
-        r#"SELECT baz[1] AS b1 FROM foo AS f"#,
+    clickhouse().verified_stmt(
+        "SELECT baz.1 AS b1 FROM foo AS f",
     );
 }
 

@@ -1508,3 +1508,8 @@ fn test_create_table_options_empty() {
 fn test_table_cte() {
     bigquery().verified_only_select("WITH table AS (SELECT * FROM tbl) SELECT * FROM table");
 }
+
+#[test]
+fn test_json_number_start() {
+    bigquery().verified_only_select("SELECT field.5k_clients_target AS clients_5k_target FROM tbl");
+}

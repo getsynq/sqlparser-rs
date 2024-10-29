@@ -2297,16 +2297,23 @@ impl<'a> Parser<'a> {
                 operator,
                 right: Box::new(self.parse_expr()?),
             })
-        } else {
+        } else if self.is_number_starting_with_dot( &tok.token) {
+                self.prev_token();
+                Ok(Expr::JsonAccess {
+                    left: Box::new(expr),
+                    operator: JsonOperator::Period,
+                    right: Box::new(Expr::Value(self.parse_snowflake_json_path()?)),
+                })
+        }else {
             if dialect_of!(self is ClickHouseDialect) {
-                if let Token::Number(s, _) = &tok.token {
-                    // ClickHouse array index
-                    return self.parse_clickhouse_array_index(expr, s.clone());
+                    if let Token::Number(s, _) = &tok.token {
+                        // ClickHouse array index
+                        return self.parse_clickhouse_array_index(expr, s.clone());
+                    }
                 }
-            }
 
-            // Can only happen if `get_next_precedence` got out of sync with this function
-            parser_err!(
+                // Can only happen if `get_next_precedence` got out of sync with this function
+                parser_err!(
                 format!("No infix parser for token {:?}", tok.token),
                 tok.span.start
             )
@@ -2555,6 +2562,7 @@ impl<'a> Parser<'a> {
             Token::DoubleColon => Ok(50),
             Token::Colon => Ok(50),
             Token::ExclamationMark => Ok(50),
+            Token::Number(s,_) if s.starts_with(".") => Ok(50),
             Token::LBracket
             | Token::LongArrow
             | Token::Arrow
@@ -5946,7 +5954,13 @@ impl<'a> Parser<'a> {
         while let Some(next_token) = next_next_token {
             match next_token.token {
                 Token::Word(w) => buf.push_str(&w.value),
-                Token::Number(ref n, _) => buf.push_str(n),
+                Token::Number(ref n, _) => {
+                    if buf.is_empty() && n.starts_with(".") {
+                        buf.push_str(&n[1..]);
+                    } else {
+                        buf.push_str(n)
+                    }
+                }
                 Token::Period => buf.push('.'),
                 Token::LBracket => buf.push('['),
                 Token::RBracket => buf.push(']'),
@@ -9871,6 +9885,15 @@ impl<'a> Parser<'a> {
         let partitions = self.parse_comma_separated(Parser::parse_identifier_no_span)?;
         self.expect_token(&Token::RParen)?;
         Ok(partitions)
+    }
+
+    fn is_number_starting_with_dot(&self, p0: &Token) -> bool {
+        if let Token::Number(s,_) = p0 {
+            if s.starts_with(".") {
+                return true
+            }
+        }
+        false
     }
 }
 
