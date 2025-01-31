@@ -2182,6 +2182,8 @@ pub enum Statement {
         /// Table name
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         table_name: ObjectName,
+        /// EXPLAIN TABLE
+        has_table_word: bool,
     },
     /// EXPLAIN / DESCRIBE for select_statement
     Explain {
@@ -2310,11 +2312,15 @@ impl fmt::Display for Statement {
             Statement::ExplainTable {
                 describe_alias,
                 table_name,
+                has_table_word,
             } => {
                 if *describe_alias {
                     write!(f, "DESCRIBE ")?;
                 } else {
                     write!(f, "EXPLAIN ")?;
+                }
+                if *has_table_word {
+                    write!(f, "TABLE ")?;
                 }
 
                 write!(f, "{table_name}")

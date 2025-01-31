@@ -1408,3 +1408,8 @@ fn test_column_with_masking() {
 fn test_table_with_tag() {
     snowflake().one_statement_parses_to("CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG='#UNKNOWN_VALUE')", "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))");
 }
+
+#[test]
+fn test_describe_table() {
+    snowflake().verified_stmt(r#"DESCRIBE TABLE "DW_PROD"."SCH"."TBL""#);
+}
