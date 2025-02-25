@@ -1646,6 +1646,7 @@ pub enum Statement {
         auto_refresh: Option<bool>,
         comment: Option<String>,
         view_options: Vec<SqlOption>,
+        copy_grants: bool,
     },
     /// ```sql
     /// CREATE TABLE
@@ -2759,6 +2760,7 @@ impl fmt::Display for Statement {
                 auto_refresh,
                 comment,
                 view_options,
+                copy_grants,
             } => {
                 write!(
                     f,
@@ -2821,6 +2823,10 @@ impl fmt::Display for Statement {
                         " OPTIONS({view_options})",
                         view_options = display_comma_separated(view_options)
                     )?;
+                }
+
+                if *copy_grants {
+                    write!(f, " COPY GRANTS")?;
                 }
 
                 write!(f, " AS {query}")?;

@@ -3704,6 +3704,8 @@ impl<'a> Parser<'a> {
 
         let view_options = self.parse_options(Keyword::OPTIONS)?;
 
+        let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
         // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` is widely supported here.
@@ -3747,6 +3749,7 @@ impl<'a> Parser<'a> {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         })
     }
 

@@ -1400,8 +1400,11 @@ fn test_alter_session() {
 }
 
 #[test]
-fn test_create_table_copy_grants() {
+fn test_copy_grants() {
     snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32), EMPLOYEE_ID VARCHAR(16777216)) COPY GRANTS AS SELECT * FROM tbl2");
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE VIEW v (EMPLOYEE_SK, EMPLOYEE_ID) COPY GRANTS AS SELECT * FROM tbl2",
+    );
 }
 
 #[test]

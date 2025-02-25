@@ -5904,6 +5904,7 @@ fn parse_create_view() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!("myschema.myview", name.to_string());
             assert_eq!(Vec::<WithSpan<Ident>>::new(), columns);
@@ -5923,6 +5924,7 @@ fn parse_create_view() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
@@ -5975,6 +5977,7 @@ fn parse_create_view_with_columns() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6001,6 +6004,7 @@ fn parse_create_view_with_columns() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
@@ -6030,6 +6034,7 @@ fn parse_create_view_if_not_exists() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(true, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6056,6 +6061,7 @@ fn parse_create_view_if_not_exists() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
@@ -6085,6 +6091,7 @@ fn parse_create_or_replace_view() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6105,6 +6112,7 @@ fn parse_create_or_replace_view() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, copy_grants);
         }
         _ => unreachable!(),
     }
@@ -6138,6 +6146,7 @@ fn parse_create_or_replace_materialized_view() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6158,6 +6167,7 @@ fn parse_create_or_replace_materialized_view() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
@@ -6187,6 +6197,7 @@ fn parse_create_materialized_view() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
@@ -6207,6 +6218,7 @@ fn parse_create_materialized_view() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
@@ -6236,6 +6248,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             auto_refresh,
             comment,
             view_options,
+            copy_grants,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
@@ -6256,6 +6269,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             assert_eq!(auto_refresh, None);
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
+            assert_eq!(copy_grants, false);
         }
         _ => unreachable!(),
     }
