@@ -327,6 +327,7 @@ define_keywords!(
     GLOBAL,
     GRANT,
     GRANTED,
+    GRANTS,
     GRANULARITY,
     GRAPHVIZ,
     GROUP,

@@ -4588,6 +4588,8 @@ impl<'a> Parser<'a> {
 
         let table_options = self.parse_options(Keyword::OPTIONS)?;
 
+        let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+
         // Parse optional `AS ( query )`
         let query = if self.parse_keyword(Keyword::AS) {
             Some(self.parse_boxed_query()?)
@@ -4676,6 +4678,7 @@ impl<'a> Parser<'a> {
             .using(using)
             .table_options(table_options)
             .projections(projections)
+            .copy_grants(copy_grants)
             .build())
     }
 

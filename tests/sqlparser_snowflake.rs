@@ -1400,6 +1400,11 @@ fn test_alter_session() {
 }
 
 #[test]
+fn test_create_table_copy_grants() {
+    snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32), EMPLOYEE_ID VARCHAR(16777216)) COPY GRANTS AS SELECT * FROM tbl2");
+}
+
+#[test]
 fn test_column_with_masking() {
     snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32) WITH MASKING POLICY unknown_policy, EMPLOYEE_ID VARCHAR(16777216) WITH MASKING POLICY unknown_policy)");
 }

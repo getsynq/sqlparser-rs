@@ -86,6 +86,7 @@ pub struct CreateTableBuilder {
     pub table_ttl: Option<Expr>,
     pub clickhouse_settings: Option<Vec<SqlOption>>,
     pub using: Option<ObjectName>,
+    pub copy_grants: bool,
 }
 
 impl CreateTableBuilder {
@@ -130,6 +131,7 @@ impl CreateTableBuilder {
             table_ttl: None,
             clickhouse_settings: None,
             using: None,
+            copy_grants: false,
         }
     }
     pub fn or_replace(mut self, or_replace: bool) -> Self {
@@ -320,6 +322,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn copy_grants(mut self, copy_grants: bool) -> Self {
+        self.copy_grants = copy_grants;
+        self
+    }
+
     pub fn build(self) -> Statement {
         Statement::CreateTable {
             or_replace: self.or_replace,
@@ -361,6 +368,7 @@ impl CreateTableBuilder {
             table_ttl: self.table_ttl,
             clickhouse_settings: self.clickhouse_settings,
             using: self.using,
+            copy_grants: self.copy_grants,
         }
     }
 }
@@ -412,6 +420,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                copy_grants,
             } => Ok(Self {
                 or_replace,
                 temporary,
@@ -452,6 +461,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                copy_grants,
             }),
             _ => Err(ParserError::ParserError(format!(
                 "Expected create table statement, but received: {stmt}"

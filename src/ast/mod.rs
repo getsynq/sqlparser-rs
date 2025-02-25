@@ -1712,6 +1712,8 @@ pub enum Statement {
         clickhouse_settings: Option<Vec<SqlOption>>,
         /// Databricks USING DELTA
         using: Option<ObjectName>,
+        // Snowflake COPY GRANTS
+        copy_grants: bool,
     },
     /// ```sql
     /// CREATE VIRTUAL TABLE .. USING <module_name> (<module_args>)`
@@ -2869,6 +2871,7 @@ impl fmt::Display for Statement {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                copy_grants,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3068,6 +3071,9 @@ impl fmt::Display for Statement {
                 }
                 if let Some(table_ttl) = table_ttl {
                     write!(f, " TTL {table_ttl}")?;
+                }
+                if *copy_grants {
+                    write!(f, " COPY GRANTS")?;
                 }
                 if let Some(query) = query {
                     write!(f, " AS {query}")?;
