@@ -3702,6 +3702,18 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let view_security = if self.parse_keyword(Keyword::SECURITY) {
+            if self.parse_keyword(Keyword::INVOKER) {
+                Some(ViewSecurity::Invoker)
+            } else if self.parse_keyword(Keyword::DEFINER) {
+                Some(ViewSecurity::Definer)
+            } else {
+                self.expected("DEFINER or INVOKER", self.peek_token())?
+            }
+        } else {
+            None
+        };
+
         let view_options = self.parse_options(Keyword::OPTIONS)?;
 
         let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
@@ -3750,6 +3762,7 @@ impl<'a> Parser<'a> {
             comment,
             view_options,
             copy_grants,
+            view_security,
         })
     }
 

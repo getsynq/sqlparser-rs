@@ -1072,3 +1072,21 @@ impl fmt::Display for ColumnPolicy {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ViewSecurity {
+    Definer,
+    Invoker,
+}
+
+impl fmt::Display for ViewSecurity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ViewSecurity::Definer => write!(f, "DEFINER")?,
+            ViewSecurity::Invoker => write!(f, "INVOKER")?,
+        }
+        Ok(())
+    }
+}

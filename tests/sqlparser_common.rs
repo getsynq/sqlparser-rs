@@ -5905,6 +5905,7 @@ fn parse_create_view() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!("myschema.myview", name.to_string());
             assert_eq!(Vec::<WithSpan<Ident>>::new(), columns);
@@ -5925,6 +5926,7 @@ fn parse_create_view() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -5978,6 +5980,7 @@ fn parse_create_view_with_columns() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6005,6 +6008,7 @@ fn parse_create_view_with_columns() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -6035,6 +6039,7 @@ fn parse_create_view_if_not_exists() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(true, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6062,6 +6067,7 @@ fn parse_create_view_if_not_exists() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -6092,6 +6098,7 @@ fn parse_create_or_replace_view() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6113,6 +6120,7 @@ fn parse_create_or_replace_view() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, copy_grants);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -6147,6 +6155,7 @@ fn parse_create_or_replace_materialized_view() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6168,6 +6177,7 @@ fn parse_create_or_replace_materialized_view() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -6198,6 +6208,7 @@ fn parse_create_materialized_view() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
@@ -6219,6 +6230,7 @@ fn parse_create_materialized_view() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -6249,6 +6261,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             comment,
             view_options,
             copy_grants,
+            view_security,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
@@ -6270,6 +6283,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             assert_eq!(comment, None);
             assert_eq!(view_options, vec![]);
             assert_eq!(copy_grants, false);
+            assert_eq!(view_security, None);
         }
         _ => unreachable!(),
     }
@@ -8618,4 +8632,28 @@ fn parse_unload() {
             }]
         }
     );
+}
+
+#[test]
+fn parse_view_security_definer() {
+    let sql = "CREATE VIEW view_name SECURITY DEFINER AS SELECT * FROM input";
+
+    match all_dialects().verified_stmt(sql) {
+        Statement::CreateView { view_security, .. } => {
+            assert_eq!(view_security, Some(ViewSecurity::Definer))
+        }
+        _ => panic!("Expected CREATE VIEW"),
+    }
+}
+
+#[test]
+fn parse_view_security_invoker() {
+    let sql = "CREATE VIEW view_name SECURITY INVOKER AS SELECT * FROM input";
+
+    match all_dialects().verified_stmt(sql) {
+        Statement::CreateView { view_security, .. } => {
+            assert_eq!(view_security, Some(ViewSecurity::Invoker))
+        }
+        _ => panic!("Expected CREATE VIEW"),
+    }
 }

@@ -38,7 +38,7 @@ pub use self::ddl::{
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
     Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition, ProcedureParam,
     ReferentialAction, TableConstraint, TableProjection, UserDefinedTypeCompositeAttributeDef,
-    UserDefinedTypeRepresentation,
+    UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -1647,6 +1647,7 @@ pub enum Statement {
         comment: Option<String>,
         view_options: Vec<SqlOption>,
         copy_grants: bool,
+        view_security: Option<ViewSecurity>,
     },
     /// ```sql
     /// CREATE TABLE
@@ -2761,6 +2762,7 @@ impl fmt::Display for Statement {
                 comment,
                 view_options,
                 copy_grants,
+                view_security,
             } => {
                 write!(
                     f,
@@ -2796,6 +2798,10 @@ impl fmt::Display for Statement {
                 if let Some(order_by) = order_by {
                     write!(f, " ORDER BY ({})", display_comma_separated(order_by))?;
                 }
+                if let Some(view_security) = view_security {
+                    write!(f, " SECURITY {}", view_security)?;
+                }
+
                 if let Some(table_ttl) = table_ttl {
                     write!(f, " TTL {table_ttl}")?;
                 }
