@@ -4475,7 +4475,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let with_options = self.parse_options(Keyword::WITH)?;
+        let mut with_options = self.parse_options(Keyword::WITH)?;
 
         let mut table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
 
@@ -4515,6 +4515,9 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+
+        let with_options_later = self.parse_options(Keyword::WITH)?;
+        with_options.extend(with_options_later);
 
         let auto_increment_offset = if self.parse_keyword(Keyword::AUTO_INCREMENT) {
             let _ = self.consume_token(&Token::Eq);

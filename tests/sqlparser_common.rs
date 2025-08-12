@@ -1268,6 +1268,14 @@ fn pg_and_generic() -> TestedDialects {
     }
 }
 
+fn generic() -> TestedDialects {
+    TestedDialects {
+        dialects: vec![Box::new(GenericDialect {})],
+        options: None,
+    }
+}
+
+
 #[test]
 fn parse_json_ops_without_colon() {
     use self::JsonOperator;
@@ -8656,4 +8664,23 @@ fn parse_view_security_invoker() {
         }
         _ => panic!("Expected CREATE VIEW"),
     }
+}
+
+#[test]
+fn create_table_with() {
+    let sql = r#"CREATE TABLE the_table (
+   day_partition varchar,
+   response_code integer,
+   "sum(call_count)" bigint
+)
+COMMENT 'This for test'
+WITH (
+   format = 'PARQUET',
+   format_version = 2,
+   location = 's3a://abc/def/g',
+   max_commit_retry = 4,
+   partitioning = ARRAY['day_partition']
+)"#;
+
+    generic().parse_sql_statements(sql).unwrap();
 }
