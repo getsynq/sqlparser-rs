@@ -508,15 +508,15 @@ fn parse_create_table_with_defaults() {
                 with_options,
                 vec![
                     SqlOption {
-                        name: Ident::new("fillfactor").empty_span(),
+                        name: ObjectName(vec![Ident::new("fillfactor")]),
                         value: Expr::Value(number("20")),
                     },
                     SqlOption {
-                        name: Ident::new("user_catalog_table").empty_span(),
+                        name: ObjectName(vec![Ident::new("user_catalog_table")]),
                         value: Expr::Value(Value::Boolean(true)),
                     },
                     SqlOption {
-                        name: Ident::new("autovacuum_vacuum_threshold").empty_span(),
+                        name: ObjectName(vec![Ident::new("autovacuum_vacuum_threshold")]),
                         value: Expr::Value(number("100")),
                     },
                 ]
@@ -3758,11 +3758,11 @@ fn parse_create_table_with_options() {
             assert_eq!(
                 vec![
                     SqlOption {
-                        name: Ident::new("foo").empty_span(),
+                        name: ObjectName(vec![Ident::new("foo")]),
                         value: Expr::Value(Value::SingleQuotedString("bar".into())),
                     },
                     SqlOption {
-                        name: Ident::new("a").empty_span(),
+                        name: ObjectName(vec![Ident::new("a")]),
                         value: Expr::Value(number("123")),
                     },
                 ],
