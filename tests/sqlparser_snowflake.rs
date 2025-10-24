@@ -1414,7 +1414,35 @@ fn test_column_with_masking() {
 
 #[test]
 fn test_table_with_tag() {
-    snowflake().one_statement_parses_to("CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG='#UNKNOWN_VALUE')", "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))");
+    // Simple tag name
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG='#UNKNOWN_VALUE')",
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    );
+
+    // Schema-qualified tag name
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (TAG_SCHEMA.DOMAIN_MAPPING='marketing')",
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    );
+
+    // Fully-qualified tag name (database.schema.tag)
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (PROD.TAG_SCHEMA.DOMAIN_MAPPING='marketing')",
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    );
+
+    // Multiple tags with different qualification levels
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (SIMPLE_TAG='value1', SCHEMA.TAG_NAME='value2', DB.SCHEMA.TAG_NAME='value3')",
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    );
+
+    // Real-world example from the issue (anonymized)
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE SCHEMA.DERIVED_TABLE (USER_ID VARCHAR(36), REPORTING_DATE TIMESTAMP_NTZ(9)) WITH TAG (STAGE.TAG_SCHEMA.DOMAIN_MAPPING='analytics')",
+        "CREATE OR REPLACE TABLE SCHEMA.DERIVED_TABLE (USER_ID VARCHAR(36), REPORTING_DATE TIMESTAMP_NTZ(9))"
+    );
 }
 
 #[test]

@@ -3171,11 +3171,11 @@ fn parse_create_table_with_options() {
             assert_eq!(
                 vec![
                     SqlOption {
-                        name: Ident::new("foo").empty_span(),
+                        name: ObjectName(vec![Ident::new("foo")]),
                         value: Expr::Value(Value::SingleQuotedString("bar".into())),
                     },
                     SqlOption {
-                        name: Ident::new("a").empty_span(),
+                        name: ObjectName(vec![Ident::new("a")]),
                         value: Expr::Value(number("123")),
                     },
                 ],
@@ -3456,11 +3456,11 @@ fn parse_alter_view_with_options() {
             assert_eq!(
                 vec![
                     SqlOption {
-                        name: Ident::new("foo").empty_span(),
+                        name: ObjectName(vec![Ident::new("foo")]),
                         value: Expr::Value(Value::SingleQuotedString("bar".into())),
                     },
                     SqlOption {
-                        name: Ident::new("a").empty_span(),
+                        name: ObjectName(vec![Ident::new("a")]),
                         value: Expr::Value(number("123")),
                     },
                 ],
@@ -5948,11 +5948,11 @@ fn parse_create_view_with_options() {
             assert_eq!(
                 vec![
                     SqlOption {
-                        name: Ident::new("foo").empty_span(),
+                        name: ObjectName(vec![Ident::new("foo")]),
                         value: Expr::Value(Value::SingleQuotedString("bar".into())),
                     },
                     SqlOption {
-                        name: Ident::new("a").empty_span(),
+                        name: ObjectName(vec![Ident::new("a")]),
                         value: Expr::Value(number("123")),
                     },
                 ],
@@ -7854,11 +7854,11 @@ fn parse_cache_table() {
             has_as: false,
             options: vec![
                 SqlOption {
-                    name: Ident::with_quote('\'', "K1").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K1")]),
                     value: Expr::Value(Value::SingleQuotedString("V1".into())),
                 },
                 SqlOption {
-                    name: Ident::with_quote('\'', "K2").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K2")]),
                     value: Expr::Value(number("0.88")),
                 },
             ],
@@ -7879,11 +7879,11 @@ fn parse_cache_table() {
             has_as: false,
             options: vec![
                 SqlOption {
-                    name: Ident::with_quote('\'', "K1").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K1")]),
                     value: Expr::Value(Value::SingleQuotedString("V1".into())),
                 },
                 SqlOption {
-                    name: Ident::with_quote('\'', "K2").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K2")]),
                     value: Expr::Value(number("0.88")),
                 },
             ],
@@ -7904,11 +7904,11 @@ fn parse_cache_table() {
             has_as: true,
             options: vec![
                 SqlOption {
-                    name: Ident::with_quote('\'', "K1").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K1")]),
                     value: Expr::Value(Value::SingleQuotedString("V1".into())),
                 },
                 SqlOption {
-                    name: Ident::with_quote('\'', "K2").empty_span(),
+                    name: ObjectName(vec![Ident::with_quote('\'', "K2")]),
                     value: Expr::Value(number("0.88")),
                 },
             ],
@@ -8631,11 +8631,10 @@ fn parse_unload() {
             }
             .empty_span(),
             with: vec![SqlOption {
-                name: Ident {
+                name: ObjectName(vec![Ident {
                     value: "format".to_string(),
                     quote_style: None
-                }
-                .empty_span(),
+                }]),
                 value: Expr::Value(Value::SingleQuotedString("AVRO".to_string()))
             }]
         }

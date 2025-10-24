@@ -4628,7 +4628,7 @@ pub struct HiveFormat {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct SqlOption {
-    pub name: WithSpan<Ident>,
+    pub name: ObjectName,
     pub value: Expr,
 }
 
