@@ -7902,6 +7902,24 @@ impl<'a> Parser<'a> {
                     relation: self.parse_array_join_table_factor()?,
                     join_operator: JoinOperator::Array,
                 }
+            } else if self.parse_keyword(Keyword::ASOF) && dialect_of!(self is SnowflakeDialect) {
+                self.expect_keyword(Keyword::JOIN)?;
+                let relation = self.parse_table_factor()?;
+
+                self.expect_keyword(Keyword::MATCH_CONDITION)?;
+                self.expect_token(&Token::LParen)?;
+                let match_condition = self.parse_expr()?;
+                self.expect_token(&Token::RParen)?;
+
+                let constraint = self.parse_join_constraint(false)?;
+
+                Join {
+                    relation,
+                    join_operator: JoinOperator::AsOf {
+                        match_condition,
+                        constraint,
+                    },
+                }
             } else {
                 let natural = self.parse_keyword(Keyword::NATURAL);
                 let peek_keyword = if let Token::Word(w) = self.peek_token().token {
