@@ -1230,6 +1230,16 @@ impl fmt::Display for Join {
             JoinOperator::CrossApply => write!(f, " CROSS APPLY {}", self.relation),
             JoinOperator::OuterApply => write!(f, " OUTER APPLY {}", self.relation),
             JoinOperator::Array => write!(f, " ARRAY JOIN {}", self.relation),
+            JoinOperator::AsOf {
+                match_condition,
+                constraint,
+            } => write!(
+                f,
+                " ASOF JOIN {} MATCH_CONDITION ({}){}",
+                self.relation,
+                match_condition,
+                suffix(constraint)
+            ),
         }
     }
 }
@@ -1257,6 +1267,11 @@ pub enum JoinOperator {
     OuterApply,
     /// ARRAY JOIN (ClickHouse)
     Array,
+    /// ASOF JOIN (Snowflake)
+    AsOf {
+        match_condition: Expr,
+        constraint: JoinConstraint,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]

@@ -1449,3 +1449,8 @@ fn test_table_with_tag() {
 fn test_describe_table() {
     snowflake().verified_stmt(r#"DESCRIBE TABLE "DW_PROD"."SCH"."TBL""#);
 }
+
+#[test]
+fn test_asof_join() {
+    snowflake().verified_stmt("SELECT * FROM table1 ASOF JOIN table2 MATCH_CONDITION (table1.timestamp <= table2.timestamp) ON table1.id = table2.id");
+}

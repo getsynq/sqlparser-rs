@@ -95,6 +95,7 @@ define_keywords!(
     AS,
     ASC,
     ASENSITIVE,
+    ASOF,
     ASSERT,
     ASYMMETRIC,
     AT,
@@ -422,6 +423,7 @@ define_keywords!(
     MASKING,
     MATCH,
     MATCHED,
+    MATCH_CONDITION,
     MATCH_RECOGNIZE,
     MATERIALIZED,
     MAX,
@@ -829,6 +831,9 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     Keyword::CONNECT,
     // Reserved for snowflake MATCH_RECOGNIZE
     Keyword::MATCH_RECOGNIZE,
+    // Reserved for snowflake ASOF JOIN
+    Keyword::ASOF,
+    Keyword::MATCH_CONDITION,
 ];
 
 /// Can't be used as a column alias, so that `SELECT <expr> alias`
