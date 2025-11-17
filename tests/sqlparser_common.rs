@@ -1275,7 +1275,6 @@ fn generic() -> TestedDialects {
     }
 }
 
-
 #[test]
 fn parse_json_ops_without_colon() {
     use self::JsonOperator;
@@ -8687,6 +8686,6 @@ WITH (
 #[test]
 fn interval_identifier() {
     generic()
-        .parse_sql_statements("SELECT min(interval) as min_interval FROM table1")
+        .parse_sql_statements("SELECT min(interval) as min_interval FROM table1 WHERE interval > 0")
         .unwrap();
 }
