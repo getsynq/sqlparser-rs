@@ -845,7 +845,8 @@ impl<'a> Parser<'a> {
                 Keyword::TRIM => self.parse_trim_expr(),
                 Keyword::INTERVAL
                     if self.peek_token().token != Token::Period
-                        && self.peek_token().token != Token::Comma =>
+                        && self.peek_token().token != Token::Comma
+                        && self.peek_token().token != Token::RParen =>
                 {
                     self.parse_interval()
                 }
