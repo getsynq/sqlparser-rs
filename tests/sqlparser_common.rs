@@ -8683,3 +8683,10 @@ WITH (
 
     generic().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn interval_identifier() {
+    generic()
+        .parse_sql_statements("SELECT min(interval) as min_interval FROM table1")
+        .unwrap();
+}
