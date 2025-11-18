@@ -844,9 +844,19 @@ impl<'a> Parser<'a> {
                 Keyword::OVERLAY => self.parse_overlay_expr(),
                 Keyword::TRIM => self.parse_trim_expr(),
                 Keyword::INTERVAL
-                    if self.peek_token().token != Token::Period
-                        && self.peek_token().token != Token::Comma
-                        && self.peek_token().token != Token::RParen =>
+                    if !vec![
+                        Token::Comma,
+                        Token::Period,
+                        Token::RParen,
+                        Token::Gt,
+                        Token::GtEq,
+                        Token::Lt,
+                        Token::LtEq,
+                        Token::Eq,
+                        Token::DoubleEq,
+                        Token::Neq,
+                    ]
+                    .contains(&self.peek_token().token) =>
                 {
                     self.parse_interval()
                 }
