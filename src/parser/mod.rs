@@ -771,7 +771,7 @@ impl<'a> Parser<'a> {
         let span = self.peek_token().span;
         return_ok_if_some!(self.maybe_parse(|parser| {
             match parser.parse_data_type()? {
-                DataType::Interval => parser.parse_interval(),
+                DataType::Interval if parser.parse_interval_guard() => parser.parse_interval(),
                 // PostgreSQL allows almost any identifier to be used as custom data type name,
                 // and we support that in `parse_data_type()`. But unlike Postgres we don't
                 // have a list of globally reserved keywords (since they vary across dialects),
@@ -843,23 +843,7 @@ impl<'a> Parser<'a> {
                 }
                 Keyword::OVERLAY => self.parse_overlay_expr(),
                 Keyword::TRIM => self.parse_trim_expr(),
-                Keyword::INTERVAL
-                    if !vec![
-                        Token::Comma,
-                        Token::Period,
-                        Token::RParen,
-                        Token::Gt,
-                        Token::GtEq,
-                        Token::Lt,
-                        Token::LtEq,
-                        Token::Eq,
-                        Token::DoubleEq,
-                        Token::Neq,
-                    ]
-                    .contains(&self.peek_token().token) =>
-                {
-                    self.parse_interval()
-                }
+                Keyword::INTERVAL if self.parse_interval_guard() => self.parse_interval(),
                 // Treat ARRAY[1,2,3] as an array [1,2,3], otherwise try as subquery or a function call
                 Keyword::ARRAY if self.peek_token() == Token::LBracket => {
                     self.expect_token(&Token::LBracket)?;
@@ -1671,6 +1655,51 @@ impl<'a> Parser<'a> {
             match_value,
             opt_search_modifier,
         })
+    }
+
+    /// Returns the `N` next tokens that have not been parsed, mapped to keywords.
+    /// In the case that a token does not contain a keyword, it is mapped to [Keyword::NoKeyword].
+    ///
+    /// This is a less verbose way of checking ahead for specific keywords.
+    /// Consider the example from [peek_tokens], re-written using [peek_keywords].
+    ///
+    /// Example:
+    /// ```rust
+    /// # use sqlparser::dialect::GenericDialect;
+    /// # use sqlparser::parser::Parser;
+    /// # use sqlparser::keywords::Keyword;
+    /// let dialect = GenericDialect {};
+    /// let mut parser = Parser::new(&dialect).try_with_sql("ORDER BY foo, bar").unwrap();
+    ///
+    /// // Note that Rust infers the number of tokens to peek based on the
+    /// // length of the slice pattern!
+    /// assert!(matches!(
+    ///     parser.peek_keywords(),
+    ///     [Keyword::ORDER, Keyword::BY]
+    /// ));
+    /// ```
+    pub fn peek_keywords<const N: usize>(&self) -> [Keyword; N] {
+        self.peek_tokens::<N>().map(|token| match token {
+            Token::Word(w) => w.keyword,
+            _ => Keyword::NoKeyword,
+        })
+    }
+
+    /// Guard against cases where `INTERVAL` is used as an identifer.
+    ///
+    /// First, we look for keywords that might be misread as interval expressions,
+    /// Then, we check if an interval can be parsed.
+    fn parse_interval_guard(&mut self) -> bool {
+        match self.peek_keywords() {
+            [Keyword::LIKE] | [Keyword::IS] => return false,
+            _ => {}
+        }
+
+        let index = self.index;
+        let attempt = self.parse_interval();
+        self.index = index;
+
+        attempt.is_ok()
     }
 
     /// Parse an INTERVAL expression.

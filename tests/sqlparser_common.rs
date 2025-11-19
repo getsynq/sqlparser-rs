@@ -8688,12 +8688,19 @@ fn interval_identifier() {
     generic()
         .parse_sql_statements(
             "
-            SELECT MIN(interval) AS min_interval FROM table1 WHERE interval > 0;
-            SELECT MIN(interval) AS min_interval FROM table1 WHERE interval >= 0;
-            SELECT MAX(interval) AS max_interval FROM table1 WHERE interval < 100;
-            SELECT MAX(interval) AS max_interval FROM table1 WHERE interval <= 100;
-            SELECT COUNT(interval) AS intervals FROM table1 WHERE interval = 50;
-            SELECT COUNT(interval) AS intervals FROM table1 WHERE interval <> NULL;
+            SELECT COUNT(interval)
+            FROM intervals
+                WHERE (interval > 0 OR interval <= 0)
+                  AND (interval < 0 OR interval >= 0)
+                  AND (interval <> 1 OR INTERVAL = 1);
+
+            SELECT interval FROM intervals WHERE EXISTS(SELECT interval FROM intervals_allowlist);
+            SELECT interval FROM intervals WHERE NOT EXISTS(SELECT interval FROM intervals_denylist);
+
+            SELECT interval FROM intervals WHERE interval IS NULL;        
+            SELECT interval FROM intervals WHERE interval IS NOT NULL;
+
+            SELECT interval FROM intervals WHERE interval LIKE 'FOO%';
         ",
         )
         .unwrap();
