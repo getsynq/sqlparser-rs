@@ -7530,7 +7530,7 @@ impl<'a> Parser<'a> {
         // or `from`.
 
         let from = if self.parse_keyword(Keyword::FROM) {
-            self.parse_comma_separated(Parser::parse_table_and_joins)?
+            self.parse_from_clause_body()?
         } else {
             vec![]
         };
@@ -7920,6 +7920,46 @@ impl<'a> Parser<'a> {
     pub fn parse_use(&mut self) -> Result<Statement, ParserError> {
         let db_name = self.parse_identifier(false)?.unwrap();
         Ok(Statement::Use { db_name })
+    }
+
+    /// Parse the body of a FROM clause (comma-separated table references).
+    /// This handles Snowflake's trailing comma support, where a comma can appear
+    /// before clause keywords like WHERE, GROUP, etc.
+    fn parse_from_clause_body(&mut self) -> Result<Vec<TableWithJoins>, ParserError> {
+        let mut tables = vec![];
+        loop {
+            tables.push(self.parse_table_and_joins()?);
+            if !self.consume_token(&Token::Comma) {
+                break;
+            }
+            // Snowflake allows trailing commas in FROM clause
+            // e.g. `SELECT * FROM t1, lateral flatten(...) alias, WHERE ...`
+            // https://docs.snowflake.com/en/release-notes/2024/8_11#select-supports-trailing-commas
+            // Check if the comma was trailing (followed by a clause keyword)
+            if dialect_of!(self is SnowflakeDialect) {
+                if let Token::Word(w) = self.peek_token().token {
+                    if matches!(
+                        w.keyword,
+                        Keyword::WHERE
+                            | Keyword::GROUP
+                            | Keyword::HAVING
+                            | Keyword::ORDER
+                            | Keyword::LIMIT
+                            | Keyword::QUALIFY
+                            | Keyword::UNION
+                            | Keyword::EXCEPT
+                            | Keyword::INTERSECT
+                            | Keyword::FETCH
+                            | Keyword::OFFSET
+                            | Keyword::WINDOW
+                    ) {
+                        // Trailing comma - stop parsing FROM clause
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(tables)
     }
 
     pub fn parse_table_and_joins(&mut self) -> Result<TableWithJoins, ParserError> {

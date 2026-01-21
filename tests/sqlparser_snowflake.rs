@@ -1394,6 +1394,22 @@ fn test_sf_trailing_commas() {
 }
 
 #[test]
+fn test_sf_trailing_commas_in_from_clause() {
+    // Snowflake allows trailing commas in FROM clause, particularly useful
+    // when using LATERAL FLATTEN with comma-separated table references
+    snowflake().verified_only_select_with_canonical(
+        "SELECT * FROM t1, t2, WHERE x = 1",
+        "SELECT * FROM t1, t2 WHERE x = 1",
+    );
+
+    // With LATERAL FLATTEN - the common use case from PR-6610
+    snowflake().verified_only_select_with_canonical(
+        r#"SELECT a, b FROM t, LATERAL FLATTEN(INPUT => t.arr) AS f, WHERE a IS NOT NULL"#,
+        r#"SELECT a, b FROM t, LATERAL FLATTEN(INPUT => t.arr) AS f WHERE a IS NOT NULL"#,
+    );
+}
+
+#[test]
 fn test_alter_session() {
     snowflake().verified_stmt("ALTER SESSION SET LOCK_TIMEOUT = 3600");
     snowflake().verified_stmt("ALTER SESSION UNSET LOCK_TIMEOUT");
