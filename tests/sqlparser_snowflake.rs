@@ -1454,3 +1454,20 @@ fn test_describe_table() {
 fn test_asof_join() {
     snowflake().verified_stmt("SELECT * FROM table1 ASOF JOIN table2 MATCH_CONDITION (table1.timestamp <= table2.timestamp) ON table1.id = table2.id");
 }
+
+#[test]
+fn test_insert_with_parenthesized_select() {
+    // Test INSERT INTO with parenthesized SELECT subquery
+    // This syntax is valid in many SQL dialects including Snowflake
+    snowflake_and_generic().verified_stmt("INSERT INTO t (a, b) (SELECT x, y FROM s)");
+
+    // With table alias
+    snowflake_and_generic().verified_stmt("INSERT INTO t (a, b) (SELECT s.x, s.y FROM s AS s)");
+
+    // Without column list
+    snowflake_and_generic().verified_stmt("INSERT INTO t (SELECT x, y FROM s)");
+
+    // With unquoted table alias (PR-6612 reproducer)
+    snowflake_and_generic()
+        .verified_stmt(r#"INSERT INTO "db"."schema"."t" ("a", "b") (SELECT "s"."a", "s"."b" FROM "db"."schema"."s" AS s)"#);
+}

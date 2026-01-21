@@ -2722,6 +2722,21 @@ impl<'a> Parser<'a> {
             })
     }
 
+    /// Check if the current position (which should be at a `(` token) is followed
+    /// by a query-starting keyword (SELECT, VALUES, WITH, TABLE, or another `(`).
+    /// This is used to distinguish between a column list and a parenthesized query.
+    fn peek_parenthesized_query_start(&self) -> bool {
+        // We assume current position is at `(`, so peek at position 1 (the token after `(`)
+        matches!(
+            self.peek_nth_token(1).token,
+            Token::Word(ref w)
+                if matches!(
+                    w.keyword,
+                    Keyword::SELECT | Keyword::VALUES | Keyword::WITH | Keyword::TABLE
+                )
+        ) || matches!(self.peek_nth_token(1).token, Token::LParen)
+    }
+
     /// Return the first non-whitespace token that has not yet been processed
     /// (or None if reached end-of-file) and mark it as processed. OK to call
     /// repeatedly after reaching EOF.
@@ -8714,7 +8729,16 @@ impl<'a> Parser<'a> {
             let table = self.parse_keyword(Keyword::TABLE);
             let table_name = self.parse_object_name(false)?;
             let is_mysql = dialect_of!(self is MySqlDialect);
-            let columns = self.parse_parenthesized_column_list(Optional, is_mysql)?;
+
+            // Parse optional column list, but be careful not to consume a parenthesized query
+            // e.g., INSERT INTO t (SELECT ...) should not treat (SELECT ...) as a column list
+            let columns = if self.peek_token().token == Token::LParen
+                && self.peek_parenthesized_query_start()
+            {
+                vec![]
+            } else {
+                self.parse_parenthesized_column_list(Optional, is_mysql)?
+            };
 
             let partitioned = if self.parse_keyword(Keyword::PARTITION) {
                 self.expect_token(&Token::LParen)?;
@@ -8726,7 +8750,11 @@ impl<'a> Parser<'a> {
             };
 
             // Hive allows you to specify columns after partitions as well if you want.
-            let after_columns = self.parse_parenthesized_column_list(Optional, false)?;
+            let after_columns = if dialect_of!(self is HiveDialect) {
+                self.parse_parenthesized_column_list(Optional, false)?
+            } else {
+                vec![]
+            };
 
             let source = Box::new(self.parse_query()?);
             let on = if self.parse_keyword(Keyword::ON) {
