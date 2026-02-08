@@ -17,3 +17,6 @@ Cargo.lock
 
 *.swp
 *.json
+
+# External corpus (symlinked from kernel-cll-corpus repo)
+/tests/corpus

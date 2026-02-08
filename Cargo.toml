@@ -41,6 +41,12 @@ time = { version = "0.3.36", optional = true }
 simple_logger = "5.0.0"
 matches = "0.1.10"
 pretty_assertions = "1.4.0"
+walkdir = "2"
+libtest-mimic = "0.8"
+
+[[test]]
+name = "sqlparser_corpus"
+harness = false
 
 [package.metadata.release]
 # Instruct `cargo release` to not run `cargo publish` locally:
