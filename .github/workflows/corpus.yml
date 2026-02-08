@@ -1,12 +1,12 @@
 name: Corpus Parsing Tests
 
-# pull_request_target runs the workflow from the BASE branch (master),
+# pull_request_target runs the workflow from the BASE branch (main),
 # so a fork PR cannot modify this workflow to exfiltrate secrets.
 # The PR's code is checked out explicitly below.
 on:
   push:
     branches:
-      - master
+      - main
   pull_request_target:
     types: [opened, synchronize]
 
@@ -53,7 +53,7 @@ jobs:
         with:
           name: corpus-report
           path: target/baseline
-          branch: master
+          branch: main
           workflow: corpus.yml
           search_artifacts: true
 
