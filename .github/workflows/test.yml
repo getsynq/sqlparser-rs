@@ -37,6 +37,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: getsynq/kernel-cll-corpus
+          ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
           path: tests/corpus-repo
       - run: ln -s "$PWD/tests/corpus-repo/corpus" tests/corpus
       - uses: dtolnay/rust-toolchain@stable
