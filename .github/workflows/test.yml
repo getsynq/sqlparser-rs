@@ -38,6 +38,7 @@ jobs:
         with:
           repository: getsynq/kernel-cll-corpus
           ssh-key: ${{ secrets.CORPUS_DEPLOY_KEY }}
+          ref: main
           path: tests/corpus-repo
       - run: ln -s "$PWD/tests/corpus-repo/corpus" tests/corpus
       - uses: dtolnay/rust-toolchain@stable
