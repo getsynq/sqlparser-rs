@@ -1034,7 +1034,6 @@ impl<'a> Tokenizer<'a> {
                     chars.next(); // consume
                     match chars.peek() {
                         Some('=') => self.consume_and_return(chars, Token::GtEq),
-                        Some('>') => self.consume_and_return(chars, Token::ShiftRight),
                         _ => Ok(Some(Token::Gt)),
                     }
                 }
