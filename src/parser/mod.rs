@@ -10463,6 +10463,23 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_window_spec(&mut self) -> Result<WindowSpec, ParserError> {
+        // Check for window name reference (e.g., "WINDOW a AS (b)")
+        let window_name = if self.peek_token().token != Token::RParen
+            && !matches!(
+                self.peek_token().token,
+                Token::Word(w) if w.keyword == Keyword::PARTITION
+                    || w.keyword == Keyword::ORDER
+                    || w.keyword == Keyword::ROWS
+                    || w.keyword == Keyword::RANGE
+                    || w.keyword == Keyword::GROUPS
+            )
+        {
+            // This looks like a window name reference
+            Some(self.parse_identifier(false)?.unwrap())
+        } else {
+            None
+        };
+
         let partition_by = if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
             self.parse_comma_separated(Parser::parse_expr)?
         } else {
@@ -10481,6 +10498,7 @@ impl<'a> Parser<'a> {
             None
         };
         Ok(WindowSpec {
+            window_name,
             partition_by,
             order_by,
             window_frame,
