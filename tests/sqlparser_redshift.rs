@@ -384,6 +384,28 @@ fn test_distribution_styles() {
 }
 
 #[test]
+fn test_extract_with_string_date_part() {
+    // Redshift allows date parts as string literals in EXTRACT
+    let sql = "SELECT EXTRACT('hour' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "SELECT EXTRACT('year' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "SELECT EXTRACT('day' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "SELECT EXTRACT('minute' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "SELECT EXTRACT('second' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "SELECT EXTRACT('quarter' FROM col) FROM tbl";
+    redshift().parse_sql_statements(sql).unwrap();
+}
+
+#[test]
 fn test_utf8_column_names() {
     redshift().verified_stmt("SELECT financing_cost_€k FROM tbl");
 }
