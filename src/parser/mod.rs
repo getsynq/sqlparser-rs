@@ -9176,6 +9176,8 @@ impl<'a> Parser<'a> {
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::FROM)?;
+        // Optional ROLE keyword before grantees (Snowflake syntax)
+        let _ = self.parse_keyword(Keyword::ROLE);
         let grantees =
             self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
 
