@@ -1474,22 +1474,46 @@ impl<'a> Parser<'a> {
         // PARSE OVERLAY (EXPR PLACING EXPR FROM 1 [FOR 3])
         self.expect_token(&Token::LParen)?;
         let expr = self.parse_expr()?;
-        self.expect_keyword(Keyword::PLACING)?;
-        let what_expr = self.parse_expr()?;
-        self.expect_keyword(Keyword::FROM)?;
-        let from_expr = self.parse_expr()?;
-        let mut for_expr = None;
-        if self.parse_keyword(Keyword::FOR) {
-            for_expr = Some(self.parse_expr()?);
+        if self.parse_keyword(Keyword::PLACING) {
+            let what_expr = self.parse_expr()?;
+            self.expect_keyword(Keyword::FROM)?;
+            let from_expr = self.parse_expr()?;
+            let mut for_expr = None;
+            if self.parse_keyword(Keyword::FOR) {
+                for_expr = Some(self.parse_expr()?);
+            }
+            self.expect_token(&Token::RParen)?;
+            Ok(Expr::Overlay {
+                expr: Box::new(expr),
+                overlay_what: Box::new(what_expr),
+                overlay_from: Box::new(from_expr),
+                overlay_for: for_expr.map(Box::new),
+            })
+        } else if self.consume_token(&Token::Comma) {
+            // Fall back to regular function call: overlay(str, replacement, start[, length])
+            let mut args = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))];
+            loop {
+                args.push(self.parse_function_args()?);
+                if !self.consume_token(&Token::Comma) {
+                    break;
+                }
+            }
+            self.expect_token(&Token::RParen)?;
+            Ok(Expr::Function(Function {
+                name: ObjectName(vec![Ident::new("overlay")]),
+                args,
+                over: None,
+                distinct: false,
+                special: false,
+                order_by: vec![],
+                limit: None,
+                on_overflow: None,
+                null_treatment: None,
+                within_group: None,
+            }))
+        } else {
+            self.expected("PLACING or comma-separated arguments", self.peek_token())
         }
-        self.expect_token(&Token::RParen)?;
-
-        Ok(Expr::Overlay {
-            expr: Box::new(expr),
-            overlay_what: Box::new(what_expr),
-            overlay_from: Box::new(from_expr),
-            overlay_for: for_expr.map(Box::new),
-        })
     }
 
     /// ```sql
@@ -1597,6 +1621,7 @@ impl<'a> Parser<'a> {
         match &next_token.token {
             Token::Word(w) => match w.keyword {
                 Keyword::YEAR => Ok(DateTimeField::Year),
+                Keyword::YEARS => Ok(DateTimeField::Years),
                 Keyword::MONTH => Ok(DateTimeField::Month),
                 Keyword::MONTHS => Ok(DateTimeField::Months),
                 Keyword::WEEK => {
@@ -1611,14 +1636,19 @@ impl<'a> Parser<'a> {
                     };
                     Ok(DateTimeField::Week(week_day))
                 }
+                Keyword::WEEKS => Ok(DateTimeField::Weeks),
                 Keyword::DAY => Ok(DateTimeField::Day),
+                Keyword::DAYS => Ok(DateTimeField::Days),
                 Keyword::DAYOFWEEK => Ok(DateTimeField::DayOfWeek),
                 Keyword::DAYOFYEAR => Ok(DateTimeField::DayOfYear),
                 Keyword::DATE => Ok(DateTimeField::Date),
                 Keyword::DATETIME => Ok(DateTimeField::Datetime),
                 Keyword::HOUR => Ok(DateTimeField::Hour),
+                Keyword::HOURS => Ok(DateTimeField::Hours),
                 Keyword::MINUTE => Ok(DateTimeField::Minute),
+                Keyword::MINUTES => Ok(DateTimeField::Minutes),
                 Keyword::SECOND => Ok(DateTimeField::Second),
+                Keyword::SECONDS => Ok(DateTimeField::Seconds),
                 Keyword::CENTURY => Ok(DateTimeField::Century),
                 Keyword::DECADE => Ok(DateTimeField::Decade),
                 Keyword::DOY => Ok(DateTimeField::Doy),
@@ -1838,13 +1868,19 @@ impl<'a> Parser<'a> {
             Token::Word(kw)
                 if [
                     Keyword::YEAR,
+                    Keyword::YEARS,
                     Keyword::MONTH,
                     Keyword::MONTHS,
                     Keyword::WEEK,
+                    Keyword::WEEKS,
                     Keyword::DAY,
+                    Keyword::DAYS,
                     Keyword::HOUR,
+                    Keyword::HOURS,
                     Keyword::MINUTE,
+                    Keyword::MINUTES,
                     Keyword::SECOND,
+                    Keyword::SECONDS,
                     Keyword::CENTURY,
                     Keyword::DECADE,
                     Keyword::DOW,

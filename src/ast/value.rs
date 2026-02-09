@@ -165,6 +165,7 @@ impl fmt::Display for DollarQuotedString {
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum DateTimeField {
     Year,
+    Years,
     Month,
     Months,
     /// Week optionally followed by a WEEKDAY.
@@ -175,14 +176,19 @@ pub enum DateTimeField {
     ///
     /// [BigQuery](https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions#extract)
     Week(Option<Ident>),
+    Weeks,
     Day,
+    Days,
     DayOfWeek,
     DayOfYear,
     Date,
     Datetime,
     Hour,
+    Hours,
     Minute,
+    Minutes,
     Second,
+    Seconds,
     Century,
     Decade,
     Dow,
@@ -221,6 +227,7 @@ impl fmt::Display for DateTimeField {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DateTimeField::Year => write!(f, "YEAR"),
+            DateTimeField::Years => write!(f, "YEARS"),
             DateTimeField::Month => write!(f, "MONTH"),
             DateTimeField::Months => write!(f, "MONTHS"),
             DateTimeField::Week(week_day) => {
@@ -230,14 +237,19 @@ impl fmt::Display for DateTimeField {
                 }
                 Ok(())
             }
+            DateTimeField::Weeks => write!(f, "WEEKS"),
             DateTimeField::Day => write!(f, "DAY"),
+            DateTimeField::Days => write!(f, "DAYS"),
             DateTimeField::DayOfWeek => write!(f, "DAYOFWEEK"),
             DateTimeField::DayOfYear => write!(f, "DAYOFYEAR"),
             DateTimeField::Date => write!(f, "DATE"),
             DateTimeField::Datetime => write!(f, "DATETIME"),
             DateTimeField::Hour => write!(f, "HOUR"),
+            DateTimeField::Hours => write!(f, "HOURS"),
             DateTimeField::Minute => write!(f, "MINUTE"),
+            DateTimeField::Minutes => write!(f, "MINUTES"),
             DateTimeField::Second => write!(f, "SECOND"),
+            DateTimeField::Seconds => write!(f, "SECONDS"),
             DateTimeField::Century => write!(f, "CENTURY"),
             DateTimeField::Decade => write!(f, "DECADE"),
             DateTimeField::Dow => write!(f, "DOW"),
