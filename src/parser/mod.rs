@@ -9772,7 +9772,29 @@ impl<'a> Parser<'a> {
 
             Ok(FunctionArg::Named { name, arg })
         } else {
-            Ok(FunctionArg::Unnamed(self.parse_wildcard_expr()?.into()))
+            let wildcard_expr = self.parse_wildcard_expr()?;
+            // Parse wildcard additional options (EXCLUDE, EXCEPT, RENAME, REPLACE)
+            // inside function arguments like HASH(* EXCLUDE (col1, col2)).
+            let arg = match wildcard_expr {
+                WildcardExpr::Wildcard => {
+                    let options = self.parse_wildcard_additional_options()?;
+                    if options == WildcardAdditionalOptions::default() {
+                        FunctionArgExpr::Wildcard
+                    } else {
+                        FunctionArgExpr::WildcardWithOptions(options)
+                    }
+                }
+                WildcardExpr::QualifiedWildcard(prefix) => {
+                    let options = self.parse_wildcard_additional_options()?;
+                    if options == WildcardAdditionalOptions::default() {
+                        FunctionArgExpr::QualifiedWildcard(prefix)
+                    } else {
+                        FunctionArgExpr::QualifiedWildcardWithOptions(prefix, options)
+                    }
+                }
+                WildcardExpr::Expr(expr) => FunctionArgExpr::Expr(expr),
+            };
+            Ok(FunctionArg::Unnamed(arg))
         }
     }
 
