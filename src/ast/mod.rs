@@ -2050,6 +2050,7 @@ pub enum Statement {
         /// `<schema name> | AUTHORIZATION <schema authorization identifier>  | <schema name>  AUTHORIZATION <schema authorization identifier>`
         schema_name: SchemaName,
         if_not_exists: bool,
+        comment: Option<String>,
     },
     /// ```sql
     /// CREATE DATABASE
@@ -2059,6 +2060,7 @@ pub enum Statement {
         if_not_exists: bool,
         location: Option<String>,
         managed_location: Option<String>,
+        comment: Option<String>,
     },
     /// ```sql
     /// CREATE FUNCTION
@@ -2658,6 +2660,7 @@ impl fmt::Display for Statement {
                 if_not_exists,
                 location,
                 managed_location,
+                comment,
             } => {
                 write!(f, "CREATE DATABASE")?;
                 if *if_not_exists {
@@ -2669,6 +2672,9 @@ impl fmt::Display for Statement {
                 }
                 if let Some(ml) = managed_location {
                     write!(f, " MANAGEDLOCATION '{ml}'")?;
+                }
+                if let Some(c) = comment {
+                    write!(f, " COMMENT '{c}'")?;
                 }
                 Ok(())
             }
@@ -3543,12 +3549,19 @@ impl fmt::Display for Statement {
             Statement::CreateSchema {
                 schema_name,
                 if_not_exists,
-            } => write!(
-                f,
-                "CREATE SCHEMA {if_not_exists}{name}",
-                if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
-                name = schema_name
-            ),
+                comment,
+            } => {
+                write!(
+                    f,
+                    "CREATE SCHEMA {if_not_exists}{name}",
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                    name = schema_name
+                )?;
+                if let Some(c) = comment {
+                    write!(f, " COMMENT='{c}'")?;
+                }
+                Ok(())
+            }
             Statement::Assert { condition, message } => {
                 write!(f, "ASSERT {condition}")?;
                 if let Some(m) = message {
