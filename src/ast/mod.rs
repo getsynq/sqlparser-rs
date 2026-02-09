@@ -2071,6 +2071,8 @@ pub enum Statement {
         location: Option<String>,
         managed_location: Option<String>,
         comment: Option<String>,
+        /// Redshift: FROM INTEGRATION 'integration_id'
+        from_integration: Option<String>,
     },
     /// ```sql
     /// CREATE FUNCTION
@@ -2683,12 +2685,16 @@ impl fmt::Display for Statement {
                 location,
                 managed_location,
                 comment,
+                from_integration,
             } => {
                 write!(f, "CREATE DATABASE")?;
                 if *if_not_exists {
                     write!(f, " IF NOT EXISTS")?;
                 }
                 write!(f, " {db_name}")?;
+                if let Some(fi) = from_integration {
+                    write!(f, " FROM INTEGRATION '{fi}'")?;
+                }
                 if let Some(l) = location {
                     write!(f, " LOCATION '{l}'")?;
                 }

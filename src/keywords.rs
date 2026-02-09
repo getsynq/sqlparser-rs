@@ -373,6 +373,7 @@ define_keywords!(
     INT64,
     INT8,
     INTEGER,
+    INTEGRATION,
     INTERPOLATE,
     INTERSECT,
     INTERSECTION,
