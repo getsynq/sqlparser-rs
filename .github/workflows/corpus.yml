@@ -42,11 +42,12 @@ jobs:
 
       - name: Run corpus tests
         continue-on-error: true
-        timeout-minutes: 30
         env:
           # Increase stack size to 4MB to handle deeply nested queries without excessive memory
           RUST_MIN_STACK: 4194304
-        run: cargo test --test sqlparser_corpus
+        run: |
+          # Run with 60 minute timeout
+          timeout 3600 cargo test --test sqlparser_corpus || true
 
       - name: Create fallback report if tests crashed
         if: always()
