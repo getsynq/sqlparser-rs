@@ -49,15 +49,30 @@ Each test file contains comprehensive parsing tests for dialect-specific syntax.
 ### Corpus Testing
 Corpus tests in `tests/sqlparser_corpus.rs` parse real SQL from `tests/corpus/{dialect}/` directories:
 ```bash
-# Run corpus tests and track progress
-cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | grep "PASS" | wc -l
+# Run corpus tests with timestamped results and comparison
+./scripts/run-corpus-tests.sh --compare
 
-# Find common error patterns
-cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | grep "sql parser error:" | sort | uniq -c | sort -rn
+# Run manually with increased stack size (if needed)
+RUST_MIN_STACK=16777216 cargo test --test sqlparser_corpus
 
-# Debug specific corpus file
-cargo test --test sqlparser_corpus -- --nocapture dialect/category/hash
+# Compare two specific reports
+node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
+
+# List saved reports
+ls -lht target/corpus-results/corpus-report-*.json
 ```
+
+**Corpus test infrastructure:**
+- Uses custom test harness (`harness = false` in Cargo.toml with libtest_mimic)
+- `customer_*` dialect prefixes are automatically stripped (customer_bigquery → bigquery)
+- Reports track individual test results for regression detection
+- Stack size increased to 16MB (`RUST_MIN_STACK=16777216`) to handle deeply nested queries
+- See `scripts/README.md` for detailed usage
+
+**Debugging stack overflows:**
+- If tests crash despite increased stack, use binary search to find problematic files
+- Run subsets: `cargo test --test sqlparser_corpus -- dialect/category/`
+- Check test logs for patterns before crash
 
 ## Architecture
 
@@ -96,6 +111,7 @@ Each dialect module defines parsing behavior variations:
 - `GenericDialect` - Default baseline dialect
 - `AnsiDialect` - Strict ANSI SQL:2011
 - `SnowflakeDialect`, `PostgreSqlDialect`, `BigQueryDialect`, `MySqlDialect`, etc.
+- **Note**: `customer_*` prefixed dialects (e.g., `customer_bigquery`) map to their base dialect
 
 Dialects control:
 - Quote character handling for identifiers
@@ -189,6 +205,7 @@ Since this is a fork of apache/datafusion-sqlparser-rs:
 - Use `pretty_assertions` for readable diffs
 - Run `cargo fmt`, `cargo clippy`, `cargo nextest run` before submitting
 - CI runs: `cargo check`, `cargo nextest run --all-features`
+- Avoid adding serde dependency to test code - use manual JSON building if needed
 
 ## Features (Cargo.toml)
 

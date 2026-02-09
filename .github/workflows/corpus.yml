@@ -36,7 +36,18 @@ jobs:
 
       - name: Run corpus tests
         continue-on-error: true
+        env:
+          # Increase stack size to 16MB to prevent stack overflow in deeply nested parser tests
+          RUST_MIN_STACK: 16777216
         run: cargo test --test sqlparser_corpus
+
+      - name: Create fallback report if tests crashed
+        if: always()
+        run: |
+          if [ ! -f target/corpus-report.json ]; then
+            echo "Warning: corpus-report.json not found (tests may have crashed)"
+            echo '{"summary":{"total_passed":0,"total_failed":0,"total_tests":0},"by_dialect":{},"test_results":{}}' > target/corpus-report.json
+          fi
 
       - name: Upload corpus report
         if: always()
@@ -57,67 +68,23 @@ jobs:
           workflow: corpus.yml
           search_artifacts: true
 
+      - name: Generate comparison report
+        if: github.event_name == 'pull_request_target'
+        id: generate_report
+        run: |
+          BASELINE_ARG=""
+          if [ -f target/baseline/corpus-report.json ]; then
+            BASELINE_ARG="target/baseline/corpus-report.json"
+          fi
+          node scripts/compare-corpus-reports.js target/corpus-report.json $BASELINE_ARG > target/report.md
+
       - name: Post PR comment
         if: github.event_name == 'pull_request_target'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const current = JSON.parse(fs.readFileSync('target/corpus-report.json', 'utf8'));
-
-            let body = '## Corpus Parsing Report\n\n';
-            const totalTests = current.total_passed + current.total_failed;
-            const passRate = (current.total_passed / totalTests * 100).toFixed(1);
-            body += `**Total: ${current.total_passed} passed, ${current.total_failed} failed** (${passRate}% pass rate)\n\n`;
-
-            let hasBaseline = false;
-            let baseline = null;
-            try {
-              baseline = JSON.parse(fs.readFileSync('target/baseline/corpus-report.json', 'utf8'));
-              hasBaseline = true;
-            } catch (e) {
-              // no baseline available
-            }
-
-            body += '| Dialect | Passed | Failed | Total | Pass Rate |';
-            if (hasBaseline) body += ' Delta |';
-            body += '\n';
-
-            body += '|---------|-------:|-------:|------:|----------:|';
-            if (hasBaseline) body += '------:|';
-            body += '\n';
-
-            for (const [dialect, stats] of Object.entries(current.dialects)) {
-              const total = stats.passed + stats.failed;
-              const rate = (stats.passed / total * 100).toFixed(1);
-              body += `| ${dialect} | ${stats.passed} | ${stats.failed} | ${total} | ${rate}% |`;
-
-              if (hasBaseline && baseline.dialects[dialect]) {
-                const base = baseline.dialects[dialect];
-                const diff = stats.passed - base.passed;
-                if (diff > 0) body += ` **+${diff}** |`;
-                else if (diff < 0) body += ` **${diff}** |`;
-                else body += ` - |`;
-              } else if (hasBaseline) {
-                body += ` *new* |`;
-              }
-
-              body += '\n';
-            }
-
-            if (hasBaseline) {
-              const totalDiff = current.total_passed - baseline.total_passed;
-              body += '\n';
-              if (totalDiff > 0) {
-                body += `**Improvement: +${totalDiff} more files parsed successfully**\n`;
-              } else if (totalDiff < 0) {
-                body += `**Regression: ${totalDiff} fewer files parsed successfully**\n`;
-              } else {
-                body += '**No change in parsing coverage**\n';
-              }
-            } else {
-              body += '\n*No baseline available for comparison (first run on this branch)*\n';
-            }
+            const body = fs.readFileSync('target/report.md', 'utf8');
 
             // Find existing comment to update
             const { data: comments } = await github.rest.issues.listComments({

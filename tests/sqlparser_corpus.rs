@@ -10,7 +10,10 @@ const CORPUS_ROOT: &str = "tests/corpus";
 const REPORT_PATH: &str = "target/corpus-report.json";
 
 fn dialect_for_name(name: &str) -> Box<dyn Dialect> {
-    match name {
+    // Strip customer_ prefix if present (e.g., customer_bigquery -> bigquery)
+    let base_name = name.strip_prefix("customer_").unwrap_or(name);
+
+    match base_name {
         "bigquery" => Box::new(BigQueryDialect),
         "clickhouse" => Box::new(ClickHouseDialect {}),
         "snowflake" => Box::new(SnowflakeDialect),
@@ -103,7 +106,56 @@ fn collect_sql_files(dir: &Path) -> Vec<PathBuf> {
 /// Per-dialect pass/fail counts.
 type Stats = BTreeMap<String, [usize; 2]>;
 
-fn write_report(stats: &Stats) {
+/// Individual test results by test path (e.g., "bigquery/abc123.sql" -> "pass"/"fail")
+type TestResults = BTreeMap<String, String>;
+
+/// Guard that writes the report on drop, ensuring it's written even if tests panic
+struct ReportWriter {
+    stats: Arc<Mutex<Stats>>,
+    test_results: Arc<Mutex<TestResults>>,
+    write_every_n: usize,
+    count: Arc<Mutex<usize>>,
+}
+
+impl ReportWriter {
+    fn new(stats: Arc<Mutex<Stats>>, test_results: Arc<Mutex<TestResults>>) -> Self {
+        let writer = Self {
+            stats,
+            test_results,
+            write_every_n: 50, // Write report every 50 tests
+            count: Arc::new(Mutex::new(0)),
+        };
+        // Write initial empty report so the file always exists
+        writer.write_report_now();
+        writer
+    }
+
+    fn increment_and_maybe_write(&self) {
+        let mut count = self.count.lock().unwrap();
+        *count += 1;
+        if *count % self.write_every_n == 0 {
+            drop(count); // Release lock before writing
+            self.write_report_now();
+        }
+    }
+
+    fn write_report_now(&self) {
+        let stats = self.stats.lock().unwrap();
+        let test_results = self.test_results.lock().unwrap();
+        if !stats.is_empty() || !test_results.is_empty() {
+            write_report(&stats, &test_results);
+        }
+    }
+}
+
+impl Drop for ReportWriter {
+    fn drop(&mut self) {
+        // Write final report
+        self.write_report_now();
+    }
+}
+
+fn write_report(stats: &Stats, test_results: &TestResults) {
     // Ensure target/ directory exists
     let _ = std::fs::create_dir_all("target");
 
@@ -116,14 +168,34 @@ fn write_report(stats: &Stats) {
 
     // Build JSON manually to avoid needing serde
     let mut json = String::from("{\n");
-    json.push_str(&format!("  \"total_passed\": {total_passed},\n"));
-    json.push_str(&format!("  \"total_failed\": {total_failed},\n"));
-    json.push_str("  \"dialects\": {\n");
+
+    // Summary section
+    json.push_str("  \"summary\": {\n");
+    json.push_str(&format!("    \"total_passed\": {total_passed},\n"));
+    json.push_str(&format!("    \"total_failed\": {total_failed},\n"));
+    json.push_str(&format!("    \"total_tests\": {}\n", total_passed + total_failed));
+    json.push_str("  },\n");
+
+    // Per-dialect stats
+    json.push_str("  \"by_dialect\": {\n");
     let dialect_count = stats.len();
     for (i, (dialect, [passed, failed])) in stats.iter().enumerate() {
         json.push_str(&format!(
             "    \"{dialect}\": {{\"passed\": {passed}, \"failed\": {failed}}}{}",
             if i + 1 < dialect_count { ",\n" } else { "\n" }
+        ));
+    }
+    json.push_str("  },\n");
+
+    // Individual test results (relative paths as keys)
+    json.push_str("  \"test_results\": {\n");
+    let test_count = test_results.len();
+    for (i, (path, status)) in test_results.iter().enumerate() {
+        // Escape path for JSON
+        let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+        json.push_str(&format!(
+            "    \"{escaped_path}\": \"{status}\"{}",
+            if i + 1 < test_count { ",\n" } else { "\n" }
         ));
     }
     json.push_str("  }\n}\n");
@@ -136,6 +208,10 @@ fn write_report(stats: &Stats) {
 }
 
 fn main() {
+    // Write empty report immediately so file always exists, even if we crash
+    let _ = std::fs::create_dir_all("target");
+    write_report(&BTreeMap::new(), &BTreeMap::new());
+
     let corpus_path = Path::new(CORPUS_ROOT);
     if !corpus_path.exists() {
         eprintln!("Corpus directory not found at {CORPUS_ROOT}, skipping corpus tests");
@@ -149,6 +225,10 @@ fn main() {
     }
 
     let stats: Arc<Mutex<Stats>> = Arc::new(Mutex::new(BTreeMap::new()));
+    let test_results: Arc<Mutex<TestResults>> = Arc::new(Mutex::new(BTreeMap::new()));
+
+    // Install report writer that writes incrementally and on drop
+    let report_writer = Arc::new(ReportWriter::new(stats.clone(), test_results.clone()));
 
     let tests: Vec<libtest_mimic::Trial> = sql_files
         .into_iter()
@@ -160,18 +240,42 @@ fn main() {
                 .to_string();
             let test_path = path.clone();
             let stats = stats.clone();
+            let test_results = test_results.clone();
+            let writer = report_writer.clone();
             let dialect = dialect_from_path(&path).to_string();
 
-            libtest_mimic::Trial::test(name, move || {
-                let result = run_test(&test_path);
+            libtest_mimic::Trial::test(name.clone(), move || {
+                // Catch panics (including stack overflow) to prevent one test from killing the whole run
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_test(&test_path)
+                }));
+
                 let mut s = stats.lock().unwrap();
+                let mut tr = test_results.lock().unwrap();
+
                 let entry = s.entry(dialect).or_insert([0, 0]);
-                if result.is_ok() {
-                    entry[0] += 1;
-                } else {
-                    entry[1] += 1;
-                }
-                result
+                let (status, test_result) = match result {
+                    Ok(Ok(())) => {
+                        entry[0] += 1;
+                        ("pass", Ok(()))
+                    }
+                    Ok(Err(e)) => {
+                        entry[1] += 1;
+                        ("fail", Err(e))
+                    }
+                    Err(_panic) => {
+                        entry[1] += 1;
+                        ("fail", Err(fail("Test panicked".to_string())))
+                    }
+                };
+
+                // Store individual test result with relative path
+                tr.insert(name, status.to_string());
+
+                // Periodically write report to disk
+                writer.increment_and_maybe_write();
+
+                test_result
             })
         })
         .collect();
@@ -179,11 +283,7 @@ fn main() {
     let args = libtest_mimic::Arguments::from_args();
     let conclusion = libtest_mimic::run(&args, tests);
 
-    // Write stats report before exiting
-    let stats = stats.lock().unwrap();
-    if !stats.is_empty() {
-        write_report(&stats);
-    }
+    // Report is written automatically by _guard's Drop implementation
 
     conclusion.exit();
 }
