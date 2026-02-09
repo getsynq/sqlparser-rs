@@ -8368,6 +8368,7 @@ fn parse_unpivot_table() {
                 .into_iter()
                 .map(|f| Ident::new(f).empty_span())
                 .collect(),
+            null_handling: None,
             alias: Some(TableAlias {
                 name: Ident::new("u").empty_span(),
                 columns: ["product", "quarter", "quantity"]
@@ -8399,6 +8400,28 @@ fn parse_unpivot_table() {
 }
 
 #[test]
+fn parse_unpivot_include_nulls() {
+    let sql = concat!(
+        "SELECT * FROM sales ",
+        "UNPIVOT INCLUDE NULLS(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+    );
+    assert_eq!(verified_stmt(sql).to_string(), sql);
+
+    let sql = concat!(
+        "SELECT * FROM sales ",
+        "UNPIVOT EXCLUDE NULLS(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+    );
+    assert_eq!(verified_stmt(sql).to_string(), sql);
+
+    // Without null handling (default)
+    let sql = concat!(
+        "SELECT * FROM sales ",
+        "UNPIVOT(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+    );
+    assert_eq!(verified_stmt(sql).to_string(), sql);
+}
+
+#[test]
 fn parse_pivot_unpivot_table() {
     let sql = concat!(
         "SELECT * FROM census AS c ",
@@ -8427,6 +8450,7 @@ fn parse_pivot_unpivot_table() {
                     .into_iter()
                     .map(|f| Ident::new(f).empty_span())
                     .collect(),
+                null_handling: None,
                 alias: Some(TableAlias {
                     name: Ident::new("u").empty_span(),
                     columns: vec![],

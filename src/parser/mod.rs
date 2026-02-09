@@ -9423,6 +9423,15 @@ impl<'a> Parser<'a> {
         &mut self,
         table: TableFactor,
     ) -> Result<TableFactor, ParserError> {
+        let null_handling = if self.parse_keyword(Keyword::INCLUDE) {
+            self.expect_keyword(Keyword::NULLS)?;
+            Some(UnpivotNullHandling::IncludeNulls)
+        } else if self.parse_keyword(Keyword::EXCLUDE) {
+            self.expect_keyword(Keyword::NULLS)?;
+            Some(UnpivotNullHandling::ExcludeNulls)
+        } else {
+            None
+        };
         self.expect_token(&Token::LParen)?;
         let value = self.parse_identifier(false)?;
         self.expect_keyword(Keyword::FOR)?;
@@ -9436,6 +9445,7 @@ impl<'a> Parser<'a> {
             value,
             name,
             columns,
+            null_handling,
             alias,
         })
     }

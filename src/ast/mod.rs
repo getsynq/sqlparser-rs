@@ -49,8 +49,8 @@ pub use self::query::{
     ReplaceSelectElement,
     ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr,
     SetOperator, SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed,
-    TableVersion, TableWithJoins, Top, ValueTableMode, Values, WildcardAdditionalOptions, With,
-    WithFill,
+    TableVersion, TableWithJoins, Top, UnpivotNullHandling, ValueTableMode, Values,
+    WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,
