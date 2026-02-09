@@ -1502,6 +1502,8 @@ pub enum Statement {
         table_name: ObjectName,
         /// COLUMNS
         columns: Vec<WithSpan<Ident>>,
+        /// True if columns were specified as (*) - ClickHouse syntax for all columns
+        insert_all_columns: bool,
         /// Overwrite (Hive)
         overwrite: bool,
         /// A SQL query that specifies what to insert
@@ -2518,6 +2520,7 @@ impl fmt::Display for Statement {
                 overwrite,
                 partitioned,
                 columns,
+                insert_all_columns,
                 after_columns,
                 source,
                 table,
@@ -2536,7 +2539,9 @@ impl fmt::Display for Statement {
                         tbl = if *table { " TABLE" } else { "" }
                     )?;
                 }
-                if !columns.is_empty() {
+                if *insert_all_columns {
+                    write!(f, "(*) ")?;
+                } else if !columns.is_empty() {
                     write!(f, "({}) ", display_comma_separated(columns))?;
                 }
                 if let Some(ref parts) = partitioned {

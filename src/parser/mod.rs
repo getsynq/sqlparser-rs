@@ -9257,10 +9257,27 @@ impl<'a> Parser<'a> {
 
             // Parse optional column list, but be careful not to consume a parenthesized query
             // e.g., INSERT INTO t (SELECT ...) should not treat (SELECT ...) as a column list
+            // ClickHouse allows INSERT INTO t (*) to mean all columns
+            let mut insert_all_columns = false;
             let columns = if self.peek_token().token == Token::LParen
                 && self.peek_parenthesized_query_start()
             {
                 vec![]
+            } else if self.peek_token().token == Token::LParen
+                && dialect_of!(self is ClickHouseDialect | GenericDialect)
+            {
+                // Check for (*) syntax
+                let _ = self.next_token(); // consume LParen
+                if self.peek_token().token == Token::Mul {
+                    self.next_token(); // consume *
+                    self.expect_token(&Token::RParen)?;
+                    insert_all_columns = true;
+                    vec![]
+                } else {
+                    // Not (*), backtrack and parse as regular column list
+                    self.prev_token(); // put back LParen
+                    self.parse_parenthesized_column_list(Optional, is_mysql)?
+                }
             } else {
                 self.parse_parenthesized_column_list(Optional, is_mysql)?
             };
@@ -9342,6 +9359,7 @@ impl<'a> Parser<'a> {
                 overwrite,
                 partitioned,
                 columns,
+                insert_all_columns,
                 after_columns,
                 source,
                 table,
