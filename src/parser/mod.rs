@@ -5820,10 +5820,16 @@ impl<'a> Parser<'a> {
             let table_name = self.parse_object_name(false)?;
             AlterTableOperation::SwapWith { table_name }
         } else if self.parse_keyword(Keyword::SET) {
-            self.expect_keyword(Keyword::OPTIONS)?;
-            self.prev_token();
-            let options = self.parse_options(Keyword::OPTIONS)?;
-            AlterTableOperation::SetOptions { options }
+            // OPTIONS keyword is optional (e.g., Snowflake: ALTER TABLE ... SET key = value)
+            if self.parse_keyword(Keyword::OPTIONS) {
+                self.prev_token();
+                let options = self.parse_options(Keyword::OPTIONS)?;
+                AlterTableOperation::SetOptions { options }
+            } else {
+                // Parse options without OPTIONS keyword
+                let options = self.parse_comma_separated(Parser::parse_sql_option)?;
+                AlterTableOperation::SetOptions { options }
+            }
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::ATTACH)
         {
