@@ -1349,7 +1349,7 @@ fn parse_select_with_numeric_prefix_column_name() {
                         joins: vec![]
                     }],
                     lateral_views: vec![],
-                sample: None,
+                    sample: None,
                     selection: None,
                     group_by: GroupByExpr::Expressions(vec![]),
                     cluster_by: vec![],
@@ -1406,7 +1406,7 @@ fn parse_select_with_concatenation_of_exp_number_and_numeric_prefix_column() {
                         joins: vec![]
                     }],
                     lateral_views: vec![],
-                sample: None,
+                    sample: None,
                     selection: None,
                     group_by: GroupByExpr::Expressions(vec![]),
                     cluster_by: vec![],
@@ -1591,7 +1591,7 @@ fn parse_substring_in_select() {
                             joins: vec![]
                         }],
                         lateral_views: vec![],
-                sample: None,
+                        sample: None,
                         selection: None,
                         group_by: GroupByExpr::Expressions(vec![]),
                         cluster_by: vec![],

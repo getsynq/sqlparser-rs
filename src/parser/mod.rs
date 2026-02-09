@@ -3558,7 +3558,8 @@ impl<'a> Parser<'a> {
                 comment: None,
                 params,
             })
-        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | GenericDialect) {
+        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | GenericDialect)
+        {
             let name = self.parse_object_name(false)?;
 
             let args: Option<Vec<OperateFunctionArg>> = if self.consume_token(&Token::LParen) {
@@ -3684,11 +3685,8 @@ impl<'a> Parser<'a> {
                 }
             } else if self.parse_keyword(Keyword::USING) {
                 ensure_not_set(&body.using, "USING")?;
-                let keyword = self.expect_one_of_keywords(&[
-                    Keyword::JAR,
-                    Keyword::FILE,
-                    Keyword::ARCHIVE,
-                ])?;
+                let keyword =
+                    self.expect_one_of_keywords(&[Keyword::JAR, Keyword::FILE, Keyword::ARCHIVE])?;
                 let uri = self.parse_literal_string()?;
                 body.using = Some(match keyword {
                     Keyword::JAR => CreateFunctionUsing::Jar(uri),
@@ -8656,11 +8654,7 @@ impl<'a> Parser<'a> {
                 self.maybe_parse(|parser| parser.parse_derived_table_factor(NotLateral))
             {
                 let sample_keywords = if dialect_of!(self is ClickHouseDialect) {
-                    &[
-                        Keyword::PIVOT,
-                        Keyword::UNPIVOT,
-                        Keyword::TABLESAMPLE,
-                    ][..]
+                    &[Keyword::PIVOT, Keyword::UNPIVOT, Keyword::TABLESAMPLE][..]
                 } else {
                     &[
                         Keyword::PIVOT,
@@ -8872,11 +8866,7 @@ impl<'a> Parser<'a> {
             };
 
             let sample_keywords = if dialect_of!(self is ClickHouseDialect) {
-                &[
-                    Keyword::PIVOT,
-                    Keyword::UNPIVOT,
-                    Keyword::TABLESAMPLE,
-                ][..]
+                &[Keyword::PIVOT, Keyword::UNPIVOT, Keyword::TABLESAMPLE][..]
             } else {
                 &[
                     Keyword::PIVOT,
@@ -10578,8 +10568,7 @@ impl<'a> Parser<'a> {
                     || w.keyword == Keyword::ROWS
                     || w.keyword == Keyword::RANGE
                     || w.keyword == Keyword::GROUPS
-            )
-        {
+            ) {
             // This looks like a window name reference
             Some(self.parse_identifier(false)?.unwrap())
         } else {

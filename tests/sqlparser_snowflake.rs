@@ -1365,7 +1365,7 @@ fn parse_tablesample() {
             joins: vec![],
         }],
         lateral_views: vec![],
-                sample: None,
+        sample: None,
         selection: None,
         group_by: GroupByExpr::Expressions(vec![]),
         cluster_by: vec![],

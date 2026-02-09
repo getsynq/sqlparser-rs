@@ -80,7 +80,7 @@ fn parse_array_access_expr() {
                 joins: vec![],
             }],
             lateral_views: vec![],
-                sample: None,
+            sample: None,
             selection: Some(
                 BinaryOp {
                     left: Box::new(BinaryOp {
