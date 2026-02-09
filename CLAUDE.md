@@ -55,6 +55,12 @@ Corpus tests in `tests/sqlparser_corpus.rs` parse real SQL from `tests/corpus/{d
 # Run manually with increased stack size (if needed)
 RUST_MIN_STACK=4194304 cargo test --test sqlparser_corpus
 
+# Run with nextest (recommended for large test suites)
+cargo nextest run --test sqlparser_corpus --no-fail-fast
+
+# Check nextest configuration
+cat .config/nextest.toml
+
 # Compare two specific reports
 node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
 
@@ -74,6 +80,12 @@ ls -lht target/corpus-results/corpus-report-*.json
 - If tests crash despite increased stack, use binary search to find problematic files
 - Run subsets: `cargo test --test sqlparser_corpus -- dialect/category/`
 - Check test logs for patterns before crash
+
+**Performance and CI considerations:**
+- With 100k+ tests, use nextest for per-test timeouts (`.config/nextest.toml`)
+- Stack size × parallel threads = total memory (16MB × 1000 threads = 16GB+)
+- GitHub Actions: Add concurrency groups to auto-cancel old runs on new pushes
+- Corpus tests may timeout not from slow tests but from memory pressure/swapping
 
 ## Architecture
 
