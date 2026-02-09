@@ -67,7 +67,7 @@ ls -lht target/corpus-results/corpus-report-*.json
 - `customer_*` dialect prefixes are automatically stripped (customer_bigquery → bigquery)
 - Reports track individual test results for regression detection
 - Stack size increased to 4MB (`RUST_MIN_STACK=4194304`) to handle deeply nested queries without excessive memory
-- Nextest configuration in `.config/nextest.toml` provides per-test timeouts (5min per test, 30min total)
+- Nextest configuration in `.config/nextest.toml` provides per-test timeouts (10s slow threshold, 20s termination)
 - See `scripts/README.md` for detailed usage
 
 **Debugging stack overflows:**

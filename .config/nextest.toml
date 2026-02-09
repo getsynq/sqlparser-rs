@@ -2,10 +2,9 @@
 # See: https://nexte.st/docs/configuration/
 
 [profile.default]
-# Default timeout for regular tests - terminate after 90 seconds
-slow-timeout = { period = "30s", terminate-after = 3 }
+# Per-test timeout: no corpus test should take longer than 10s normally
+# Mark as slow after 10s, terminate after 20s if hung
+slow-timeout = { period = "10s", terminate-after = 2 }
 
-# Corpus tests can take longer - give them more time
-[[profile.default.overrides]]
-filter = 'test(=sqlparser_corpus)'
-slow-timeout = { period = "5m", terminate-after = 6 }  # 30 minutes total
+# Note: All tests in sqlparser_corpus binary are corpus tests,
+# so this timeout applies to each individual SQL file test
