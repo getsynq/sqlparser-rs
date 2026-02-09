@@ -40,15 +40,15 @@ jobs:
       - run: ln -s "$PWD/tests/corpus-repo/corpus" tests/corpus
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install nextest
-        uses: taiki-e/install-action@nextest
+      - name: Build corpus-runner
+        run: cargo build --release --bin corpus-runner
 
       - name: Run corpus tests
         continue-on-error: true
         env:
           # Increase stack size to 4MB to handle deeply nested queries without excessive memory
           RUST_MIN_STACK: 4194304
-        run: cargo nextest run --test sqlparser_corpus --no-fail-fast
+        run: target/release/corpus-runner tests/corpus
 
       - name: Create fallback report if tests crashed
         if: always()

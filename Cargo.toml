@@ -36,17 +36,20 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0.128", optional = true }
 sqlparser_derive = { version = "0.1.1", path = "derive", optional = true }
 time = { version = "0.3.36", optional = true }
+walkdir = "2"
+rayon = "1.10"
 
 [dev-dependencies]
 simple_logger = "5.0.0"
 matches = "0.1.10"
 pretty_assertions = "1.4.0"
-walkdir = "2"
 libtest-mimic = "0.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
 
-[[test]]
-name = "sqlparser_corpus"
-harness = false
+[[bin]]
+name = "corpus-runner"
+path = "src/bin/corpus_runner.rs"
 
 [package.metadata.release]
 # Instruct `cargo release` to not run `cargo publish` locally:

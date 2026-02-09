@@ -418,7 +418,7 @@ impl<'a> Parser<'a> {
                 expecting_statement_delimiter = false;
             }
 
-            match self.peek_token().token {
+            match self.peek_token_kind().clone() {
                 Token::EOF => break,
 
                 // end of statement
@@ -658,7 +658,7 @@ impl<'a> Parser<'a> {
 
         let next_token = self.next_token();
         match next_token.token {
-            Token::Word(w) if self.peek_token().token == Token::Period => {
+            Token::Word(w) if self.peek_token_is(&Token::Period) => {
                 let mut id_parts: Vec<Ident> = vec![w.to_ident()];
 
                 while self.consume_token(&Token::Period) {
@@ -838,30 +838,28 @@ impl<'a> Parser<'a> {
                 Keyword::SAFE_CAST => self.parse_safe_cast_expr(),
                 Keyword::EXISTS => self.parse_exists_expr(false),
                 Keyword::EXTRACT => self.parse_extract_expr(),
-                Keyword::CEIL if self.peek_token().token == Token::LParen => {
+                Keyword::CEIL if self.peek_token_is(&Token::LParen) => {
                     self.parse_ceil_floor_expr(true)
                 }
-                Keyword::FLOOR if self.peek_token().token == Token::LParen => {
+                Keyword::FLOOR if self.peek_token_is(&Token::LParen) => {
                     self.parse_ceil_floor_expr(false)
                 }
-                Keyword::POSITION if self.peek_token().token == Token::LParen => {
+                Keyword::POSITION if self.peek_token_is(&Token::LParen) => {
                     self.parse_position_expr(w.to_ident())
                 }
-                Keyword::SUBSTR | Keyword::SUBSTRING
-                    if self.peek_token().token == Token::LParen =>
-                {
+                Keyword::SUBSTR | Keyword::SUBSTRING if self.peek_token_is(&Token::LParen) => {
                     self.parse_substring_expr()
                 }
                 Keyword::OVERLAY => self.parse_overlay_expr(),
                 Keyword::TRIM => self.parse_trim_expr(),
                 Keyword::INTERVAL if self.parse_interval_guard() => self.parse_interval(),
                 // Treat ARRAY[1,2,3] as an array [1,2,3], otherwise try as subquery or a function call
-                Keyword::ARRAY if self.peek_token() == Token::LBracket => {
+                Keyword::ARRAY if self.peek_token_is(&Token::LBracket) => {
                     self.expect_token(&Token::LBracket)?;
                     self.parse_array_expr(true)
                 }
                 Keyword::ARRAY
-                    if self.peek_token() == Token::LParen
+                    if self.peek_token_is(&Token::LParen)
                         && !dialect_of!(self is ClickHouseDialect | DatabricksDialect) =>
                 {
                     self.expect_token(&Token::LParen)?;
@@ -878,7 +876,7 @@ impl<'a> Parser<'a> {
                 }
                 // Here `w` is a word, check if it's a part of a multi-part
                 // identifier, a function call, or a simple identifier:
-                _ => match self.peek_token().token {
+                _ => match self.peek_token_kind().clone() {
                     Token::LParen | Token::Period => {
                         let mut id_parts: Vec<Ident> = vec![w.to_ident()];
                         while self.consume_token(&Token::Period) {
@@ -1127,7 +1125,7 @@ impl<'a> Parser<'a> {
             let rows = if self.parse_keyword(Keyword::UNBOUNDED) {
                 None
             } else {
-                Some(Box::new(match self.peek_token().token {
+                Some(Box::new(match self.peek_token_kind().clone() {
                     Token::SingleQuotedString(_) => self.parse_interval()?,
                     _ => self.parse_expr()?,
                 }))
@@ -1468,7 +1466,7 @@ impl<'a> Parser<'a> {
     pub fn parse_trim_expr(&mut self) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
         let mut trim_where = None;
-        if let Token::Word(word) = self.peek_token().token {
+        if let Token::Word(word) = self.peek_token_kind().clone() {
             if [Keyword::BOTH, Keyword::LEADING, Keyword::TRAILING]
                 .iter()
                 .any(|d| word.keyword == *d)
@@ -1536,7 +1534,7 @@ impl<'a> Parser<'a> {
     /// Parses an array expression `[ex1, ex2, ..]`
     /// if `named` is `true`, came from an expression like  `ARRAY[ex1, ex2]`
     pub fn parse_array_expr(&mut self, named: bool) -> Result<Expr, ParserError> {
-        if self.peek_token().token == Token::RBracket {
+        if self.peek_token_is(&Token::RBracket) {
             let _ = self.next_token(); // consume ]
             Ok(Expr::Array(Array {
                 elem: vec![],
@@ -1622,7 +1620,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_not(&mut self) -> Result<Expr, ParserError> {
-        match self.peek_token().token {
+        match self.peek_token_kind().clone() {
             Token::Word(w) => match w.keyword {
                 Keyword::EXISTS => {
                     let negated = true;
@@ -1765,7 +1763,7 @@ impl<'a> Parser<'a> {
         //
         // Note that PostgreSQL allows omitting the qualifier, so we provide
         // this more general implementation.
-        let leading_field = match self.peek_token().token {
+        let leading_field = match self.peek_token_kind().clone() {
             Token::Word(kw)
                 if [
                     Keyword::YEAR,
@@ -1960,15 +1958,16 @@ impl<'a> Parser<'a> {
     fn parse_struct_field_def(
         &mut self,
     ) -> Result<(StructField, MatchedTrailingBracket), ParserError> {
-        let field_name: Option<WithSpan<Ident>> = if let Token::Word(_) = self.peek_token().token {
-            match self.peek_nth_token(1).token {
-                // if there is another word it is named field
-                Token::Word(_) => Some(self.parse_identifier(false)?),
-                _ => None,
-            }
-        } else {
-            None
-        };
+        let field_name: Option<WithSpan<Ident>> =
+            if let Token::Word(_) = self.peek_token_kind().clone() {
+                match self.peek_nth_token(1).token {
+                    // if there is another word it is named field
+                    Token::Word(_) => Some(self.parse_identifier(false)?),
+                    _ => None,
+                }
+            } else {
+                None
+            };
 
         let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
         let options = self.parse_options(Keyword::OPTIONS)?;
@@ -2060,7 +2059,7 @@ impl<'a> Parser<'a> {
         trailing_bracket: MatchedTrailingBracket,
     ) -> Result<MatchedTrailingBracket, ParserError> {
         let trailing_bracket = if !trailing_bracket.0 {
-            match self.peek_token().token {
+            match self.peek_token_kind().clone() {
                 Token::Gt => {
                     self.next_token();
                     false.into()
@@ -2757,6 +2756,67 @@ impl<'a> Parser<'a> {
             })
     }
 
+    /// Static EOF token for returning references (avoids allocation)
+    fn get_eof_token() -> &'static TokenWithLocation {
+        static EOF_TOKEN: TokenWithLocation = TokenWithLocation {
+            token: Token::EOF,
+            span: Span {
+                start: Location { line: 0, column: 0 },
+                end: Location { line: 0, column: 0 },
+            },
+        };
+        &EOF_TOKEN
+    }
+
+    /// Return reference to the first non-whitespace token (optimized, no clone)
+    /// This is an internal optimization to avoid cloning tokens.
+    #[inline]
+    pub(crate) fn peek_token_ref(&self) -> &TokenWithLocation {
+        self.peek_nth_token_ref(0)
+    }
+
+    /// Return reference to nth non-whitespace token (optimized, no clone)
+    /// This is an internal optimization to avoid cloning tokens.
+    #[inline]
+    pub(crate) fn peek_nth_token_ref(&self, mut n: usize) -> &TokenWithLocation {
+        let mut index = self.index;
+        loop {
+            index += 1;
+            match self.tokens.get(index - 1) {
+                Some(TokenWithLocation {
+                    token: Token::Whitespace(_),
+                    ..
+                }) => continue,
+                Some(token) => {
+                    if n == 0 {
+                        return token; // No clone!
+                    }
+                    n -= 1;
+                }
+                None => return Self::get_eof_token(),
+            }
+        }
+    }
+
+    /// Return reference to token kind only (most common pattern, optimized)
+    /// This is an internal optimization to avoid cloning tokens.
+    #[inline]
+    pub(crate) fn peek_token_kind(&self) -> &Token {
+        &self.peek_token_ref().token
+    }
+
+    /// Check if peek_token matches a specific token (optimized, no clone)
+    #[inline]
+    pub(crate) fn peek_token_is(&self, expected: &Token) -> bool {
+        self.peek_token_ref() == expected
+    }
+
+    /// Check if peek_nth_token matches a specific token (optimized, no clone)
+    #[inline]
+    pub(crate) fn peek_nth_token_is(&self, n: usize, expected: &Token) -> bool {
+        self.peek_nth_token_ref(n).token.eq(expected)
+    }
+
     /// Check if the current position (which should be at a `(` token) is followed
     /// by a query-starting keyword (SELECT, VALUES, WITH, TABLE, or another `(`).
     /// This is used to distinguish between a column list and a parenthesized query.
@@ -2846,7 +2906,7 @@ impl<'a> Parser<'a> {
     /// Look for an expected keyword and consume it if it exists
     #[must_use]
     pub fn parse_keyword(&mut self, expected: Keyword) -> bool {
-        match self.peek_token().token {
+        match self.peek_token_kind().clone() {
             Token::Word(w) if expected == w.keyword => {
                 self.next_token();
                 true
@@ -2886,7 +2946,7 @@ impl<'a> Parser<'a> {
     /// Look for one of the given keywords and return the one that matches.
     #[must_use]
     pub fn parse_one_of_keywords(&mut self, keywords: &[Keyword]) -> Option<Keyword> {
-        match self.peek_token().token {
+        match self.peek_token_kind().clone() {
             Token::Word(w) => {
                 keywords
                     .iter()
@@ -2908,7 +2968,7 @@ impl<'a> Parser<'a> {
     /// not be efficient as it does a loop on the tokens with `peek_nth_token`
     /// each time.
     pub fn parse_keyword_with_tokens(&mut self, expected: Keyword, tokens: &[Token]) -> bool {
-        match self.peek_token().token {
+        match self.peek_token_kind().clone() {
             Token::Word(w) if expected == w.keyword => {
                 for (idx, token) in tokens.iter().enumerate() {
                     if self.peek_nth_token(idx + 1).token != *token {
@@ -3012,7 +3072,7 @@ impl<'a> Parser<'a> {
         if !self.consume_token(&Token::Comma) {
             true
         } else if self.options.trailing_commas {
-            let token = self.peek_token().token;
+            let token = self.peek_token_kind().clone();
             match token {
                 Token::Word(ref kw)
                     if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&kw.keyword) =>
@@ -3083,7 +3143,7 @@ impl<'a> Parser<'a> {
     where
         F: FnMut(&mut Parser<'a>) -> Result<T, ParserError>,
     {
-        if self.peek_token().token == end_token {
+        if self.peek_token_is(&end_token) {
             return Ok(vec![]);
         }
 
@@ -3197,7 +3257,7 @@ impl<'a> Parser<'a> {
                     // Skip remaining tokens until semicolon or EOF
                     let mut depth = 0i32;
                     loop {
-                        match self.peek_token().token {
+                        match self.peek_token_kind().clone() {
                             Token::EOF => break,
                             Token::SemiColon if depth == 0 => break,
                             Token::LParen => {
@@ -3233,14 +3293,14 @@ impl<'a> Parser<'a> {
         let (mut table_flag, mut options, mut has_as, mut query) = (None, vec![], false, None);
         if self.parse_keyword(Keyword::TABLE) {
             let table_name = self.parse_object_name(false)?;
-            if self.peek_token().token != Token::EOF {
-                if let Token::Word(word) = self.peek_token().token {
+            if !self.peek_token_is(&Token::EOF) {
+                if let Token::Word(word) = self.peek_token_kind().clone() {
                     if word.keyword == Keyword::OPTIONS {
                         options = self.parse_options(Keyword::OPTIONS)?
                     }
                 };
 
-                if self.peek_token().token != Token::EOF {
+                if !self.peek_token_is(&Token::EOF) {
                     let (a, q) = self.parse_as_query()?;
                     has_as = a;
                     query = Some(q);
@@ -3266,14 +3326,14 @@ impl<'a> Parser<'a> {
             table_flag = Some(self.parse_object_name(false)?);
             if self.parse_keyword(Keyword::TABLE) {
                 let table_name = self.parse_object_name(false)?;
-                if self.peek_token() != Token::EOF {
-                    if let Token::Word(word) = self.peek_token().token {
+                if !self.peek_token_is(&Token::EOF) {
+                    if let Token::Word(word) = self.peek_token_kind().clone() {
                         if word.keyword == Keyword::OPTIONS {
                             options = self.parse_options(Keyword::OPTIONS)?
                         }
                     };
 
-                    if self.peek_token() != Token::EOF {
+                    if !self.peek_token_is(&Token::EOF) {
                         let (a, q) = self.parse_as_query()?;
                         has_as = a;
                         query = Some(q);
@@ -3296,7 +3356,7 @@ impl<'a> Parser<'a> {
                     })
                 }
             } else {
-                if self.peek_token() == Token::EOF {
+                if self.peek_token_is(&Token::EOF) {
                     self.prev_token();
                 }
                 self.expected("a `TABLE` keyword", self.peek_token())
@@ -3306,7 +3366,7 @@ impl<'a> Parser<'a> {
 
     /// Parse 'AS' before as query,such as `WITH XXX AS SELECT XXX` oer `CACHE TABLE AS SELECT XXX`
     pub fn parse_as_query(&mut self) -> Result<(bool, Query), ParserError> {
-        match self.peek_token().token {
+        match self.peek_token_kind().clone() {
             Token::Word(word) => match word.keyword {
                 Keyword::AS => {
                     self.next_token();
@@ -3324,7 +3384,7 @@ impl<'a> Parser<'a> {
         if has_table {
             let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
             let table_name = self.parse_object_name(false)?;
-            if self.peek_token().token == Token::EOF {
+            if self.peek_token_is(&Token::EOF) {
                 Ok(Statement::UNCache {
                     table_name,
                     if_exists,
@@ -3371,7 +3431,7 @@ impl<'a> Parser<'a> {
         };
 
         // Skip additional dialect-specific clauses (DATA_RETENTION_TIME_IN_DAYS, DEFAULT_DDL_COLLATION, etc.)
-        while matches!(self.peek_token().token, Token::Word(_))
+        while matches!(self.peek_token_kind().clone(), Token::Word(_))
             && self.peek_nth_token(1).token == Token::Eq
         {
             self.next_token(); // keyword
@@ -3464,7 +3524,7 @@ impl<'a> Parser<'a> {
         };
 
         // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
-        while matches!(self.peek_token().token, Token::Word(_))
+        while matches!(self.peek_token_kind().clone(), Token::Word(_))
             && self.peek_nth_token(1).token == Token::Eq
         {
             self.next_token(); // keyword
@@ -3698,7 +3758,7 @@ impl<'a> Parser<'a> {
                 // Generic fallback for dialect-specific CREATE FUNCTION clauses:
                 // Pattern 1: WORD = value_or_parens (e.g. RUNTIME_VERSION = '3.10')
                 // Pattern 2: WORD(values) (e.g. OPTIONS(...), PACKAGES(...))
-                if matches!(self.peek_token().token, Token::Word(_)) {
+                if matches!(self.peek_token_kind().clone(), Token::Word(_)) {
                     let next = self.peek_nth_token(1).token;
                     if next == Token::Eq {
                         self.next_token(); // consume keyword
@@ -3892,7 +3952,7 @@ impl<'a> Parser<'a> {
                 _ => self.expected("identifier", next_token)?,
             };
             let engine_options = if self.consume_token(&Token::LParen) {
-                let columns = if self.peek_token() != Token::RParen {
+                let columns = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_expr())?
                 } else {
                     vec![]
@@ -3925,7 +3985,7 @@ impl<'a> Parser<'a> {
 
         let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
             if self.consume_token(&Token::LParen) {
-                let columns = if self.peek_token() != Token::RParen {
+                let columns = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_identifier(false))?
                 } else {
                     vec![]
@@ -4703,9 +4763,9 @@ impl<'a> Parser<'a> {
 
         // Snowflake allows defining `CLUSTER BY` after the name of the table or after columns
         let mut cluster_by = if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
-            let exprs = if self.peek_token() == Token::LParen {
+            let exprs = if self.peek_token_is(&Token::LParen) {
                 self.expect_token(&Token::LParen)?;
-                let exprs = if self.peek_token() != Token::RParen {
+                let exprs = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_expr())?
                 } else {
                     vec![]
@@ -4827,7 +4887,7 @@ impl<'a> Parser<'a> {
                 _ => self.expected("identifier", next_token)?,
             };
             let engine_options = if self.consume_token(&Token::LParen) {
-                let columns = if self.peek_token() != Token::RParen {
+                let columns = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_expr())?
                 } else {
                     vec![]
@@ -4878,7 +4938,7 @@ impl<'a> Parser<'a> {
 
         let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
             if self.consume_token(&Token::LParen) {
-                let columns = if self.peek_token() != Token::RParen {
+                let columns = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_identifier(false))?
                 } else {
                     vec![]
@@ -4905,9 +4965,9 @@ impl<'a> Parser<'a> {
 
         // In Snowflake CLUSTER BY can be also defined after columns
         if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
-            let exprs = if self.peek_token() == Token::LParen {
+            let exprs = if self.peek_token_is(&Token::LParen) {
                 self.expect_token(&Token::LParen)?;
-                let exprs = if self.peek_token() != Token::RParen {
+                let exprs = if !self.peek_token_is(&Token::RParen) {
                     self.parse_comma_separated(|p| p.parse_expr())?
                 } else {
                     vec![]
@@ -5002,7 +5062,7 @@ impl<'a> Parser<'a> {
         table_properties.extend(_table_properties);
 
         // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
-        while matches!(self.peek_token().token, Token::Word(_))
+        while matches!(self.peek_token_kind().clone(), Token::Word(_))
             && self.peek_nth_token(1).token == Token::Eq
         {
             self.next_token(); // keyword
@@ -5070,7 +5130,7 @@ impl<'a> Parser<'a> {
             return Ok(Some(params));
         }
         loop {
-            if let Token::Word(_) = self.peek_token().token {
+            if let Token::Word(_) = self.peek_token_kind().clone() {
                 params.push(self.parse_procedure_param()?)
             }
             let comma = self.consume_token(&Token::Comma);
@@ -5099,7 +5159,7 @@ impl<'a> Parser<'a> {
                 projections.push(projection);
             } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 constraints.push(constraint);
-            } else if let Token::Word(_) = self.peek_token().token {
+            } else if let Token::Word(_) = self.peek_token_kind().clone() {
                 columns.push(self.parse_column_def()?);
             } else {
                 return self.expected("column name or constraint definition", self.peek_token());
@@ -5245,7 +5305,7 @@ impl<'a> Parser<'a> {
         {
             // The expression is optional for the EPHEMERAL syntax, so we need to check
             // if the column definition has remaining tokens before parsing the expression.
-            if matches!(self.peek_token().token, Token::Comma | Token::RParen) {
+            if matches!(self.peek_token_kind().clone(), Token::Comma | Token::RParen) {
                 Ok(Some(ColumnOption::Ephemeral(None)))
             } else {
                 Ok(Some(ColumnOption::Ephemeral(Some(self.parse_expr()?))))
@@ -5505,7 +5565,7 @@ impl<'a> Parser<'a> {
             {
                 let display_as_key = w.keyword == Keyword::KEY;
 
-                let name = match self.peek_token().token {
+                let name = match self.peek_token_kind().clone() {
                     Token::Word(word) if word.keyword == Keyword::USING => None,
                     _ => self.maybe_parse(|p| p.parse_identifier(false).map(WithSpan::unwrap)),
                 };
@@ -5949,7 +6009,7 @@ impl<'a> Parser<'a> {
     /// or `CALL procedure_name` statement
     pub fn parse_call(&mut self) -> Result<Statement, ParserError> {
         let object_name = self.parse_object_name(false)?;
-        if self.peek_token().token == Token::LParen {
+        if self.peek_token_is(&Token::LParen) {
             match self.parse_function(object_name)? {
                 Expr::Function(f) => Ok(Statement::Call(f)),
                 other => parser_err!(
@@ -6481,7 +6541,7 @@ impl<'a> Parser<'a> {
                 self.parse_function(ObjectName(vec![Ident::new(value)]))
             }
             Token::Word(Word { value, keyword, .. }) if (keyword == Keyword::NoKeyword) => {
-                if self.peek_token() == Token::LParen {
+                if self.peek_token_is(&Token::LParen) {
                     return self.parse_function(ObjectName(vec![Ident::new(value)]));
                 }
                 Ok(Expr::Value(Value::SingleQuotedString(value)))
@@ -7002,7 +7062,7 @@ impl<'a> Parser<'a> {
     pub fn parse_identifiers(&mut self) -> Result<Vec<Ident>, ParserError> {
         let mut idents = vec![];
         loop {
-            match self.peek_token().token {
+            match self.peek_token_kind().clone() {
                 Token::Word(w) => {
                     idents.push(w.to_ident());
                 }
@@ -7202,7 +7262,7 @@ impl<'a> Parser<'a> {
         allow_empty: bool,
     ) -> Result<Vec<WithSpan<Ident>>, ParserError> {
         if self.consume_token(&Token::LParen) {
-            if allow_empty && self.peek_token().token == Token::RParen {
+            if allow_empty && self.peek_token_is(&Token::RParen) {
                 self.next_token();
                 Ok(vec![])
             } else {
@@ -7861,7 +7921,7 @@ impl<'a> Parser<'a> {
 
         loop {
             // The query can be optionally followed by a set operator:
-            let op = self.parse_set_operator(&self.peek_token().token);
+            let op = self.parse_set_operator(&self.peek_token_kind().clone());
             let next_precedence = match op {
                 // UNION and EXCEPT have the same binding power and evaluate left-to-right
                 Some(SetOperator::Union) | Some(SetOperator::Except) => 10,
@@ -8370,7 +8430,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_use(&mut self) -> Result<Statement, ParserError> {
         // Parse optional object type: DATABASE, SCHEMA, ROLE, WAREHOUSE, CATALOG, SECONDARY ROLES
-        let object_type = match self.peek_token().token {
+        let object_type = match self.peek_token_kind().clone() {
             Token::Word(w) => {
                 match w.value.to_uppercase().as_str() {
                     "DATABASE" | "SCHEMA" | "ROLE" | "WAREHOUSE" | "CATALOG" => {
@@ -8380,7 +8440,7 @@ impl<'a> Parser<'a> {
                     "SECONDARY" => {
                         self.next_token();
                         // Expect ROLES
-                        if let Token::Word(w2) = self.peek_token().token {
+                        if let Token::Word(w2) = self.peek_token_kind().clone() {
                             if w2.value.to_uppercase() == "ROLES" {
                                 self.next_token();
                                 Some("SECONDARY ROLES".to_string())
@@ -8422,7 +8482,7 @@ impl<'a> Parser<'a> {
             // https://docs.snowflake.com/en/release-notes/2024/8_11#select-supports-trailing-commas
             // Check if the comma was trailing (followed by a clause keyword)
             if dialect_of!(self is SnowflakeDialect) {
-                if let Token::Word(w) = self.peek_token().token {
+                if let Token::Word(w) = self.peek_token_kind().clone() {
                     if matches!(
                         w.keyword,
                         Keyword::WHERE
@@ -8502,7 +8562,7 @@ impl<'a> Parser<'a> {
                 }
             } else {
                 let natural = self.parse_keyword(Keyword::NATURAL);
-                let peek_keyword = if let Token::Word(w) = self.peek_token().token {
+                let peek_keyword = if let Token::Word(w) = self.peek_token_kind().clone() {
                     w.keyword
                 } else {
                     Keyword::NoKeyword
@@ -8903,7 +8963,7 @@ impl<'a> Parser<'a> {
             // table AT(TIMESTAMP => expr) or table BEFORE(STATEMENT => 'id')
             let is_at = self.parse_keyword(Keyword::AT);
             let is_before = if !is_at {
-                match self.peek_token().token {
+                match self.peek_token_kind().clone() {
                     Token::Word(w) if w.value.to_uppercase() == "BEFORE" => {
                         self.next_token();
                         true
@@ -9355,28 +9415,27 @@ impl<'a> Parser<'a> {
             // e.g., INSERT INTO t (SELECT ...) should not treat (SELECT ...) as a column list
             // ClickHouse allows INSERT INTO t (*) to mean all columns
             let mut insert_all_columns = false;
-            let columns = if self.peek_token().token == Token::LParen
-                && self.peek_parenthesized_query_start()
-            {
-                vec![]
-            } else if self.peek_token().token == Token::LParen
-                && dialect_of!(self is ClickHouseDialect | GenericDialect)
-            {
-                // Check for (*) syntax
-                let _ = self.next_token(); // consume LParen
-                if self.peek_token().token == Token::Mul {
-                    self.next_token(); // consume *
-                    self.expect_token(&Token::RParen)?;
-                    insert_all_columns = true;
+            let columns =
+                if self.peek_token_is(&Token::LParen) && self.peek_parenthesized_query_start() {
                     vec![]
+                } else if self.peek_token_is(&Token::LParen)
+                    && dialect_of!(self is ClickHouseDialect | GenericDialect)
+                {
+                    // Check for (*) syntax
+                    let _ = self.next_token(); // consume LParen
+                    if self.peek_token_is(&Token::Mul) {
+                        self.next_token(); // consume *
+                        self.expect_token(&Token::RParen)?;
+                        insert_all_columns = true;
+                        vec![]
+                    } else {
+                        // Not (*), backtrack and parse as regular column list
+                        self.prev_token(); // put back LParen
+                        self.parse_parenthesized_column_list(Optional, is_mysql)?
+                    }
                 } else {
-                    // Not (*), backtrack and parse as regular column list
-                    self.prev_token(); // put back LParen
                     self.parse_parenthesized_column_list(Optional, is_mysql)?
-                }
-            } else {
-                self.parse_parenthesized_column_list(Optional, is_mysql)?
-            };
+                };
 
             let partitioned = if self.parse_keyword(Keyword::PARTITION) {
                 self.expect_token(&Token::LParen)?;
@@ -9400,7 +9459,7 @@ impl<'a> Parser<'a> {
                     let conflict_target =
                         if self.parse_keywords(&[Keyword::ON, Keyword::CONSTRAINT]) {
                             Some(ConflictTarget::OnConstraint(self.parse_object_name(false)?))
-                        } else if self.peek_token() == Token::LParen {
+                        } else if self.peek_token_is(&Token::LParen) {
                             Some(ConflictTarget::Columns(
                                 self.parse_parenthesized_column_list(IsOptional::Mandatory, false)?,
                             ))
@@ -9575,7 +9634,7 @@ impl<'a> Parser<'a> {
                     Some(OnOverflow::Error)
                 } else {
                     self.expect_keyword(Keyword::TRUNCATE)?;
-                    let filler = match self.peek_token().token {
+                    let filler = match self.peek_token_kind().clone() {
                         Token::Word(w)
                             if w.keyword == Keyword::WITH || w.keyword == Keyword::WITHOUT =>
                         {
@@ -9777,7 +9836,7 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<Option<ExceptSelectItem>, ParserError> {
         let opt_except = if self.parse_keyword(Keyword::EXCEPT) {
-            if self.peek_token().token == Token::LParen {
+            if self.peek_token_is(&Token::LParen) {
                 let idents = self.parse_parenthesized_column_list(Mandatory, false)?;
                 match &idents[..] {
                     [] => {
@@ -10201,7 +10260,7 @@ impl<'a> Parser<'a> {
     pub fn parse_merge_clauses(&mut self) -> Result<Vec<MergeClause>, ParserError> {
         let mut clauses: Vec<MergeClause> = vec![];
         loop {
-            if self.peek_token() == Token::EOF || self.peek_token() == Token::SemiColon {
+            if self.peek_token_is(&Token::EOF) || self.peek_token_is(&Token::SemiColon) {
                 break;
             }
             self.expect_keyword(Keyword::WHEN)?;
@@ -10508,7 +10567,7 @@ impl<'a> Parser<'a> {
 
         // Skip optional clauses until AS keyword (LANGUAGE, EXECUTE AS CALLER, etc.)
         loop {
-            if self.peek_token().token == Token::EOF {
+            if self.peek_token_is(&Token::EOF) {
                 return self.expected("AS", self.peek_token());
             }
             if self.parse_keywords(&[Keyword::EXECUTE, Keyword::AS]) {
@@ -10560,9 +10619,9 @@ impl<'a> Parser<'a> {
 
     pub fn parse_window_spec(&mut self) -> Result<WindowSpec, ParserError> {
         // Check for window name reference (e.g., "WINDOW a AS (b)")
-        let window_name = if self.peek_token().token != Token::RParen
+        let window_name = if !self.peek_token_is(&Token::RParen)
             && !matches!(
-                self.peek_token().token,
+                self.peek_token_kind().clone(),
                 Token::Word(w) if w.keyword == Keyword::PARTITION
                     || w.keyword == Keyword::ORDER
                     || w.keyword == Keyword::ROWS

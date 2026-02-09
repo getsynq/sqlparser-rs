@@ -35,6 +35,35 @@ cargo fmt
 cargo clippy
 ```
 
+### Performance and Profiling
+
+**Critical:** Always profile BEFORE optimizing. Assumptions about bottlenecks are often wrong.
+
+```bash
+# Profile with corpus-runner on macOS (reliable)
+target/release/corpus-runner tests/corpus &
+PID=$!
+sample $PID 120 -file /tmp/profile.txt
+kill $PID
+grep "Sort by top of stack" -A 30 /tmp/profile.txt
+
+# Build corpus-runner for testing/profiling
+cargo build --release --bin corpus-runner
+```
+
+**Profiling lessons:**
+- Test framework overhead often dominates (0.65s/test in old corpus tests)
+- Profile with real workload (corpus-runner), not synthetic benchmarks
+- macOS `sample` is more reliable than samply for long-running processes
+- Look for hot spots in system calls (malloc/free/memmove) not just parser code
+- Example from this codebase: 22% time in memory ops, 8% tokenization, only 4% token cloning
+
+**Performance patterns:**
+- Use `rayon::prelude::*` and `.par_iter()` for parallel processing (3-4x speedup on multi-core)
+- `Arc<Mutex<Stats>>` for shared state, `Arc<AtomicUsize>` for lock-free counters
+- Standalone binaries avoid test framework overhead (2,643x faster than libtest-mimic)
+- `std::panic::catch_unwind` for graceful failure handling in parallel code
+
 ### Test Structure
 Tests are organized by SQL dialect in the `tests/` directory:
 - `sqlparser_common.rs` - Generic/cross-dialect tests
@@ -47,45 +76,55 @@ Tests are organized by SQL dialect in the `tests/` directory:
 Each test file contains comprehensive parsing tests for dialect-specific syntax.
 
 ### Corpus Testing
-Corpus tests in `tests/sqlparser_corpus.rs` parse real SQL from `tests/corpus/{dialect}/` directories:
+
+The `corpus-runner` binary is a standalone tool for parsing corpus tests without test framework overhead:
+
 ```bash
-# Run corpus tests with timestamped results and comparison
-./scripts/run-corpus-tests.sh --compare
+# Build the corpus-runner
+cargo build --release --bin corpus-runner
 
-# Run manually with increased stack size (if needed)
-RUST_MIN_STACK=4194304 cargo test --test sqlparser_corpus
+# Run all corpus tests (completes in ~7 seconds for 100k files)
+target/release/corpus-runner tests/corpus
 
-# Run with nextest (recommended for large test suites)
-cargo nextest run --test sqlparser_corpus --no-fail-fast
+# Run specific dialect directory
+target/release/corpus-runner tests/corpus/bigquery
 
-# Check nextest configuration
-cat .config/nextest.toml
-
-# Compare two specific reports
+# Compare reports
 node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
-
-# List saved reports
-ls -lht target/corpus-results/corpus-report-*.json
 ```
 
-**Corpus test infrastructure:**
-- Uses custom test harness (`harness = false` in Cargo.toml with libtest_mimic)
-- `customer_*` dialect prefixes are automatically stripped (customer_bigquery → bigquery)
-- Reports track individual test results for regression detection
-- Stack size increased to 4MB (`RUST_MIN_STACK=4194304`) to handle deeply nested queries without excessive memory
-- Nextest configuration in `.config/nextest.toml` provides per-test timeouts (10s slow threshold, 20s termination)
-- See `scripts/README.md` for detailed usage
+**Performance:**
+- Processes ~15,000 files/sec on M-series Mac (using 3-4 CPU cores via rayon)
+- 99,856 files in 6.7 seconds
+- **2,643x faster than old libtest-mimic test harness**
+- Generates `target/corpus-report.json` for CI/CD
 
-**Debugging stack overflows:**
-- If tests crash despite increased stack, use binary search to find problematic files
-- Run subsets: `cargo test --test sqlparser_corpus -- dialect/category/`
-- Check test logs for patterns before crash
+**Features:**
+- Parallel processing with rayon
+- Progress reporting every 1000 files
+- Per-dialect pass/fail stats
+- Handles panics and stack overflows gracefully
+- Same binary used in GitHub Actions (`.github/workflows/corpus.yml`)
+- Can be used for profiling (same workload as tests)
+- `customer_*` dialect prefixes automatically stripped (customer_bigquery → bigquery)
 
-**Performance and CI considerations:**
-- With 100k+ tests, use nextest for per-test timeouts (`.config/nextest.toml`)
-- Stack size × parallel threads = total memory (16MB × 1000 threads = 16GB+)
-- GitHub Actions: Add concurrency groups to auto-cancel old runs on new pushes
-- Corpus tests may timeout not from slow tests but from memory pressure/swapping
+**Development workflow:**
+- Use corpus-runner for fast feedback (6.7s vs 2+ hours)
+- No need to run via cargo test - it's a standalone binary
+- CI uses the same binary (`target/release/corpus-runner tests/corpus`)
+- Report format matches old test harness for compatibility
+
+**For profiling:**
+```bash
+# Profile for 2 minutes with macOS sample
+target/release/corpus-runner tests/corpus &
+PID=$!
+sample $PID 120 -file /tmp/profile.txt
+kill $PID
+
+# View hot spots
+grep "Sort by top of stack" -A 30 /tmp/profile.txt
+```
 
 ## Architecture
 
@@ -220,6 +259,82 @@ Since this is a fork of apache/datafusion-sqlparser-rs:
 - CI runs: `cargo check`, `cargo nextest run --all-features`
 - Avoid adding serde dependency to test code - use manual JSON building if needed
 
+**Running corpus tests (now fast!):**
+```bash
+# Run full corpus test suite (~7 seconds for 100k files)
+target/release/corpus-runner tests/corpus
+
+# Or use the benchmark suite for micro-benchmarking
+cargo bench
+```
+
+## Performance Optimization
+
+**⚠️ CRITICAL: Profile before optimizing!**
+
+Without profiling data, optimizations are guesswork. Benchmarks measure total time but don't show WHERE time is spent.
+
+**Profiling workflow (macOS):**
+```bash
+# 1. Create a simple profiling binary (benches/simple_profile.rs):
+#    - Loop parse operations 10,000+ times
+#    - Add [[bin]] section to Cargo.toml pointing to it
+
+# 2. Build in release mode
+cargo build --release --bin profile_parse
+
+# 3. Profile with samply (install: cargo install samply)
+samply record target/release/profile_parse
+# Opens Firefox Profiler UI at http://127.0.0.1:3000
+# Shows call stacks, hot functions, time distribution
+
+# Alternative: cargo-instruments (install: brew install cargo-instruments)
+cargo instruments --bin profile_parse --release --template time
+# Note: May fail with Xcode symbol errors on some macOS versions
+# If it works, opens .trace file in Instruments.app
+
+# Fallback: Use Instruments directly
+xcrun xctrace record --template 'Time Profiler' \
+  --output profile.trace \
+  --launch -- target/release/profile_parse
+# Open with: open profile.trace
+```
+
+**Profiling on Linux:**
+```bash
+# Use perf (better than macOS tools)
+cargo build --release --bin profile_parse
+perf record -g target/release/profile_parse
+perf report
+# Or generate flamegraph:
+cargo flamegraph --bin profile_parse
+```
+
+**Benchmarking with criterion:**
+```bash
+# Add to Cargo.toml dev-dependencies: criterion = { version = "0.5", features = ["html_reports"] }
+# Create benches/benchmark_name.rs with criterion_group! and criterion_main!
+# Add [[bench]] section to Cargo.toml with harness = false
+cargo bench --bench benchmark_name                    # Run benchmarks
+cargo bench --bench benchmark_name -- --save-baseline name  # Save baseline
+```
+
+**Important caveats:**
+- **Profile FIRST, optimize SECOND** - Don't guess where bottlenecks are
+- Rust compiler can inline and optimize stack allocations, but **cannot eliminate heap allocations**
+- `Token` enum contains `String` fields - clones require heap allocation
+- Benchmarks show TOTAL time, profiling shows WHERE time is spent
+- Small improvements (3-5%) may not be worth code complexity without profiling data
+
+**Bulk code transformations:**
+```bash
+# Always backup before bulk sed operations
+cp src/parser/mod.rs src/parser/mod.rs.backup
+# Use sed carefully - test incrementally
+sed -i '' 's/pattern/replacement/g' src/parser/mod.rs
+cargo check  # Verify after each transformation
+```
+
 ## Features (Cargo.toml)
 
 ```toml
@@ -238,6 +353,25 @@ The crate includes a CLI for parsing SQL and dumping JSON:
 cargo run --features json_example --example cli queries/example.sql
 cargo run --features json_example --example cli queries/example.sql --dialect snowflake
 ```
+
+## Troubleshooting
+
+### "Failed to look up symbolic reference" error
+This is a known Xcode Instruments issue on some macOS versions. Use samply instead.
+
+### Cargo.toml Errors
+- "duplicate key" error: Check for multiple `[dependencies]` sections (merge them)
+- Ensure dev-dependencies use correct section name (not `[dev-dependencies]` twice)
+
+### Profiling Issues
+- samply may not generate output on timeout - use macOS `sample` command instead
+- Test framework overhead dominates profiles - use corpus-runner for real workload
+- Profile shows mutex locks: test harness coordination overhead, not parsing work
+
+### Performance Debugging
+- Always check actual numbers: "25k files/sec" during warmup ≠ sustained 15k files/sec
+- Measure complete runs, not just initial progress reports
+- Use `time` command to verify total execution time matches reported rate
 
 ## Related Documentation
 
