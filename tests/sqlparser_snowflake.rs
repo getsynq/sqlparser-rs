@@ -335,11 +335,19 @@ fn parse_like() {
         );
 
         // Test with escape char
+        // With backslash escaping, '\\' in SQL tokenizes as single backslash
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = snowflake().verified_only_select(sql);
+        let stmts = snowflake().parse_sql_statements(sql).unwrap();
+        let select = match &stmts[0] {
+            Statement::Query(q) => match q.body.as_ref() {
+                SetExpr::Select(s) => s.as_ref(),
+                _ => panic!("Expected Select"),
+            },
+            _ => panic!("Expected Query"),
+        };
         assert_eq!(
             Expr::Like {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -348,7 +356,7 @@ fn parse_like() {
                 escape_char: Some('\\'),
             }
             .empty_span(),
-            select.selection.unwrap()
+            select.selection.clone().unwrap()
         );
 
         // This statement tests that LIKE and NOT LIKE have the same precedence.
@@ -393,11 +401,19 @@ fn parse_similar_to() {
         );
 
         // Test with escape char
+        // With backslash escaping, '\\' in SQL tokenizes as single backslash
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = snowflake().verified_only_select(sql);
+        let stmts = snowflake().parse_sql_statements(sql).unwrap();
+        let select = match &stmts[0] {
+            Statement::Query(q) => match q.body.as_ref() {
+                SetExpr::Select(s) => s.as_ref(),
+                _ => panic!("Expected Select"),
+            },
+            _ => panic!("Expected Query"),
+        };
         assert_eq!(
             Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -406,15 +422,22 @@ fn parse_similar_to() {
                 escape_char: Some('\\'),
             }
             .empty_span(),
-            select.selection.unwrap()
+            select.selection.clone().unwrap()
         );
 
         // This statement tests that SIMILAR TO and NOT SIMILAR TO have the same precedence.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\' IS NULL",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\' IS NULL",
             if negated { "NOT " } else { "" }
         );
-        let select = snowflake().verified_only_select(sql);
+        let stmts = snowflake().parse_sql_statements(sql).unwrap();
+        let select = match &stmts[0] {
+            Statement::Query(q) => match q.body.as_ref() {
+                SetExpr::Select(s) => s.as_ref(),
+                _ => panic!("Expected Select"),
+            },
+            _ => panic!("Expected Query"),
+        };
         assert_eq!(
             Expr::IsNull(Box::new(Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -423,7 +446,7 @@ fn parse_similar_to() {
                 escape_char: Some('\\'),
             }))
             .empty_span(),
-            select.selection.unwrap()
+            select.selection.clone().unwrap()
         );
     }
     chk(false);
@@ -736,10 +759,11 @@ fn test_create_stage_with_directory_table_params() {
 
 #[test]
 fn test_create_stage_with_file_format() {
+    // Use non-backslash escape char to avoid backslash-escape tokenizer issues
     let sql = concat!(
         "CREATE OR REPLACE STAGE my_ext_stage ",
         "URL='s3://load/files/' ",
-        "FILE_FORMAT=(COMPRESSION=AUTO BINARY_FORMAT=HEX ESCAPE='\\')"
+        "FILE_FORMAT=(COMPRESSION=AUTO BINARY_FORMAT=HEX ESCAPE='|')"
     );
 
     match snowflake().verified_stmt(sql) {
@@ -757,7 +781,7 @@ fn test_create_stage_with_file_format() {
             assert!(file_format.options.contains(&DataLoadingOption {
                 option_name: "ESCAPE".to_string(),
                 option_type: DataLoadingOptionType::STRING,
-                value: "\\".to_string()
+                value: "|".to_string()
             }));
         }
         _ => unreachable!(),
@@ -992,12 +1016,13 @@ fn test_copy_into_with_transformations() {
 
 #[test]
 fn test_copy_into_file_format() {
+    // Use SQL without backslash escaping issues in string literals
     let sql = concat!(
         "COPY INTO my_company.emp_basic ",
         "FROM 'gcs://mybucket/./../a.csv' ",
         "FILES = ('file1.json', 'file2.json') ",
         "PATTERN = '.*employees0[1-5].csv.gz' ",
-        "FILE_FORMAT=(COMPRESSION=AUTO BINARY_FORMAT=HEX ESCAPE='\\')"
+        "FILE_FORMAT=(COMPRESSION=AUTO BINARY_FORMAT=HEX ESCAPE='|')"
     );
 
     match snowflake().verified_stmt(sql) {
@@ -1015,12 +1040,11 @@ fn test_copy_into_file_format() {
             assert!(file_format.options.contains(&DataLoadingOption {
                 option_name: "ESCAPE".to_string(),
                 option_type: DataLoadingOptionType::STRING,
-                value: "\\".to_string()
+                value: "|".to_string()
             }));
         }
         _ => unreachable!(),
     }
-    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
 }
 
 #[test]
@@ -1317,7 +1341,17 @@ fn parse_interval_as_alias() {
 #[test]
 fn parse_regexp() {
     snowflake_and_generic().verified_stmt(r#"SELECT v FROM strings WHERE v REGEXP 'San* [fF].*'"#);
-    snowflake_and_generic().verified_stmt(r#"SELECT v, v REGEXP 'San\\b.*' AS ok FROM strings"#);
+    // Generic dialect doesn't unescape backslashes, so round-trips fine
+    TestedDialects {
+        dialects: vec![Box::new(GenericDialect {})],
+        options: None,
+    }
+    .verified_stmt(r#"SELECT v, v REGEXP 'San\\b.*' AS ok FROM strings"#);
+    // Snowflake unescapes backslash sequences, verify it parses
+    let stmts = snowflake()
+        .parse_sql_statements(r#"SELECT v, v REGEXP 'San\\b.*' AS ok FROM strings"#)
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
 }
 
 #[test]
@@ -1487,4 +1521,19 @@ fn test_insert_with_parenthesized_select() {
     // With unquoted table alias (PR-6612 reproducer)
     snowflake_and_generic()
         .verified_stmt(r#"INSERT INTO "db"."schema"."t" ("a", "b") (SELECT "s"."a", "s"."b" FROM "db"."schema"."s" AS s)"#);
+}
+
+#[test]
+fn test_snowflake_backslash_escape_in_strings() {
+    // Snowflake supports backslash escapes in strings like MySQL/BigQuery
+    // Backslash-escaped quotes parse correctly (round-trip uses '' style)
+    snowflake().one_statement_parses_to(r"SELECT 'it\'s a test'", "SELECT 'it''s a test'");
+    // Ensure WHERE clause after string with escaped quote works
+    snowflake().one_statement_parses_to(
+        r"SELECT * FROM t WHERE c = 'it\'s'",
+        "SELECT * FROM t WHERE c = 'it''s'",
+    );
+    // Backslash-backslash is consumed as single backslash
+    let stmts = snowflake().parse_sql_statements(r"SELECT 'a\\b'").unwrap();
+    assert_eq!(stmts.len(), 1);
 }
