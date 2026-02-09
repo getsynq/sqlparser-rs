@@ -2196,7 +2196,16 @@ impl<'a> Parser<'a> {
         if let Some(op) = regular_binary_operator {
             if let Some(keyword) = self.parse_one_of_keywords(&[Keyword::ANY, Keyword::ALL]) {
                 self.expect_token(&Token::LParen)?;
-                let right = self.parse_subexpr(precedence)?;
+                // Check if this is a subquery (SELECT/WITH) inside ANY/ALL
+                let right = if self.parse_keyword(Keyword::SELECT)
+                    || self.parse_keyword(Keyword::WITH)
+                {
+                    self.prev_token();
+                    let subquery = self.parse_boxed_query()?;
+                    Expr::Subquery(subquery)
+                } else {
+                    self.parse_subexpr(precedence)?
+                };
                 self.expect_token(&Token::RParen)?;
 
                 if !matches!(
