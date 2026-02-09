@@ -5061,9 +5061,65 @@ impl<'a> Parser<'a> {
         // Skip optional TAG (...) clause (Snowflake)
         self.parse_optional_tag_clause();
 
-        // Parse optional `AS ( query )`
+        // Parse optional `AS ( query )` or `AS table_name` (ClickHouse)
         let query = if self.parse_keyword(Keyword::AS) {
-            Some(self.parse_boxed_query()?)
+            // Check if AS is followed by a plain identifier (not a query keyword)
+            // ClickHouse: CREATE TABLE t1 (...) AS t2
+            match self.peek_token().token {
+                Token::Word(ref w)
+                    if !matches!(
+                        w.keyword,
+                        Keyword::SELECT | Keyword::WITH | Keyword::VALUES | Keyword::TABLE
+                    ) && !matches!(self.peek_nth_token(0).token, Token::LParen) =>
+                {
+                    // ClickHouse: CREATE TABLE t1 (...) AS t2
+                    // Wrap as SELECT * FROM t2 to preserve the source table reference
+                    let table_name = self.parse_object_name(false)?;
+                    Some(Box::new(Query {
+                        with: None,
+                        body: Box::new(SetExpr::Select(Box::new(Select {
+                            distinct: None,
+                            top: None,
+                            projection: vec![SelectItem::Wildcard(
+                                WildcardAdditionalOptions::default(),
+                            )
+                            .spanning(Span::default())],
+                            into: None,
+                            from: vec![TableWithJoins {
+                                relation: TableFactor::Table {
+                                    name: table_name,
+                                    alias: None,
+                                    args: None,
+                                    with_hints: vec![],
+                                    version: None,
+                                    partitions: vec![],
+                                },
+                                joins: vec![],
+                            }],
+                            lateral_views: vec![],
+                            sample: None,
+                            selection: None,
+                            group_by: GroupByExpr::Expressions(vec![]),
+                            cluster_by: vec![],
+                            distribute_by: vec![],
+                            sort_by: vec![],
+                            having: None,
+                            named_window: vec![],
+                            qualify: None,
+                            value_table_mode: None,
+                        }))),
+                        order_by: None,
+                        limit: None,
+                        limit_by: vec![],
+                        offset: None,
+                        fetch: None,
+                        locks: vec![],
+                        settings: None,
+                        format_clause: None,
+                    }))
+                }
+                _ => Some(self.parse_boxed_query()?),
+            }
         } else {
             None
         };

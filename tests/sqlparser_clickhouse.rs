@@ -1379,6 +1379,22 @@ fn test_aggregate_function_column() {
     }
 }
 
+#[test]
+fn parse_create_table_as_another_table() {
+    // ClickHouse supports CREATE TABLE t1 (...) AS t2
+    // This is internally represented as SELECT * FROM t2
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t1 (col1 String, col2 UInt64) ENGINE = MergeTree() AS t2",
+        "CREATE TABLE t1 (col1 STRING, col2 UInt64) ENGINE=MergeTree() AS SELECT * FROM t2",
+    );
+
+    // Also works with qualified table names
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t1 (col1 String) ENGINE = MergeTree() AS db1.t2",
+        "CREATE TABLE t1 (col1 STRING) ENGINE=MergeTree() AS SELECT * FROM db1.t2",
+    );
+}
+
 fn clickhouse() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {})],
