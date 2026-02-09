@@ -3810,6 +3810,7 @@ fn parse_explain_table() {
             describe_alias,
             table_name,
             has_table_word: _,
+            format: _,
         } => {
             assert_eq!(describe_alias, expected_describe_alias);
             assert_eq!("test_identifier", table_name.to_string());
