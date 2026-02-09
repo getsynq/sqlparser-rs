@@ -1613,3 +1613,24 @@ fn parse_wildcard_exclude_in_function_args() {
         "SELECT OBJECT_CONSTRUCT(* EXCLUDE province) FROM t1",
     );
 }
+
+#[test]
+fn parse_create_view_with_masking_policy() {
+    // View columns with MASKING POLICY
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1, col2 MASKING POLICY policy1, col3 MASKING POLICY policy2) AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1, col2, col3) AS SELECT * FROM t1",
+    );
+
+    // View column with MASKING POLICY and COMMENT
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1 MASKING POLICY p1 COMMENT 'test') AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
+    );
+
+    // View column with MASKING POLICY, TAG and COMMENT
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1 MASKING POLICY p1 TAG (t1 = 'v1') COMMENT 'test') AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
+    );
+}

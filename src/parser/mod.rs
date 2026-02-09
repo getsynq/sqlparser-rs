@@ -7431,11 +7431,26 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Snowflake allow specifying comment, for now ignore it to allow parsing rest of the SQL
+    /// Parse a column identifier with optional Snowflake view column clauses.
+    /// Handles: `col_name [MASKING POLICY name [USING (...)]] [TAG (...)] [COMMENT 'str']`
     pub fn parse_column_identifier_with_optional_comment(
         &mut self,
     ) -> Result<WithSpan<Ident>, ParserError> {
         let ident = self.parse_identifier(false)?;
+        // Skip MASKING POLICY clause if present
+        if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            // Consume policy name
+            let _ = self.parse_identifier(false)?;
+            // Skip optional USING (col, ...)
+            if self.parse_keyword(Keyword::USING) {
+                self.expect_token(&Token::LParen)?;
+                let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+            }
+        }
+        // Skip TAG clause if present
+        self.parse_optional_tag_clause();
+        // Skip COMMENT clause if present
         if self.parse_keyword(Keyword::COMMENT) {
             self.parse_literal_string()?;
         }
