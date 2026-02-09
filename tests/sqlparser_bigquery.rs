@@ -148,11 +148,28 @@ fn parse_nested_data_types() {
 }
 
 #[test]
+fn parse_deeply_nested_struct_types() {
+    // STRUCT containing a field with ARRAY<STRING> - the >> closing pattern
+    let sql = "CREATE TABLE tbl (metadata STRUCT<uuid STRING, sort_keys ARRAY<STRING>>)";
+    bigquery().one_statement_parses_to(sql, sql);
+
+    // Nested STRUCT inside STRUCT
+    let sql = "CREATE TABLE tbl (sla STRUCT<policy STRUCT<id INT64, title STRING>>)";
+    bigquery().one_statement_parses_to(sql, sql);
+
+    // Triple nesting
+    let sql = "CREATE TABLE tbl (x STRUCT<y STRUCT<z ARRAY<INT64>>>)";
+    bigquery().one_statement_parses_to(sql, sql);
+}
+
+#[test]
 fn parse_invalid_brackets() {
     let sql = "SELECT STRUCT<INT64>>(NULL)";
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError("unmatched > in STRUCT literal".to_string())
+        ParserError::ParserError(
+            "Expected (, found: >\nNear `SELECT STRUCT<INT64>`".to_string()
+        )
     );
 
     let sql = "SELECT STRUCT<STRUCT<INT64>>>(NULL)";
@@ -167,7 +184,7 @@ fn parse_invalid_brackets() {
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
         ParserError::ParserError(
-            "Expected ',' or ')' after column definition, found: >\nNear ` (x STRUCT<STRUCT<INT64>>`".to_string()
+            "Expected ',' or ')' after column definition, found: >\nNear `(x STRUCT<STRUCT<INT64>>`".to_string()
         )
     );
 }

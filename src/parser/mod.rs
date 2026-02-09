@@ -2058,23 +2058,16 @@ impl<'a> Parser<'a> {
         &mut self,
         trailing_bracket: MatchedTrailingBracket,
     ) -> Result<MatchedTrailingBracket, ParserError> {
-        let trailing_bracket = if !trailing_bracket.0 {
-            match self.peek_token_kind().clone() {
-                Token::Gt => {
-                    self.next_token();
-                    false.into()
-                }
-                Token::ShiftRight => {
-                    self.next_token();
-                    true.into()
-                }
-                _ => return self.expected(">", self.peek_token()),
+        if trailing_bracket.0 {
+            return Ok(false.into());
+        }
+        match self.peek_token_kind().clone() {
+            Token::Gt => {
+                self.next_token();
+                Ok(false.into())
             }
-        } else {
-            false.into()
-        };
-
-        Ok(trailing_bracket)
+            _ => self.expected(">", self.peek_token()),
+        }
     }
 
     /// Parse an operator following an expression
@@ -2091,7 +2084,17 @@ impl<'a> Parser<'a> {
             Token::DoubleEq => Some(BinaryOperator::Eq),
             Token::Eq => Some(BinaryOperator::Eq),
             Token::Neq => Some(BinaryOperator::NotEq),
-            Token::Gt => Some(BinaryOperator::Gt),
+            Token::Gt => {
+                // Two consecutive > tokens form >> (bitwise shift right) for PostgreSQL/DuckDB
+                if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect)
+                    && matches!(self.peek_token().token, Token::Gt)
+                {
+                    self.next_token(); // consume the second >
+                    Some(BinaryOperator::PGBitwiseShiftRight)
+                } else {
+                    Some(BinaryOperator::Gt)
+                }
+            }
             Token::GtEq => Some(BinaryOperator::GtEq),
             Token::Lt => Some(BinaryOperator::Lt),
             Token::LtEq => Some(BinaryOperator::LtEq),
@@ -2117,9 +2120,6 @@ impl<'a> Parser<'a> {
             }
             Token::ShiftLeft if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) => {
                 Some(BinaryOperator::PGBitwiseShiftLeft)
-            }
-            Token::ShiftRight if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) => {
-                Some(BinaryOperator::PGBitwiseShiftRight)
             }
             Token::Sharp if dialect_of!(self is PostgreSqlDialect) => {
                 Some(BinaryOperator::PGBitwiseXor)
@@ -2618,7 +2618,6 @@ impl<'a> Parser<'a> {
             | Token::Lt
             | Token::LtEq
             | Token::Neq
-            | Token::Gt
             | Token::GtEq
             | Token::DoubleEq
             | Token::Tilde
@@ -2626,8 +2625,18 @@ impl<'a> Parser<'a> {
             | Token::ExclamationMarkTilde
             | Token::ExclamationMarkTildeAsterisk
             | Token::Spaceship => Ok(20),
+            Token::Gt => {
+                // Two consecutive > tokens form >> (shift right) at higher precedence
+                if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect)
+                    && matches!(self.peek_nth_token(1).token, Token::Gt)
+                {
+                    Ok(22)
+                } else {
+                    Ok(20)
+                }
+            }
             Token::Pipe => Ok(21),
-            Token::Caret | Token::Sharp | Token::ShiftRight | Token::ShiftLeft => Ok(22),
+            Token::Caret | Token::Sharp | Token::ShiftLeft => Ok(22),
             Token::Ampersand => Ok(23),
             Token::Plus | Token::Minus => Ok(Self::PLUS_MINUS_PREC),
             Token::Mul | Token::Div | Token::DuckIntDiv | Token::Mod | Token::StringConcat => {
