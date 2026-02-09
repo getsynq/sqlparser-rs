@@ -3362,9 +3362,18 @@ impl<'a> Parser<'a> {
 
         let schema_name = self.parse_schema_name()?;
 
+        // Parse optional COMMENT clause (Snowflake, ClickHouse)
+        let comment = if self.parse_keyword(Keyword::COMMENT) {
+            let _ = self.consume_token(&Token::Eq);
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
         Ok(Statement::CreateSchema {
             schema_name,
             if_not_exists,
+            comment,
         })
     }
 
@@ -3417,6 +3426,14 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+        // Parse COMMENT clause (ClickHouse, Snowflake)
+        let comment = if self.parse_keyword(Keyword::COMMENT) {
+            let _ = self.consume_token(&Token::Eq);
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
         // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
         while matches!(self.peek_token().token, Token::Word(_))
             && self.peek_nth_token(1).token == Token::Eq
@@ -3442,6 +3459,7 @@ impl<'a> Parser<'a> {
             if_not_exists: ine,
             location,
             managed_location,
+            comment,
         })
     }
 
