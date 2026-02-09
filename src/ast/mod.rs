@@ -1425,12 +1425,14 @@ impl fmt::Display for ShowCreateObject {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum CommentObject {
     Column,
     Table,
+    /// Any other object type represented by its name (e.g. SCHEMA, VIEW, DATABASE, etc.)
+    Other(String),
 }
 
 impl fmt::Display for CommentObject {
@@ -1438,6 +1440,7 @@ impl fmt::Display for CommentObject {
         match self {
             CommentObject::Column => f.write_str("COLUMN"),
             CommentObject::Table => f.write_str("TABLE"),
+            CommentObject::Other(name) => f.write_str(name),
         }
     }
 }
@@ -1992,11 +1995,12 @@ pub enum Statement {
     /// Note: this is a MySQL-specific statement.
     ShowCollation { filter: Option<ShowStatementFilter> },
     /// ```sql
-    /// USE
+    /// USE [DATABASE | SCHEMA | ROLE | WAREHOUSE | SECONDARY ROLES] name
     /// ```
-    ///
-    /// Note: This is a MySQL-specific statement.
-    Use { db_name: Ident },
+    Use {
+        db_name: ObjectName,
+        object_type: Option<String>,
+    },
     /// ```sql
     /// START  [ TRANSACTION | WORK ] | START TRANSACTION } ...
     /// ```
@@ -3480,8 +3484,15 @@ impl fmt::Display for Statement {
                 }
                 Ok(())
             }
-            Statement::Use { db_name } => {
-                write!(f, "USE {db_name}")?;
+            Statement::Use {
+                db_name,
+                object_type,
+            } => {
+                write!(f, "USE")?;
+                if let Some(obj_type) = object_type {
+                    write!(f, " {obj_type}")?;
+                }
+                write!(f, " {db_name}")?;
                 Ok(())
             }
             Statement::ShowCollation { filter } => {
@@ -4498,11 +4509,14 @@ impl fmt::Display for OnOverflow {
 pub enum ObjectType {
     Table,
     View,
+    MaterializedView,
     Index,
     Schema,
+    Database,
     Role,
     Sequence,
     Stage,
+    Type,
 }
 
 impl fmt::Display for ObjectType {
@@ -4510,11 +4524,14 @@ impl fmt::Display for ObjectType {
         f.write_str(match self {
             ObjectType::Table => "TABLE",
             ObjectType::View => "VIEW",
+            ObjectType::MaterializedView => "MATERIALIZED VIEW",
             ObjectType::Index => "INDEX",
             ObjectType::Schema => "SCHEMA",
+            ObjectType::Database => "DATABASE",
             ObjectType::Role => "ROLE",
             ObjectType::Sequence => "SEQUENCE",
             ObjectType::Stage => "STAGE",
+            ObjectType::Type => "TYPE",
         })
     }
 }

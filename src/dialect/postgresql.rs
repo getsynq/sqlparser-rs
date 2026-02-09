@@ -67,6 +67,10 @@ pub fn parse_comment(parser: &mut Parser) -> Result<Statement, ParserError> {
             let object_name = parser.parse_object_name(false)?;
             (CommentObject::Table, object_name)
         }
+        Token::Word(w) => {
+            let object_name = parser.parse_object_name(false)?;
+            (CommentObject::Other(w.value.to_uppercase()), object_name)
+        }
         _ => parser.expected("comment object_type", token)?,
     };
 

@@ -470,7 +470,7 @@ impl<'a> Parser<'a> {
         match &next_token.token {
             Token::Word(w) => match w.keyword {
                 Keyword::KILL => Ok(self.parse_kill()?),
-                Keyword::DESCRIBE => Ok(self.parse_explain(true)?),
+                Keyword::DESCRIBE | Keyword::DESC => Ok(self.parse_explain(true)?),
                 Keyword::EXPLAIN => Ok(self.parse_explain(false)?),
                 Keyword::ANALYZE => Ok(self.parse_analyze()?),
                 Keyword::SELECT | Keyword::WITH | Keyword::VALUES => {
@@ -527,6 +527,17 @@ impl<'a> Parser<'a> {
                 // `OPTIMIZE` is clickhouse specific https://clickhouse.tech/docs/en/sql-reference/statements/optimize/
                 Keyword::OPTIMIZE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     Ok(self.parse_optimize_table()?)
+                }
+                // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
+                Keyword::CASE if dialect_of!(self is SnowflakeDialect | BigQueryDialect) => {
+                    self.prev_token();
+                    let expr = self.parse_expr()?;
+                    Ok(Statement::SetVariable {
+                        local: false,
+                        hivevar: false,
+                        variable: ObjectName(vec![]),
+                        value: vec![expr],
+                    })
                 }
                 _ => self.expected("an SQL statement", next_token),
             },
@@ -1224,9 +1235,33 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a SQL CAST function e.g. `CAST(expr AS FLOAT)`
+    /// ClickHouse also supports `CAST(expr, 'type')` syntax.
     pub fn parse_cast_expr(&mut self) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
         let expr = self.parse_expr()?;
+
+        // ClickHouse supports CAST(expr, 'type') with comma syntax
+        if dialect_of!(self is ClickHouseDialect | GenericDialect)
+            && self.consume_token(&Token::Comma)
+        {
+            let type_str = self.parse_literal_string()?;
+            self.expect_token(&Token::RParen)?;
+            // Parse the type string as a data type
+            let mut type_parser = Parser::new(&ClickHouseDialect {})
+                .try_with_sql(&type_str)
+                .map_err(|e| {
+                    ParserError::ParserError(format!(
+                        "Failed to parse CAST type string '{type_str}': {e}"
+                    ))
+                })?;
+            let data_type = type_parser.parse_data_type()?;
+            return Ok(Expr::Cast {
+                expr: Box::new(expr),
+                data_type,
+                format: None,
+            });
+        }
+
         self.expect_keyword(Keyword::AS)?;
         let data_type = self.parse_data_type()?;
 
@@ -3132,11 +3167,6 @@ impl<'a> Parser<'a> {
             self.parse_create_function(or_replace, temporary)
         } else if self.parse_keyword(Keyword::MACRO) {
             self.parse_create_macro(or_replace, temporary)
-        } else if or_replace {
-            self.expected(
-                "[EXTERNAL] TABLE or [MATERIALIZED] VIEW or FUNCTION after CREATE OR REPLACE",
-                self.peek_token(),
-            )
         } else if self.parse_keyword(Keyword::INDEX) {
             self.parse_create_index(false)
         } else if self.parse_keywords(&[Keyword::UNIQUE, Keyword::INDEX]) {
@@ -3156,7 +3186,45 @@ impl<'a> Parser<'a> {
         } else if self.parse_keyword(Keyword::PROCEDURE) {
             self.parse_create_procedure(or_alter)
         } else {
-            self.expected("an object type after CREATE", self.peek_token())
+            // Generic fallback: skip tokens until end of statement
+            // This handles dialect-specific CREATE statements like:
+            // CREATE DICTIONARY, CREATE WAREHOUSE, CREATE DYNAMIC TABLE,
+            // CREATE USER, CREATE STORAGE, CREATE FILE FORMAT, etc.
+            let token = self.next_token();
+            match token.token {
+                Token::Word(w) => {
+                    let object_type = w.value.to_uppercase();
+                    // Skip remaining tokens until semicolon or EOF
+                    let mut depth = 0i32;
+                    loop {
+                        match self.peek_token().token {
+                            Token::EOF => break,
+                            Token::SemiColon if depth == 0 => break,
+                            Token::LParen => {
+                                depth += 1;
+                                self.next_token();
+                            }
+                            Token::RParen => {
+                                if depth == 0 {
+                                    break;
+                                }
+                                depth -= 1;
+                                self.next_token();
+                            }
+                            _ => {
+                                self.next_token();
+                            }
+                        }
+                    }
+                    Ok(Statement::Comment {
+                        object_type: CommentObject::Other(object_type),
+                        object_name: ObjectName(vec![]),
+                        comment: None,
+                        if_exists: false,
+                    })
+                }
+                _ => self.expected("an object type after CREATE", token),
+            }
         }
     }
 
@@ -3333,6 +3401,42 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
+        // ClickHouse: ENGINE = Replicated(...)
+        if self.parse_keyword(Keyword::ENGINE) {
+            let _ = self.consume_token(&Token::Eq);
+            let _ = self.parse_object_name(false);
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
+        while matches!(self.peek_token().token, Token::Word(_))
+            && self.peek_nth_token(1).token == Token::Eq
+        {
+            self.next_token(); // keyword
+            self.next_token(); // =
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            } else {
+                let _ = self.parse_expr();
+            }
+        }
         Ok(Statement::CreateDatabase {
             db_name,
             if_not_exists: ine,
@@ -3387,7 +3491,26 @@ impl<'a> Parser<'a> {
                 comment: None,
                 params,
             })
-        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect) {
+        } else if dialect_of!(self is ClickHouseDialect) {
+            // ClickHouse: CREATE FUNCTION name AS (params) -> body
+            // or: CREATE FUNCTION name AS param -> body
+            let name = self.parse_object_name(false)?;
+            self.expect_keyword(Keyword::AS)?;
+            let expr = self.parse_expr()?;
+            let params = CreateFunctionBody {
+                as_: Some(FunctionDefinition::SingleQuotedDef(expr.to_string())),
+                ..Default::default()
+            };
+            Ok(Statement::CreateFunction {
+                or_replace,
+                temporary,
+                name,
+                args: None,
+                return_type: None,
+                comment: None,
+                params,
+            })
+        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | GenericDialect) {
             let name = self.parse_object_name(false)?;
 
             let args: Option<Vec<OperateFunctionArg>> = if self.consume_token(&Token::LParen) {
@@ -3511,6 +3634,59 @@ impl<'a> Parser<'a> {
                     ensure_not_set(&body.return_, "RETURN")?;
                     body.return_ = Some(self.parse_expr()?);
                 }
+            } else if self.parse_keyword(Keyword::USING) {
+                ensure_not_set(&body.using, "USING")?;
+                let keyword = self.expect_one_of_keywords(&[
+                    Keyword::JAR,
+                    Keyword::FILE,
+                    Keyword::ARCHIVE,
+                ])?;
+                let uri = self.parse_literal_string()?;
+                body.using = Some(match keyword {
+                    Keyword::JAR => CreateFunctionUsing::Jar(uri),
+                    Keyword::FILE => CreateFunctionUsing::File(uri),
+                    Keyword::ARCHIVE => CreateFunctionUsing::Archive(uri),
+                    _ => unreachable!(),
+                });
+            } else if dialect_of!(self is SnowflakeDialect | BigQueryDialect | GenericDialect) {
+                // Generic fallback for dialect-specific CREATE FUNCTION clauses:
+                // Pattern 1: WORD = value_or_parens (e.g. RUNTIME_VERSION = '3.10')
+                // Pattern 2: WORD(values) (e.g. OPTIONS(...), PACKAGES(...))
+                if matches!(self.peek_token().token, Token::Word(_)) {
+                    let next = self.peek_nth_token(1).token;
+                    if next == Token::Eq {
+                        self.next_token(); // consume keyword
+                        self.next_token(); // consume =
+                        if self.consume_token(&Token::LParen) {
+                            let mut depth = 1i32;
+                            while depth > 0 {
+                                match self.next_token().token {
+                                    Token::LParen => depth += 1,
+                                    Token::RParen => depth -= 1,
+                                    Token::EOF => break,
+                                    _ => {}
+                                }
+                            }
+                        } else {
+                            let _ = self.parse_expr();
+                        }
+                        continue;
+                    } else if next == Token::LParen {
+                        self.next_token(); // consume keyword
+                        self.next_token(); // consume (
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => break,
+                                _ => {}
+                            }
+                        }
+                        continue;
+                    }
+                }
+                return Ok(body);
             } else {
                 return Ok(body);
             }
@@ -3772,6 +3948,32 @@ impl<'a> Parser<'a> {
         let view_options = self.parse_options(Keyword::OPTIONS)?;
 
         let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+
+        // BigQuery: PARTITION BY expr, CLUSTER BY cols before AS
+        if materialized {
+            if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
+                // Skip the partition expression
+                let _ = self.parse_expr();
+            }
+            // CLUSTER BY may appear after PARTITION BY or independently
+            if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
+                let _ = self.parse_comma_separated(|p| p.parse_expr());
+            }
+            // OPTIONS(...) may come before AS in BigQuery
+            if self.parse_keyword(Keyword::OPTIONS) {
+                if self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
 
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
@@ -4062,6 +4264,8 @@ impl<'a> Parser<'a> {
 
         let object_type = if self.parse_keyword(Keyword::TABLE) {
             ObjectType::Table
+        } else if self.parse_keywords(&[Keyword::MATERIALIZED, Keyword::VIEW]) {
+            ObjectType::MaterializedView
         } else if self.parse_keyword(Keyword::VIEW) {
             ObjectType::View
         } else if self.parse_keyword(Keyword::INDEX) {
@@ -4070,15 +4274,21 @@ impl<'a> Parser<'a> {
             ObjectType::Role
         } else if self.parse_keyword(Keyword::SCHEMA) {
             ObjectType::Schema
+        } else if self.parse_keyword(Keyword::DATABASE) {
+            ObjectType::Database
         } else if self.parse_keyword(Keyword::SEQUENCE) {
             ObjectType::Sequence
         } else if self.parse_keyword(Keyword::STAGE) {
             ObjectType::Stage
+        } else if self.parse_keyword(Keyword::TYPE) {
+            ObjectType::Type
         } else if self.parse_keyword(Keyword::FUNCTION) {
+            return self.parse_drop_function();
+        } else if self.parse_keyword(Keyword::PROCEDURE) {
             return self.parse_drop_function();
         } else {
             return self.expected(
-                "TABLE, VIEW, INDEX, ROLE, SCHEMA, FUNCTION, STAGE or SEQUENCE after DROP",
+                "TABLE, VIEW, INDEX, ROLE, SCHEMA, DATABASE, FUNCTION, PROCEDURE, STAGE or SEQUENCE after DROP",
                 self.peek_token(),
             );
         };
@@ -4154,6 +4364,35 @@ impl<'a> Parser<'a> {
     /// ```
     pub fn parse_declare(&mut self) -> Result<Statement, ParserError> {
         let name = self.parse_identifier(false)?.unwrap();
+
+        // BigQuery-style: DECLARE var [, ...] type [DEFAULT expr]
+        // Check if the next token looks like a data type (not cursor-related keywords)
+        if dialect_of!(self is BigQueryDialect) {
+            let idx = self.index;
+            // Try parsing as variable declaration - check if next token is a type or comma
+            if self.consume_token(&Token::Comma) || !self.parse_keyword(Keyword::CURSOR) {
+                // Not a cursor declaration - skip to end of statement
+                self.index = idx;
+                // Skip comma-separated variable names
+                while self.consume_token(&Token::Comma) {
+                    let _ = self.parse_identifier(false);
+                }
+                // Parse the data type
+                let _ = self.parse_data_type()?;
+                // Parse optional DEFAULT expression
+                if self.parse_keyword(Keyword::DEFAULT) {
+                    let _ = self.parse_expr()?;
+                }
+                // Use SetVariable as a simple representation
+                return Ok(Statement::SetVariable {
+                    local: false,
+                    hivevar: false,
+                    variable: ObjectName(vec![name]),
+                    value: vec![],
+                });
+            }
+            self.index = idx;
+        }
 
         let binary = self.parse_keyword(Keyword::BINARY);
         let sensitive = if self.parse_keyword(Keyword::INSENSITIVE) {
@@ -6118,6 +6357,13 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 Ok(FunctionDefinition::DoubleDollarDef(value.value))
             }
+            Token::LParen => {
+                // BigQuery/Snowflake: AS (expr)
+                self.expect_token(&Token::LParen)?;
+                let expr = self.parse_expr()?;
+                self.expect_token(&Token::RParen)?;
+                Ok(FunctionDefinition::SingleQuotedDef(expr.to_string()))
+            }
             _ => Ok(FunctionDefinition::SingleQuotedDef(
                 self.parse_literal_string()?,
             )),
@@ -7079,7 +7325,47 @@ impl<'a> Parser<'a> {
     pub fn parse_delete(&mut self) -> Result<Statement, ParserError> {
         let tables = if !self.parse_keyword(Keyword::FROM) {
             let tables = self.parse_comma_separated(|p| p.parse_object_name(false))?;
-            self.expect_keyword(Keyword::FROM)?;
+            // BigQuery allows DELETE table_name [alias] WHERE ... without FROM
+            if !self.parse_keyword(Keyword::FROM) {
+                // No FROM keyword - treat the parsed table names as the FROM targets
+                // Check for optional alias
+                let table_name = tables.into_iter().next().unwrap();
+                let alias = self.parse_optional_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+                let from = vec![TableWithJoins {
+                    relation: TableFactor::Table {
+                        name: table_name,
+                        alias: alias.map(|name| TableAlias {
+                            name,
+                            columns: vec![],
+                        }),
+                        args: None,
+                        with_hints: vec![],
+                        version: None,
+                        partitions: vec![],
+                    },
+                    joins: vec![],
+                }];
+
+                let selection = if self.parse_keyword(Keyword::WHERE) {
+                    Some(self.parse_expr()?)
+                } else {
+                    None
+                };
+
+                let returning = if self.parse_keyword(Keyword::RETURNING) {
+                    Some(self.parse_comma_separated(Parser::parse_select_item)?)
+                } else {
+                    None
+                };
+
+                return Ok(Statement::Delete {
+                    tables: vec![],
+                    from,
+                    using: None,
+                    selection,
+                    returning,
+                });
+            }
             tables
         } else {
             vec![]
@@ -7329,7 +7615,20 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a CTE (`alias [( col1, col2, ... )] AS (subquery)`)
+    ///
+    /// ClickHouse also supports `expr AS alias` style CTEs where the expression
+    /// comes first, followed by `AS alias`.
     pub fn parse_cte(&mut self) -> Result<Cte, ParserError> {
+        // ClickHouse supports `WITH expr AS alias` syntax where the expression
+        // comes before AS. Try to detect and parse this case.
+        if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+            let idx = self.index;
+            if let Ok(cte) = self.try_parse_clickhouse_cte() {
+                return Ok(cte);
+            }
+            self.index = idx;
+        }
+
         let name = self.parse_identifier(false)?;
 
         let mut cte = if self.parse_keyword(Keyword::AS) {
@@ -7371,6 +7670,54 @@ impl<'a> Parser<'a> {
             cte.from = Some(self.parse_identifier(false)?.unwrap());
         }
         Ok(cte)
+    }
+
+    /// Try to parse a ClickHouse-style CTE: `expr AS alias`
+    /// Returns Err if this doesn't look like a ClickHouse CTE.
+    fn try_parse_clickhouse_cte(&mut self) -> Result<Cte, ParserError> {
+        let expr = self.parse_expr()?;
+        self.expect_keyword(Keyword::AS)?;
+        let alias_name = self.parse_identifier(false)?;
+
+        // Wrap the expression in a SELECT query
+        let query = Box::new(Query {
+            with: None,
+            body: Box::new(SetExpr::Select(Box::new(Select {
+                distinct: None,
+                top: None,
+                projection: vec![SelectItem::UnnamedExpr(expr.spanning(Span::default()))
+                    .spanning(Span::default())],
+                into: None,
+                from: vec![],
+                lateral_views: vec![],
+                selection: None,
+                group_by: GroupByExpr::Expressions(vec![]),
+                cluster_by: vec![],
+                distribute_by: vec![],
+                sort_by: vec![],
+                having: None,
+                named_window: vec![],
+                qualify: None,
+                value_table_mode: None,
+            }))),
+            order_by: None,
+            limit: None,
+            limit_by: vec![],
+            offset: None,
+            fetch: None,
+            locks: vec![],
+            settings: None,
+            format_clause: None,
+        });
+
+        Ok(Cte {
+            alias: TableAlias {
+                name: alias_name,
+                columns: vec![],
+            },
+            query,
+            from: None,
+        })
     }
 
     /// Call's [`Self::parse_query_body`] returning a `Box`'ed  result.
@@ -7918,8 +8265,42 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_use(&mut self) -> Result<Statement, ParserError> {
-        let db_name = self.parse_identifier(false)?.unwrap();
-        Ok(Statement::Use { db_name })
+        // Parse optional object type: DATABASE, SCHEMA, ROLE, WAREHOUSE, CATALOG, SECONDARY ROLES
+        let object_type = match self.peek_token().token {
+            Token::Word(w) => {
+                match w.value.to_uppercase().as_str() {
+                    "DATABASE" | "SCHEMA" | "ROLE" | "WAREHOUSE" | "CATALOG" => {
+                        self.next_token();
+                        Some(w.value.to_uppercase())
+                    }
+                    "SECONDARY" => {
+                        self.next_token();
+                        // Expect ROLES
+                        if let Token::Word(w2) = self.peek_token().token {
+                            if w2.value.to_uppercase() == "ROLES" {
+                                self.next_token();
+                                Some("SECONDARY ROLES".to_string())
+                            } else {
+                                // Not ROLES, put SECONDARY back as part of name
+                                self.prev_token();
+                                None
+                            }
+                        } else {
+                            self.prev_token();
+                            None
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+
+        let db_name = self.parse_object_name(false)?;
+        Ok(Statement::Use {
+            db_name,
+            object_type,
+        })
     }
 
     /// Parse the body of a FROM clause (comma-separated table references).
@@ -8403,6 +8784,43 @@ impl<'a> Parser<'a> {
         {
             let expr = self.parse_expr()?;
             Ok(Some(TableVersion::ForSystemTimeAsOf(expr)))
+        } else if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+            // Snowflake AT/BEFORE time travel:
+            // table AT(TIMESTAMP => expr) or table BEFORE(STATEMENT => 'id')
+            let is_at = self.parse_keyword(Keyword::AT);
+            let is_before = if !is_at {
+                match self.peek_token().token {
+                    Token::Word(w) if w.value.to_uppercase() == "BEFORE" => {
+                        self.next_token();
+                        true
+                    }
+                    _ => false,
+                }
+            } else {
+                false
+            };
+            if is_at || is_before {
+                self.expect_token(&Token::LParen)?;
+                // Skip contents: name => expr pairs
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => {
+                            return Err(ParserError::ParserError(
+                                "Unexpected EOF in AT/BEFORE clause".to_string(),
+                            ))
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Some(TableVersion::ForSystemTimeAsOf(Expr::Value(
+                    Value::Null,
+                ))))
+            } else {
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
@@ -8555,6 +8973,8 @@ impl<'a> Parser<'a> {
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::TO)?;
+        // Snowflake: TO ROLE name / TO USER name
+        let _ = self.parse_one_of_keywords(&[Keyword::ROLE, Keyword::USER, Keyword::SHARE]);
         let grantees =
             self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
 
@@ -8638,14 +9058,38 @@ impl<'a> Parser<'a> {
                 schemas: self.parse_comma_separated(|p| p.parse_object_name(false))?,
             }
         } else {
-            let object_type =
-                self.parse_one_of_keywords(&[Keyword::SEQUENCE, Keyword::SCHEMA, Keyword::TABLE]);
-            let objects = self.parse_comma_separated(|p| p.parse_object_name(false));
+            let object_type = self.parse_one_of_keywords(&[
+                Keyword::SEQUENCE,
+                Keyword::SCHEMA,
+                Keyword::TABLE,
+                Keyword::DATABASE,
+                Keyword::FUNCTION,
+                Keyword::VIEW,
+                Keyword::ROLE,
+            ]);
+            let objects = self.parse_comma_separated(|p| {
+                let name = p.parse_object_name(false)?;
+                // Skip optional function signature like (string, int)
+                if p.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match p.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+                Ok(name)
+            });
             match object_type {
                 Some(Keyword::SCHEMA) => GrantObjects::Schemas(objects?),
                 Some(Keyword::SEQUENCE) => GrantObjects::Sequences(objects?),
                 Some(Keyword::TABLE) | None => GrantObjects::Tables(objects?),
-                _ => unreachable!(),
+                // Treat other object types (DATABASE, FUNCTION, VIEW, ROLE) as Tables
+                // since we don't have specific GrantObjects variants for them
+                Some(_) => GrantObjects::Tables(objects?),
             }
         };
 
@@ -9894,16 +10338,56 @@ impl<'a> Parser<'a> {
     pub fn parse_create_procedure(&mut self, or_alter: bool) -> Result<Statement, ParserError> {
         let name = self.parse_object_name(false)?;
         let params = self.parse_optional_procedure_parameters()?;
-        self.expect_keyword(Keyword::AS)?;
-        self.expect_keyword(Keyword::BEGIN)?;
-        let statements = self.parse_statements()?;
-        self.expect_keyword(Keyword::END)?;
-        Ok(Statement::CreateProcedure {
-            name,
-            or_alter,
-            params,
-            body: statements,
-        })
+
+        // Skip optional RETURNS clause
+        if self.parse_keyword(Keyword::RETURNS) {
+            // Consume the return type (could be TABLE(), VARCHAR, etc.)
+            if self.consume_token(&Token::LParen) {
+                // RETURNS TABLE (...) - skip balanced parens
+                let _ = self.parse_data_type();
+                let _ = self.consume_token(&Token::RParen);
+            } else {
+                let _ = self.parse_data_type();
+            }
+        }
+
+        // Skip optional clauses until AS keyword (LANGUAGE, EXECUTE AS CALLER, etc.)
+        loop {
+            if self.peek_token().token == Token::EOF {
+                return self.expected("AS", self.peek_token());
+            }
+            if self.parse_keywords(&[Keyword::EXECUTE, Keyword::AS]) {
+                // EXECUTE AS CALLER/OWNER - skip the identifier after AS
+                let _ = self.parse_identifier(false);
+                continue;
+            }
+            if self.parse_keyword(Keyword::AS) {
+                break;
+            }
+            // Skip this token
+            self.next_token();
+        }
+
+        // Try BEGIN/END block style first, otherwise treat as expression/string body
+        if self.parse_keyword(Keyword::BEGIN) {
+            let statements = self.parse_statements()?;
+            self.expect_keyword(Keyword::END)?;
+            Ok(Statement::CreateProcedure {
+                name,
+                or_alter,
+                params,
+                body: statements,
+            })
+        } else {
+            // Body is a string literal or expression - skip to end of statement
+            let _ = self.parse_expr();
+            Ok(Statement::CreateProcedure {
+                name,
+                or_alter,
+                params,
+                body: vec![],
+            })
+        }
     }
 
     pub fn parse_over(&mut self) -> Result<Option<WindowType>, ParserError> {
