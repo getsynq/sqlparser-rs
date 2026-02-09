@@ -36,6 +36,7 @@ jobs:
 
       - name: Run corpus tests
         continue-on-error: true
+        timeout-minutes: 30
         env:
           # Increase stack size to 16MB to prevent stack overflow in deeply nested parser tests
           RUST_MIN_STACK: 16777216
