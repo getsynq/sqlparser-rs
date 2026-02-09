@@ -20,3 +20,4 @@ Cargo.lock
 
 # External corpus (symlinked from kernel-cll-corpus repo)
 /tests/corpus
+target/corpus-results/

@@ -10,7 +10,10 @@ const CORPUS_ROOT: &str = "tests/corpus";
 const REPORT_PATH: &str = "target/corpus-report.json";
 
 fn dialect_for_name(name: &str) -> Box<dyn Dialect> {
-    match name {
+    // Strip customer_ prefix if present (e.g., customer_bigquery -> bigquery)
+    let base_name = name.strip_prefix("customer_").unwrap_or(name);
+
+    match base_name {
         "bigquery" => Box::new(BigQueryDialect),
         "clickhouse" => Box::new(ClickHouseDialect {}),
         "snowflake" => Box::new(SnowflakeDialect),
@@ -103,7 +106,10 @@ fn collect_sql_files(dir: &Path) -> Vec<PathBuf> {
 /// Per-dialect pass/fail counts.
 type Stats = BTreeMap<String, [usize; 2]>;
 
-fn write_report(stats: &Stats) {
+/// Individual test results by test path (e.g., "bigquery/abc123.sql" -> "pass"/"fail")
+type TestResults = BTreeMap<String, String>;
+
+fn write_report(stats: &Stats, test_results: &TestResults) {
     // Ensure target/ directory exists
     let _ = std::fs::create_dir_all("target");
 
@@ -116,14 +122,34 @@ fn write_report(stats: &Stats) {
 
     // Build JSON manually to avoid needing serde
     let mut json = String::from("{\n");
-    json.push_str(&format!("  \"total_passed\": {total_passed},\n"));
-    json.push_str(&format!("  \"total_failed\": {total_failed},\n"));
-    json.push_str("  \"dialects\": {\n");
+
+    // Summary section
+    json.push_str("  \"summary\": {\n");
+    json.push_str(&format!("    \"total_passed\": {total_passed},\n"));
+    json.push_str(&format!("    \"total_failed\": {total_failed},\n"));
+    json.push_str(&format!("    \"total_tests\": {}\n", total_passed + total_failed));
+    json.push_str("  },\n");
+
+    // Per-dialect stats
+    json.push_str("  \"by_dialect\": {\n");
     let dialect_count = stats.len();
     for (i, (dialect, [passed, failed])) in stats.iter().enumerate() {
         json.push_str(&format!(
             "    \"{dialect}\": {{\"passed\": {passed}, \"failed\": {failed}}}{}",
             if i + 1 < dialect_count { ",\n" } else { "\n" }
+        ));
+    }
+    json.push_str("  },\n");
+
+    // Individual test results (relative paths as keys)
+    json.push_str("  \"test_results\": {\n");
+    let test_count = test_results.len();
+    for (i, (path, status)) in test_results.iter().enumerate() {
+        // Escape path for JSON
+        let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+        json.push_str(&format!(
+            "    \"{escaped_path}\": \"{status}\"{}",
+            if i + 1 < test_count { ",\n" } else { "\n" }
         ));
     }
     json.push_str("  }\n}\n");
@@ -149,6 +175,7 @@ fn main() {
     }
 
     let stats: Arc<Mutex<Stats>> = Arc::new(Mutex::new(BTreeMap::new()));
+    let test_results: Arc<Mutex<TestResults>> = Arc::new(Mutex::new(BTreeMap::new()));
 
     let tests: Vec<libtest_mimic::Trial> = sql_files
         .into_iter()
@@ -160,17 +187,26 @@ fn main() {
                 .to_string();
             let test_path = path.clone();
             let stats = stats.clone();
+            let test_results = test_results.clone();
             let dialect = dialect_from_path(&path).to_string();
 
-            libtest_mimic::Trial::test(name, move || {
+            libtest_mimic::Trial::test(name.clone(), move || {
                 let result = run_test(&test_path);
                 let mut s = stats.lock().unwrap();
+                let mut tr = test_results.lock().unwrap();
+
                 let entry = s.entry(dialect).or_insert([0, 0]);
-                if result.is_ok() {
+                let status = if result.is_ok() {
                     entry[0] += 1;
+                    "pass"
                 } else {
                     entry[1] += 1;
-                }
+                    "fail"
+                };
+
+                // Store individual test result with relative path
+                tr.insert(name, status.to_string());
+
                 result
             })
         })
@@ -181,8 +217,9 @@ fn main() {
 
     // Write stats report before exiting
     let stats = stats.lock().unwrap();
+    let test_results = test_results.lock().unwrap();
     if !stats.is_empty() {
-        write_report(&stats);
+        write_report(&stats, &test_results);
     }
 
     conclusion.exit();
