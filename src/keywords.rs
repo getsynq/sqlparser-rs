@@ -133,6 +133,7 @@ define_keywords!(
     CACHE,
     CALL,
     CALLED,
+    CALLER,
     CARDINALITY,
     CASCADE,
     CASCADED,

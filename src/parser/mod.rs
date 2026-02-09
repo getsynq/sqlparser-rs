@@ -9504,6 +9504,23 @@ impl<'a> Parser<'a> {
 
     /// Parse a GRANT statement.
     pub fn parse_grant(&mut self) -> Result<Statement, ParserError> {
+        // Snowflake: GRANT ROLE role_name TO [ROLE|USER] grantee
+        // This is different from privilege grants - no ON clause
+        if self.parse_keyword(Keyword::ROLE) {
+            let role_name = self.parse_identifier(false)?.unwrap();
+            self.expect_keyword(Keyword::TO)?;
+            let _ = self.parse_one_of_keywords(&[Keyword::ROLE, Keyword::USER]);
+            let grantees =
+                self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
+            return Ok(Statement::Grant {
+                privileges: Privileges::Actions(vec![Action::Usage]),
+                objects: GrantObjects::Schemas(vec![ObjectName(vec![role_name])]),
+                grantees,
+                with_grant_option: false,
+                granted_by: None,
+            });
+        }
+
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::TO)?;
@@ -9542,11 +9559,14 @@ impl<'a> Parser<'a> {
                 .parse_comma_separated(Parser::parse_grant_permission)?
                 .into_iter()
                 .map(|(kw, columns)| match kw {
+                    Keyword::ALTER => Ok(Action::Create), // ALTER as standalone privilege (ClickHouse)
                     Keyword::DELETE => Ok(Action::Delete),
+                    Keyword::IMPERSONATE => Ok(Action::Impersonate),
                     Keyword::INSERT => Ok(Action::Insert { columns }),
                     Keyword::OPERATE => Ok(Action::Operate),
                     Keyword::OWNERSHIP => Ok(Action::Ownership),
                     Keyword::READ => Ok(Action::Read),
+                    Keyword::REFERENCE_USAGE => Ok(Action::ReferenceUsage),
                     Keyword::REFERENCES => Ok(Action::References { columns }),
                     Keyword::SELECT => Ok(Action::Select { columns }),
                     Keyword::TRIGGER => Ok(Action::Trigger),
@@ -9636,15 +9656,29 @@ impl<'a> Parser<'a> {
     pub fn parse_grant_permission(
         &mut self,
     ) -> Result<(Keyword, Option<Vec<WithSpan<Ident>>>), ParserError> {
+        // ClickHouse: ALTER DELETE, ALTER UPDATE compound privileges
+        // Consume ALTER prefix and return the sub-keyword
+        if self.parse_keyword(Keyword::ALTER) {
+            if let Some(sub_kw) =
+                self.parse_one_of_keywords(&[Keyword::DELETE, Keyword::UPDATE])
+            {
+                return Ok((sub_kw, None));
+            }
+            // Plain ALTER - not a compound privilege, return as-is
+            return Ok((Keyword::ALTER, None));
+        }
+
         if let Some(kw) = self.parse_one_of_keywords(&[
             Keyword::CONNECT,
             Keyword::CREATE,
             Keyword::DELETE,
             Keyword::EXECUTE,
+            Keyword::IMPERSONATE,
             Keyword::INSERT,
             Keyword::OPERATE,
             Keyword::OWNERSHIP,
             Keyword::READ,
+            Keyword::REFERENCE_USAGE,
             Keyword::REFERENCES,
             Keyword::SELECT,
             Keyword::TEMPORARY,
@@ -9666,12 +9700,27 @@ impl<'a> Parser<'a> {
             };
             Ok((kw, columns))
         } else {
-            self.expected("a privilege keyword", self.peek_token())?
+            // BigQuery: backtick-quoted role names like `roles/bigquery.dataViewer`
+            // Fall back to treating any identifier as a USAGE privilege
+            if matches!(
+                self.peek_token().token,
+                Token::Word(_) | Token::SingleQuotedString(_)
+            ) {
+                let _ = self.next_token();
+                Ok((Keyword::USAGE, None))
+            } else {
+                self.expected("a privilege keyword", self.peek_token())?
+            }
         }
     }
 
     /// Parse a REVOKE statement
     pub fn parse_revoke(&mut self) -> Result<Statement, ParserError> {
+        // Snowflake: REVOKE GRANT OPTION FOR privilege ON ...
+        let _ = self.parse_keywords(&[Keyword::GRANT, Keyword::OPTION, Keyword::FOR]);
+        // Snowflake: REVOKE CALLER privilege ON ...
+        let _ = self.parse_keyword(Keyword::CALLER);
+
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::FROM)?;
