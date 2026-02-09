@@ -109,6 +109,23 @@ type Stats = BTreeMap<String, [usize; 2]>;
 /// Individual test results by test path (e.g., "bigquery/abc123.sql" -> "pass"/"fail")
 type TestResults = BTreeMap<String, String>;
 
+/// Guard that writes the report on drop, ensuring it's written even if tests panic
+struct ReportWriter {
+    stats: Arc<Mutex<Stats>>,
+    test_results: Arc<Mutex<TestResults>>,
+}
+
+impl Drop for ReportWriter {
+    fn drop(&mut self) {
+        // Write report even if we're panicking
+        let stats = self.stats.lock().unwrap();
+        let test_results = self.test_results.lock().unwrap();
+        if !stats.is_empty() || !test_results.is_empty() {
+            write_report(&stats, &test_results);
+        }
+    }
+}
+
 fn write_report(stats: &Stats, test_results: &TestResults) {
     // Ensure target/ directory exists
     let _ = std::fs::create_dir_all("target");
@@ -177,6 +194,12 @@ fn main() {
     let stats: Arc<Mutex<Stats>> = Arc::new(Mutex::new(BTreeMap::new()));
     let test_results: Arc<Mutex<TestResults>> = Arc::new(Mutex::new(BTreeMap::new()));
 
+    // Install report writer that will write even on panic
+    let _guard = ReportWriter {
+        stats: stats.clone(),
+        test_results: test_results.clone(),
+    };
+
     let tests: Vec<libtest_mimic::Trial> = sql_files
         .into_iter()
         .map(|path| {
@@ -191,23 +214,34 @@ fn main() {
             let dialect = dialect_from_path(&path).to_string();
 
             libtest_mimic::Trial::test(name.clone(), move || {
-                let result = run_test(&test_path);
+                // Catch panics (including stack overflow) to prevent one test from killing the whole run
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_test(&test_path)
+                }));
+
                 let mut s = stats.lock().unwrap();
                 let mut tr = test_results.lock().unwrap();
 
                 let entry = s.entry(dialect).or_insert([0, 0]);
-                let status = if result.is_ok() {
-                    entry[0] += 1;
-                    "pass"
-                } else {
-                    entry[1] += 1;
-                    "fail"
+                let (status, test_result) = match result {
+                    Ok(Ok(())) => {
+                        entry[0] += 1;
+                        ("pass", Ok(()))
+                    }
+                    Ok(Err(e)) => {
+                        entry[1] += 1;
+                        ("fail", Err(e))
+                    }
+                    Err(_panic) => {
+                        entry[1] += 1;
+                        ("fail", Err(fail("Test panicked".to_string())))
+                    }
                 };
 
                 // Store individual test result with relative path
                 tr.insert(name, status.to_string());
 
-                result
+                test_result
             })
         })
         .collect();
@@ -215,12 +249,7 @@ fn main() {
     let args = libtest_mimic::Arguments::from_args();
     let conclusion = libtest_mimic::run(&args, tests);
 
-    // Write stats report before exiting
-    let stats = stats.lock().unwrap();
-    let test_results = test_results.lock().unwrap();
-    if !stats.is_empty() {
-        write_report(&stats, &test_results);
-    }
+    // Report is written automatically by _guard's Drop implementation
 
     conclusion.exit();
 }
