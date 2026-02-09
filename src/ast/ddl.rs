@@ -730,6 +730,11 @@ pub enum ColumnOption {
         sequence_options: Option<Vec<SequenceOptions>>,
         generation_expr: Option<Expr>,
     },
+    /// `IDENTITY [ ( seed, increment ) ]` (Redshift, SQL Server)
+    Identity {
+        seed: Option<Expr>,
+        increment: Option<Expr>,
+    },
 }
 
 impl fmt::Display for ColumnOption {
@@ -827,6 +832,20 @@ impl fmt::Display for ColumnOption {
                     write!(f, "GENERATED ALWAYS AS ({expr}) STORED")
                 }
             },
+            Identity { seed, increment } => {
+                write!(f, "IDENTITY")?;
+                if seed.is_some() || increment.is_some() {
+                    write!(f, "(")?;
+                    if let Some(s) = seed {
+                        write!(f, "{s}")?;
+                    }
+                    if let Some(i) = increment {
+                        write!(f, ", {i}")?;
+                    }
+                    write!(f, ")")?;
+                }
+                Ok(())
+            }
         }
     }
 }

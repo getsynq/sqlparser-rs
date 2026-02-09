@@ -1,6 +1,6 @@
 ---
 active: true
-iteration: 1
+iteration: 2
 max_iterations: 10
 completion_promise: "All important SQL syntax is handled"
 started_at: "2026-02-09T00:39:35Z"
