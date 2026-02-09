@@ -5751,7 +5751,7 @@ fn parse_overlay() {
     );
     assert_eq!(
         ParserError::ParserError(
-            "Expected PLACING, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned()
+            "Expected PLACING or comma-separated arguments, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned()
         ),
         parse_sql_statements("SELECT OVERLAY('abccccde' FROM 3)").unwrap_err(),
     );
