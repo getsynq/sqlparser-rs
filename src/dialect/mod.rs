@@ -181,6 +181,7 @@ pub fn dialect_from_str(dialect_name: impl AsRef<str>) -> Option<Box<dyn Dialect
         "ansi" => Some(Box::new(AnsiDialect {})),
         "duckdb" => Some(Box::new(DuckDbDialect {})),
         "databricks" => Some(Box::new(DatabricksDialect {})),
+        "trino" => Some(Box::new(GenericDialect)), // Trino uses generic SQL parsing
         _ => None,
     }
 }
@@ -234,6 +235,8 @@ mod tests {
         assert!(parse_dialect("ANSI").is::<AnsiDialect>());
         assert!(parse_dialect("duckdb").is::<DuckDbDialect>());
         assert!(parse_dialect("DuckDb").is::<DuckDbDialect>());
+        assert!(parse_dialect("trino").is::<GenericDialect>());
+        assert!(parse_dialect("Trino").is::<GenericDialect>());
 
         // error cases
         assert!(dialect_from_str("Unknown").is_none());
