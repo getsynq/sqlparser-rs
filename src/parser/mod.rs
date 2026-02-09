@@ -5263,6 +5263,20 @@ impl<'a> Parser<'a> {
         {
             let expr = self.parse_expr()?;
             Ok(Some(ColumnOption::OnUpdate(expr)))
+        } else if self.parse_keyword(Keyword::IDENTITY)
+            && dialect_of!(self is RedshiftSqlDialect | MsSqlDialect | GenericDialect)
+        {
+            // IDENTITY [ ( seed, increment ) ]
+            let (seed, increment) = if self.consume_token(&Token::LParen) {
+                let seed = Some(self.parse_expr()?);
+                self.expect_token(&Token::Comma)?;
+                let increment = Some(self.parse_expr()?);
+                self.expect_token(&Token::RParen)?;
+                (seed, increment)
+            } else {
+                (None, None)
+            };
+            Ok(Some(ColumnOption::Identity { seed, increment }))
         } else if self.parse_keyword(Keyword::GENERATED) {
             self.parse_optional_column_option_generated()
         } else {
