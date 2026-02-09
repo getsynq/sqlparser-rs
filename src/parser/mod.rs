@@ -1018,7 +1018,7 @@ impl<'a> Parser<'a> {
         if self.parse_keyword(Keyword::COLLATE) {
             Ok(Expr::Collate {
                 expr: Box::new(expr),
-                collation: self.parse_object_name(false)?,
+                collation: self.parse_collation_name()?,
             })
         } else {
             Ok(expr)
@@ -5192,7 +5192,7 @@ impl<'a> Parser<'a> {
         let name = self.parse_identifier(false)?;
         let data_type = self.parse_data_type()?;
         let collation = if self.parse_keyword(Keyword::COLLATE) {
-            Some(self.parse_object_name(false)?)
+            Some(self.parse_collation_name()?)
         } else {
             None
         };
@@ -5230,6 +5230,13 @@ impl<'a> Parser<'a> {
                 break;
             };
         }
+
+        // COLLATE may also appear after column options (e.g., NOT NULL COLLATE 'utf8')
+        let collation = if collation.is_none() && self.parse_keyword(Keyword::COLLATE) {
+            Some(self.parse_collation_name()?)
+        } else {
+            collation
+        };
 
         let column_options = self.parse_options(Keyword::OPTIONS)?;
 
@@ -5730,6 +5737,17 @@ impl<'a> Parser<'a> {
             Ok(options)
         } else {
             Ok(vec![])
+        }
+    }
+
+    /// Parse a collation name, accepting both identifiers and string literals.
+    /// Returns `ObjectName` wrapping the collation value.
+    fn parse_collation_name(&mut self) -> Result<ObjectName, ParserError> {
+        if let Token::SingleQuotedString(s) = self.peek_token_kind().clone() {
+            self.next_token();
+            Ok(ObjectName(vec![Ident::with_quote('\'', s)]))
+        } else {
+            self.parse_object_name(false)
         }
     }
 
