@@ -61,15 +61,13 @@ fn run_test(path: &Path) -> Result<(), Failed> {
     let dialect_name = dialect_from_path(path);
     let dialect = dialect_for_name(dialect_name);
 
-    let sql = std::fs::read_to_string(path).map_err(|e| fail(format!("Failed to read file: {e}")))?;
+    let sql =
+        std::fs::read_to_string(path).map_err(|e| fail(format!("Failed to read file: {e}")))?;
 
     match Parser::parse_sql(&*dialect, &sql) {
         Ok(statements) => {
             if statements.is_empty() {
-                return Err(fail(format!(
-                    "Parsed 0 statements from {}",
-                    path.display()
-                )));
+                return Err(fail(format!("Parsed 0 statements from {}", path.display())));
             }
 
             if let Some(expected) = expected_statement_count(&sql) {
@@ -95,9 +93,7 @@ fn collect_sql_files(dir: &Path) -> Vec<PathBuf> {
     let walker = walkdir::WalkDir::new(dir).sort_by_file_name();
     for entry in walker {
         let Ok(entry) = entry else { continue };
-        if entry.file_type().is_file()
-            && entry.path().extension().is_some_and(|ext| ext == "sql")
-        {
+        if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "sql") {
             files.push(entry.into_path());
         }
     }
