@@ -1524,6 +1524,34 @@ fn test_insert_with_parenthesized_select() {
 }
 
 #[test]
+fn test_snowflake_autoincrement_start_increment() {
+    // AUTOINCREMENT with START/INCREMENT/ORDER
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE TABLE t (id INT AUTOINCREMENT START 1 INCREMENT 1 ORDER, name VARCHAR)",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // AUTOINCREMENT with START/INCREMENT/NOORDER
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE TABLE t (id INT AUTOINCREMENT START 1 INCREMENT 1 NOORDER)",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // AUTOINCREMENT with parenthesized seed/increment
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (id INT AUTOINCREMENT(1, 1))")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // AUTOINCREMENT without START/INCREMENT (plain)
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (id INT AUTOINCREMENT)")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+}
+
+#[test]
 fn test_snowflake_tag_clause() {
     // Table-level TAG (skipped in AST, not round-tripped)
     let stmts = snowflake()

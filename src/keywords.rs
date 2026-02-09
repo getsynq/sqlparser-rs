@@ -469,6 +469,7 @@ define_keywords!(
     NOINHERIT,
     NOLOGIN,
     NONE,
+    NOORDER,
     NORELY,
     NOREPLICATION,
     NORMALIZE,
