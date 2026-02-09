@@ -20,8 +20,8 @@ echo "==> Running corpus tests..."
 cd "$REPO_ROOT"
 
 # Run tests (continue on error to get partial results)
-# Set RUST_MIN_STACK to 16MB to handle deeply nested queries
-RUST_MIN_STACK=16777216 cargo test --test sqlparser_corpus 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
+# Set RUST_MIN_STACK to 4MB to handle deeply nested queries without excessive memory
+RUST_MIN_STACK=4194304 cargo test --test sqlparser_corpus 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
 
 # Check if report was generated
 if [ ! -f "$REPO_ROOT/target/corpus-report.json" ]; then
