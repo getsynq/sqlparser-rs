@@ -7478,10 +7478,19 @@ impl<'a> Parser<'a> {
             _ => {
                 let has_table_word = self.parse_keyword(Keyword::TABLE);
                 let table_name = self.parse_object_name(false)?;
+
+                // ClickHouse: DESCRIBE TABLE tab FORMAT Vertical
+                let format = if self.parse_keyword(Keyword::FORMAT) {
+                    Some(self.parse_identifier(false)?.unwrap())
+                } else {
+                    None
+                };
+
                 Ok(Statement::ExplainTable {
                     describe_alias,
                     has_table_word,
                     table_name,
+                    format,
                 })
             }
         }

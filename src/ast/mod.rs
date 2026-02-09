@@ -2194,6 +2194,8 @@ pub enum Statement {
         table_name: ObjectName,
         /// EXPLAIN TABLE
         has_table_word: bool,
+        /// Optional output format (ClickHouse)
+        format: Option<Ident>,
     },
     /// EXPLAIN / DESCRIBE for select_statement
     Explain {
@@ -2323,6 +2325,7 @@ impl fmt::Display for Statement {
                 describe_alias,
                 table_name,
                 has_table_word,
+                format,
             } => {
                 if *describe_alias {
                     write!(f, "DESCRIBE ")?;
@@ -2333,7 +2336,13 @@ impl fmt::Display for Statement {
                     write!(f, "TABLE ")?;
                 }
 
-                write!(f, "{table_name}")
+                write!(f, "{table_name}")?;
+
+                if let Some(format) = format {
+                    write!(f, " FORMAT {format}")?;
+                }
+
+                Ok(())
             }
             Statement::Explain {
                 describe_alias,
