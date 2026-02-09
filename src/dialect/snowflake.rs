@@ -78,6 +78,9 @@ impl Dialect for SnowflakeDialect {
             // COPY INTO
             return Some(parse_copy_into(parser));
         }
+        if parser.parse_keyword(Keyword::COMMENT) {
+            return Some(crate::dialect::postgresql::parse_comment(parser));
+        }
 
         None
     }

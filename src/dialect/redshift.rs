@@ -10,7 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::Statement;
 use crate::dialect::Dialect;
+use crate::keywords::Keyword;
+use crate::parser::{Parser, ParserError};
 
 use super::PostgreSqlDialect;
 
@@ -36,5 +39,12 @@ impl Dialect for RedshiftSqlDialect {
     fn is_identifier_part(&self, ch: char) -> bool {
         // Extends Postgres dialect with sharp
         PostgreSqlDialect {}.is_identifier_part(ch) || ch == '#' || ch == '€'
+    }
+
+    fn parse_statement(&self, parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
+        if parser.parse_keyword(Keyword::COMMENT) {
+            return Some(crate::dialect::postgresql::parse_comment(parser));
+        }
+        None
     }
 }

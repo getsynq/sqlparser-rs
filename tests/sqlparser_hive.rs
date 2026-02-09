@@ -270,13 +270,8 @@ fn parse_create_function() {
         options: None,
     };
 
-    assert_eq!(
-        generic.parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError(
-            "Expected an object type after CREATE, found: FUNCTION\nNear `CREATE TEMPORARY `"
-                .to_string()
-        )
-    );
+    // GenericDialect now supports CREATE FUNCTION
+    generic.parse_sql_statements(sql).unwrap();
 
     let sql = "CREATE TEMPORARY FUNCTION mydb.myfunc AS 'org.random.class.Name' USING JAR";
     assert_eq!(

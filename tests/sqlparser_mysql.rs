@@ -247,7 +247,8 @@ fn parse_use() {
     assert_eq!(
         mysql_and_generic().verified_stmt("USE mydb"),
         Statement::Use {
-            db_name: Ident::new("mydb")
+            db_name: ObjectName(vec![Ident::new("mydb")]),
+            object_type: None,
         }
     );
 }
