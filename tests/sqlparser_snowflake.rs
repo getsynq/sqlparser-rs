@@ -1634,3 +1634,19 @@ fn parse_create_view_with_masking_policy() {
         "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
     );
 }
+
+#[test]
+fn parse_column_comment_after_masking_policy() {
+    // Column COMMENT after MASKING POLICY in CREATE TABLE
+    // Display outputs COMMENT before MASKING POLICY (options before policy)
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (col1 VARCHAR MASKING POLICY p1 COMMENT 'description')",
+        "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description' MASKING POLICY p1)",
+    );
+
+    // Column COMMENT after TAG in CREATE TABLE
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (col1 VARCHAR TAG (t1 = 'v1') COMMENT 'description')",
+        "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description')",
+    );
+}

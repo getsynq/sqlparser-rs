@@ -5420,6 +5420,20 @@ impl<'a> Parser<'a> {
         // Skip optional TAG (...) clause on columns (Snowflake)
         self.parse_optional_tag_clause();
 
+        // COMMENT may appear after MASKING POLICY / TAG (Snowflake)
+        if self.parse_keyword(Keyword::COMMENT) {
+            let next_token = self.next_token();
+            match next_token.token {
+                Token::SingleQuotedString(value) => {
+                    options.push(ColumnOptionDef {
+                        name: None,
+                        option: ColumnOption::Comment(value),
+                    });
+                }
+                _ => return self.expected("string after COMMENT", next_token),
+            }
+        }
+
         let column_location = if dialect_of!(self is ClickHouseDialect) {
             if self.parse_keyword(Keyword::FIRST) {
                 Some(ColumnLocation::First)
