@@ -46,6 +46,19 @@ Tests are organized by SQL dialect in the `tests/` directory:
 
 Each test file contains comprehensive parsing tests for dialect-specific syntax.
 
+### Corpus Testing
+Corpus tests in `tests/sqlparser_corpus.rs` parse real SQL from `tests/corpus/{dialect}/` directories:
+```bash
+# Run corpus tests and track progress
+cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | grep "PASS" | wc -l
+
+# Find common error patterns
+cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | grep "sql parser error:" | sort | uniq -c | sort -rn
+
+# Debug specific corpus file
+cargo test --test sqlparser_corpus -- --nocapture dialect/category/hash
+```
+
 ## Architecture
 
 ### Core Components
@@ -107,6 +120,36 @@ Expression parsing uses operator precedence climbing:
 - `parse_infix()` - Handles binary operators based on precedence
 - Precedence levels defined in `get_precedence()`
 
+#### Common Parser Patterns
+
+**Lookahead and backtracking:**
+```rust
+if self.peek_token().token == Token::Keyword(Keyword::FOO) {
+    self.next_token(); // consume
+    // ... parse FOO syntax
+} else {
+    self.prev_token(); // backtrack if needed
+}
+```
+
+**Negative lookahead** (distinguish between similar patterns):
+```rust
+// Check for absence of keywords to detect non-keyword identifier
+if !matches!(self.peek_token().token, Token::Word(w) if w.keyword == Keyword::PARTITION) {
+    // Parse as identifier, not as PARTITION keyword
+}
+```
+
+**Reserved keyword lists** (`src/keywords.rs`):
+- `RESERVED_FOR_COLUMN_ALIAS` - Keywords that can't be column aliases in SELECT
+- `RESERVED_FOR_TABLE_ALIAS` - Keywords that can't be table aliases in FROM/JOIN
+- Add clause-level keywords (FORMAT, SETTINGS, SAMPLE) to BOTH lists to prevent incorrect alias parsing
+
+**Dialect conflicts** (same keyword, different syntax):
+- Problem: Keyword parsed in multiple locations (e.g., SAMPLE as table factor vs SELECT clause)
+- Solution: Use `dialect_of!` to exclude conflicting dialects from one parsing location
+- Example: ClickHouse `SAMPLE n` (clause) vs Snowflake `SAMPLE (n)` (table factor) - exclude ClickHouse from table factor parsing
+
 ## Development Guidelines
 
 ### Syntax vs Semantics
@@ -124,6 +167,14 @@ Semantic analysis varies drastically between SQL dialects and is left to consume
 2. **Update Parser** (`src/parser/mod.rs`): Add parsing logic
 3. **Add Tests**: Write dialect-specific tests in appropriate test file
 4. **Consider Dialect**: Use `dialect_of!` if syntax is dialect-specific
+
+#### AST Change Workflow
+When adding fields to AST structs, you must update ALL pattern matches:
+1. Add field to struct definition (e.g., `src/ast/mod.rs`, `src/ast/query.rs`)
+2. Update Display implementation to output new field
+3. Update parser to initialize new field
+4. Fix all test files - add `new_field: _` to pattern matches (Rust errors E0027, E0063 guide you)
+5. Use `cargo check` to find all locations requiring updates
 
 #### Upstream Compatibility
 Since this is a fork of apache/datafusion-sqlparser-rs:
