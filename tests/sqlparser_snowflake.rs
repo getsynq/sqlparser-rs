@@ -1524,6 +1524,41 @@ fn test_insert_with_parenthesized_select() {
 }
 
 #[test]
+fn test_snowflake_tag_clause() {
+    // Table-level TAG (skipped in AST, not round-tripped)
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (a INT) TAG (db.schema.tag_name = 'value')")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // Table-level TAG with COMMENT
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE TABLE t (a INT) COMMENT='test' TAG (db.schema.tag_name = 'value')",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // View-level TAG before AS
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE VIEW v TAG (db.schema.tag_name = 'value') AS SELECT 1")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // Column-level TAG
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE TABLE t (a INT TAG (db.schema.tag_name = 'value'), b INT)",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // Multiple tags
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE TABLE t (a INT) TAG (s.t1 = 'v1', s.t2 = 'v2')",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+}
+
+#[test]
 fn test_snowflake_backslash_escape_in_strings() {
     // Snowflake supports backslash escapes in strings like MySQL/BigQuery
     // Backslash-escaped quotes parse correctly (round-trip uses '' style)
