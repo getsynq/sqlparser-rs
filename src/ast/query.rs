@@ -791,13 +791,34 @@ impl Display for TableSampleSeed {
     }
 }
 
+/// A value with an optional alias in PIVOT's IN clause
+/// e.g., `'Q1' AS quarter_one` or just `'Q1'`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct PivotValue {
+    pub value: Value,
+    pub alias: Option<Ident>,
+}
+
+impl fmt::Display for PivotValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)?;
+        if let Some(alias) = &self.alias {
+            write!(f, " AS {alias}")?;
+        }
+        Ok(())
+    }
+}
+
 /// Values that can appear in PIVOT's IN clause
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum PivotValueSource {
-    /// Concrete list of values: IN ('Q1', 'Q2', 'Q3', 'Q4')
-    List(Vec<Value>),
+    /// Concrete list of values with optional aliases:
+    /// IN ('Q1', 'Q2') or IN ('Q1' AS q1, 'Q2' AS q2)
+    List(Vec<PivotValue>),
     /// Dynamic: IN (ANY ORDER BY column)
     Any(Option<OrderBy>),
 }
