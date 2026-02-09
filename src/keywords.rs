@@ -495,6 +495,7 @@ define_keywords!(
     ON,
     ONLY,
     OPEN,
+    OPERATE,
     OPERATOR,
     OPTIMIZE,
     OPTION,
