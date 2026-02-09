@@ -1346,26 +1346,60 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_ceil_floor_expr(&mut self, is_ceil: bool) -> Result<Expr, ParserError> {
+        let func_name = if is_ceil { "CEIL" } else { "FLOOR" };
         self.expect_token(&Token::LParen)?;
         let expr = self.parse_expr()?;
-        // Parse `CEIL/FLOOR(expr)`
-        let mut field = DateTimeField::NoDateTime;
-        let keyword_to = self.parse_keyword(Keyword::TO);
-        if keyword_to {
+        if self.parse_keyword(Keyword::TO) {
             // Parse `CEIL/FLOOR(expr TO DateTimeField)`
-            field = self.parse_date_time_field()?;
-        }
-        self.expect_token(&Token::RParen)?;
-        if is_ceil {
-            Ok(Expr::Ceil {
-                expr: Box::new(expr),
-                field,
-            })
+            let field = self.parse_date_time_field()?;
+            self.expect_token(&Token::RParen)?;
+            if is_ceil {
+                Ok(Expr::Ceil {
+                    expr: Box::new(expr),
+                    field,
+                })
+            } else {
+                Ok(Expr::Floor {
+                    expr: Box::new(expr),
+                    field,
+                })
+            }
+        } else if self.consume_token(&Token::Comma) {
+            // Parse `CEIL/FLOOR(expr, scale)` as a regular function call
+            let mut args = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))];
+            loop {
+                args.push(self.parse_function_args()?);
+                if !self.consume_token(&Token::Comma) {
+                    break;
+                }
+            }
+            self.expect_token(&Token::RParen)?;
+            Ok(Expr::Function(Function {
+                name: ObjectName(vec![Ident::new(func_name)]),
+                args,
+                over: None,
+                distinct: false,
+                special: false,
+                order_by: vec![],
+                limit: None,
+                on_overflow: None,
+                null_treatment: None,
+                within_group: None,
+            }))
         } else {
-            Ok(Expr::Floor {
-                expr: Box::new(expr),
-                field,
-            })
+            // Parse `CEIL/FLOOR(expr)`
+            self.expect_token(&Token::RParen)?;
+            if is_ceil {
+                Ok(Expr::Ceil {
+                    expr: Box::new(expr),
+                    field: DateTimeField::NoDateTime,
+                })
+            } else {
+                Ok(Expr::Floor {
+                    expr: Box::new(expr),
+                    field: DateTimeField::NoDateTime,
+                })
+            }
         }
     }
 
