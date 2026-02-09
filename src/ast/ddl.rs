@@ -1082,9 +1082,10 @@ impl fmt::Display for ColumnPolicy {
             ColumnPolicy::ProjectionPolicy(property) => ("PROJECTION POLICY", property),
         };
         if property.with {
-            write!(f, " WITH ")?;
+            write!(f, " WITH {command} {}", property.policy_name)?;
+        } else {
+            write!(f, " {command} {}", property.policy_name)?;
         }
-        write!(f, "{command} {}", property.policy_name)?;
         if let Some(using_columns) = &property.using_columns {
             write!(f, " USING ({})", display_comma_separated(using_columns))?;
         }
