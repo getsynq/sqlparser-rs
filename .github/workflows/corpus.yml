@@ -9,7 +9,7 @@ on:
       - main
   pull_request_target:
     types: [opened, synchronize]
-
+  workflow_dispatch: {}
 jobs:
   corpus:
     name: Corpus Parsing Tests
