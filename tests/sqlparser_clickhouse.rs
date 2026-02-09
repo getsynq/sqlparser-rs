@@ -1402,6 +1402,15 @@ fn clickhouse() -> TestedDialects {
     }
 }
 
+#[test]
+fn parse_create_table_as_function() {
+    // CREATE TABLE ... AS function(...) is used for table functions in ClickHouse
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE series AS generateSeries(1, 5)",
+        "CREATE TABLE series AS SELECT * FROM generateSeries(1, 5)",
+    );
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],
