@@ -351,6 +351,7 @@ define_keywords!(
     ILIKE,
     IMMEDIATE,
     IMMUTABLE,
+    IMPERSONATE,
     IN,
     INCLUDE,
     INCREMENT,
@@ -565,6 +566,7 @@ define_keywords!(
     RECURSIVE,
     REF,
     REFERENCES,
+    REFERENCE_USAGE,
     REFERENCING,
     REFRESH,
     REGCLASS,
@@ -826,6 +828,8 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     // for Snowflake TABLESAMPLE
     Keyword::TABLESAMPLE,
     Keyword::SAMPLE,
+    // for ClickHouse FINAL
+    Keyword::FINAL,
     // for Clickhouse PREWHERE
     Keyword::PREWHERE,
     // for ClickHouse SELECT * FROM t SETTINGS ...

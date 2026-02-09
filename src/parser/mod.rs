@@ -4977,142 +4977,273 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let mut with_options = self.parse_options(Keyword::WITH)?;
+        // Parse CREATE TABLE clauses that can appear in any order after column definitions.
+        // Different dialects (Snowflake, ClickHouse, BigQuery, Databricks, Redshift) allow
+        // these clauses in varying orders, so we use a loop to flexibly accept them.
+        let mut with_options = vec![];
+        let mut table_properties = vec![];
+        let mut location = None;
+        let mut engine = None;
+        let mut comment = None;
+        let mut auto_increment_offset = None;
+        let mut primary_key = None;
+        let mut order_by = None;
+        let mut partitioned_by = None;
+        let mut table_ttl = None;
+        let mut clickhouse_settings = None;
+        let mut table_options = vec![];
+        let mut copy_grants = false;
+        let mut default_charset: Option<String> = None;
+        let mut collation: Option<String> = None;
+        let mut on_commit: Option<OnCommit> = None;
+        let mut strict = false;
 
-        let mut table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
+        loop {
+            // WITH (...) options
+            if with_options.is_empty() {
+                let opts = self.parse_options(Keyword::WITH)?;
+                if !opts.is_empty() {
+                    with_options = opts;
+                    continue;
+                }
+            }
 
-        let engine = if self.parse_keyword(Keyword::ENGINE) {
-            self.expect_token(&Token::Eq)?;
-            let next_token = self.next_token();
-            let engine_name = match next_token.token {
-                Token::Word(w) => w.value,
-                _ => self.expected("identifier", next_token)?,
-            };
-            let engine_options = if self.consume_token(&Token::LParen) {
-                let columns = if !self.peek_token_is(&Token::RParen) {
+            // TBLPROPERTIES (...)
+            {
+                let opts = self.parse_options(Keyword::TBLPROPERTIES)?;
+                if !opts.is_empty() {
+                    table_properties.extend(opts);
+                    continue;
+                }
+            }
+
+            // ENGINE = name[(args)]
+            if engine.is_none() && self.parse_keyword(Keyword::ENGINE) {
+                self.expect_token(&Token::Eq)?;
+                let next_token = self.next_token();
+                let engine_name = match next_token.token {
+                    Token::Word(w) => w.value,
+                    _ => self.expected("identifier", next_token)?,
+                };
+                let engine_options = if self.consume_token(&Token::LParen) {
+                    let columns = if !self.peek_token_is(&Token::RParen) {
+                        self.parse_comma_separated(|p| p.parse_expr())?
+                    } else {
+                        vec![]
+                    };
+                    self.expect_token(&Token::RParen)?;
+                    Some(columns)
+                } else {
+                    None
+                };
+                engine = Some(EngineSpec {
+                    name: engine_name,
+                    options: engine_options,
+                });
+                continue;
+            }
+
+            // COMMENT [=] 'text'
+            if comment.is_none() && self.parse_keyword(Keyword::COMMENT) {
+                let _ = self.consume_token(&Token::Eq);
+                let next_token = self.next_token();
+                comment = match next_token.token {
+                    Token::SingleQuotedString(str) => Some(str),
+                    _ => self.expected("comment", next_token)?,
+                };
+                continue;
+            }
+
+            // AUTO_INCREMENT [=] offset
+            if auto_increment_offset.is_none() && self.parse_keyword(Keyword::AUTO_INCREMENT) {
+                let _ = self.consume_token(&Token::Eq);
+                let next_token = self.next_token();
+                auto_increment_offset = match next_token.token {
+                    Token::Number(s, _) => Some(s.parse::<u32>().expect("literal int")),
+                    _ => self.expected("literal int", next_token)?,
+                };
+                continue;
+            }
+
+            // PRIMARY KEY (cols)
+            if primary_key.is_none() && self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY]) {
+                primary_key = Some(self.parse_parenthesized_column_list(Optional, false)?);
+                continue;
+            }
+
+            // ORDER BY (cols) or ORDER BY col
+            if order_by.is_none() && self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                order_by = if self.consume_token(&Token::LParen) {
+                    let columns = if !self.peek_token_is(&Token::RParen) {
+                        self.parse_comma_separated(|p| p.parse_identifier(false))?
+                    } else {
+                        vec![]
+                    };
+                    self.expect_token(&Token::RParen)?;
+                    Some(columns)
+                } else if self.parse_keyword(Keyword::TUPLE)
+                    && dialect_of!(self is ClickHouseDialect)
+                {
+                    self.expect_token(&Token::LParen)?;
+                    self.expect_token(&Token::RParen)?;
+                    Some(vec![])
+                } else {
+                    Some(vec![self.parse_identifier(false)?])
+                };
+                continue;
+            }
+
+            // PARTITION BY expr
+            if partitioned_by.is_none()
+                && self.parse_keywords(&[Keyword::PARTITION, Keyword::BY])
+            {
+                partitioned_by = Some(self.parse_expr()?);
+                continue;
+            }
+
+            // CLUSTER BY (exprs) or CLUSTER BY exprs
+            if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
+                let exprs = if self.peek_token_is(&Token::LParen) {
+                    self.expect_token(&Token::LParen)?;
+                    let exprs = if !self.peek_token_is(&Token::RParen) {
+                        self.parse_comma_separated(|p| p.parse_expr())?
+                    } else {
+                        vec![]
+                    };
+                    self.expect_token(&Token::RParen)?;
+                    exprs
+                } else {
                     self.parse_comma_separated(|p| p.parse_expr())?
-                } else {
-                    vec![]
                 };
-                self.expect_token(&Token::RParen)?;
-                Some(columns)
-            } else {
-                None
-            };
-            Some(EngineSpec {
-                name: engine_name,
-                options: engine_options,
-            })
-        } else {
-            None
-        };
-
-        let mut comment = if self.parse_keyword(Keyword::COMMENT) {
-            let _ = self.consume_token(&Token::Eq);
-            let next_token = self.next_token();
-            match next_token.token {
-                Token::SingleQuotedString(str) => Some(str),
-                _ => self.expected("comment", next_token)?,
+                cluster_by = Some(exprs);
+                continue;
             }
-        } else {
-            None
-        };
 
-        let with_options_later = self.parse_options(Keyword::WITH)?;
-        with_options.extend(with_options_later);
-
-        let auto_increment_offset = if self.parse_keyword(Keyword::AUTO_INCREMENT) {
-            let _ = self.consume_token(&Token::Eq);
-            let next_token = self.next_token();
-            match next_token.token {
-                Token::Number(s, _) => Some(s.parse::<u32>().expect("literal int")),
-                _ => self.expected("literal int", next_token)?,
+            // TTL expr (ClickHouse)
+            if table_ttl.is_none()
+                && self.parse_keyword(Keyword::TTL)
+                && dialect_of!(self is ClickHouseDialect | GenericDialect)
+            {
+                table_ttl = Some(self.parse_expr()?);
+                continue;
             }
-        } else {
-            None
-        };
 
-        let primary_key = if self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY]) {
-            Some(self.parse_parenthesized_column_list(Optional, false)?)
-        } else {
-            None
-        };
+            // SETTINGS key=val, ... (ClickHouse)
+            if clickhouse_settings.is_none() && self.parse_keyword(Keyword::SETTINGS) {
+                clickhouse_settings =
+                    Some(self.parse_comma_separated(Parser::parse_sql_option)?);
+                continue;
+            }
 
-        let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
-            if self.consume_token(&Token::LParen) {
-                let columns = if !self.peek_token_is(&Token::RParen) {
-                    self.parse_comma_separated(|p| p.parse_identifier(false))?
-                } else {
-                    vec![]
+            // LOCATION 'path'
+            if location.is_none() && self.parse_keyword(Keyword::LOCATION) {
+                location = Some(self.parse_literal_string()?);
+                continue;
+            }
+
+            // OPTIONS (...)
+            if table_options.is_empty() {
+                let opts = self.parse_options(Keyword::OPTIONS)?;
+                if !opts.is_empty() {
+                    table_options = opts;
+                    continue;
+                }
+            }
+
+            // COPY GRANTS (Snowflake)
+            if !copy_grants && self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]) {
+                copy_grants = true;
+                continue;
+            }
+
+            // TAG (...) (Snowflake)
+            if self.parse_optional_tag_clause() {
+                continue;
+            }
+
+            // DEFAULT CHARSET = name (MySQL)
+            if default_charset.is_none()
+                && self.parse_keywords(&[Keyword::DEFAULT, Keyword::CHARSET])
+            {
+                self.expect_token(&Token::Eq)?;
+                let next_token = self.next_token();
+                default_charset = match next_token.token {
+                    Token::Word(w) => Some(w.value),
+                    _ => self.expected("identifier", next_token)?,
                 };
-                self.expect_token(&Token::RParen)?;
-                Some(columns)
-            } else if self.parse_keyword(Keyword::TUPLE) && dialect_of!(self is ClickHouseDialect) {
-                self.expect_token(&Token::LParen)?;
-                self.expect_token(&Token::RParen)?;
-                Some(vec![])
-            } else {
-                Some(vec![self.parse_identifier(false)?])
+                continue;
             }
-        } else {
-            None
-        };
 
-        // In BigQuery PARITION BY can be also defined after columns
-        let partitioned_by = if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
-            Some(self.parse_expr()?)
-        } else {
-            None
-        };
-
-        // In Snowflake CLUSTER BY can be also defined after columns
-        if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
-            let exprs = if self.peek_token_is(&Token::LParen) {
-                self.expect_token(&Token::LParen)?;
-                let exprs = if !self.peek_token_is(&Token::RParen) {
-                    self.parse_comma_separated(|p| p.parse_expr())?
-                } else {
-                    vec![]
+            // COLLATE = name (MySQL)
+            if collation.is_none() && self.parse_keyword(Keyword::COLLATE) {
+                self.expect_token(&Token::Eq)?;
+                let next_token = self.next_token();
+                collation = match next_token.token {
+                    Token::Word(w) => Some(w.value),
+                    _ => self.expected("identifier", next_token)?,
                 };
-                self.expect_token(&Token::RParen)?;
-                exprs
-            } else {
-                self.parse_comma_separated(|p| p.parse_expr())?
-            };
-            cluster_by = Some(exprs)
-        };
-
-        let table_ttl = if self.parse_keyword(Keyword::TTL)
-            && dialect_of!(self is ClickHouseDialect | GenericDialect)
-        {
-            Some(self.parse_expr()?)
-        } else {
-            None
-        };
-
-        let clickhouse_settings = if self.parse_keyword(Keyword::SETTINGS) {
-            Some(self.parse_comma_separated(Parser::parse_sql_option)?)
-        } else {
-            None
-        };
-
-        comment = if self.parse_keyword(Keyword::COMMENT) {
-            let _ = self.consume_token(&Token::Eq);
-            let next_token = self.next_token();
-            match next_token.token {
-                Token::SingleQuotedString(str) => Some(str),
-                _ => self.expected("comment", next_token)?,
+                continue;
             }
-        } else {
-            comment
-        };
 
-        let table_options = self.parse_options(Keyword::OPTIONS)?;
+            // ON COMMIT {DELETE ROWS|PRESERVE ROWS|DROP}
+            if on_commit.is_none() {
+                if self.parse_keywords(&[
+                    Keyword::ON,
+                    Keyword::COMMIT,
+                    Keyword::DELETE,
+                    Keyword::ROWS,
+                ]) {
+                    on_commit = Some(OnCommit::DeleteRows);
+                    continue;
+                } else if self.parse_keywords(&[
+                    Keyword::ON,
+                    Keyword::COMMIT,
+                    Keyword::PRESERVE,
+                    Keyword::ROWS,
+                ]) {
+                    on_commit = Some(OnCommit::PreserveRows);
+                    continue;
+                } else if self.parse_keywords(&[Keyword::ON, Keyword::COMMIT, Keyword::DROP]) {
+                    on_commit = Some(OnCommit::Drop);
+                    continue;
+                }
+            }
 
-        let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+            // STRICT (SQLite)
+            if !strict && self.parse_keyword(Keyword::STRICT) {
+                strict = true;
+                continue;
+            }
 
-        // Skip optional TAG (...) clause (Snowflake)
-        self.parse_optional_tag_clause();
+            // KEY = VALUE dialect-specific options (DEFAULT_DDL_COLLATION, etc.)
+            if matches!(self.peek_token_kind().clone(), Token::Word(_))
+                && self.peek_nth_token(1).token == Token::Eq
+                // Don't consume AS = ... which could be something else
+                && !matches!(
+                    self.peek_token().token,
+                    Token::Word(ref w) if w.keyword == Keyword::AS
+                )
+            {
+                self.next_token(); // keyword
+                self.next_token(); // =
+                if self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                } else {
+                    let _ = self.parse_expr();
+                }
+                continue;
+            }
+
+            break;
+        }
 
         // Parse optional `AS ( query )` or `AS table_name` (ClickHouse)
         let query = if self.parse_keyword(Keyword::AS) {
@@ -5185,72 +5316,6 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let default_charset = if self.parse_keywords(&[Keyword::DEFAULT, Keyword::CHARSET]) {
-            self.expect_token(&Token::Eq)?;
-            let next_token = self.next_token();
-            match next_token.token {
-                Token::Word(w) => Some(w.value),
-                _ => self.expected("identifier", next_token)?,
-            }
-        } else {
-            None
-        };
-
-        let collation = if self.parse_keywords(&[Keyword::COLLATE]) {
-            self.expect_token(&Token::Eq)?;
-            let next_token = self.next_token();
-            match next_token.token {
-                Token::Word(w) => Some(w.value),
-                _ => self.expected("identifier", next_token)?,
-            }
-        } else {
-            None
-        };
-
-        let on_commit: Option<OnCommit> =
-            if self.parse_keywords(&[Keyword::ON, Keyword::COMMIT, Keyword::DELETE, Keyword::ROWS])
-            {
-                Some(OnCommit::DeleteRows)
-            } else if self.parse_keywords(&[
-                Keyword::ON,
-                Keyword::COMMIT,
-                Keyword::PRESERVE,
-                Keyword::ROWS,
-            ]) {
-                Some(OnCommit::PreserveRows)
-            } else if self.parse_keywords(&[Keyword::ON, Keyword::COMMIT, Keyword::DROP]) {
-                Some(OnCommit::Drop)
-            } else {
-                None
-            };
-
-        let strict = self.parse_keyword(Keyword::STRICT);
-
-        //Databricks has TBLPROPERTIES after COMMENT
-        let _table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
-        table_properties.extend(_table_properties);
-
-        // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
-        while matches!(self.peek_token_kind().clone(), Token::Word(_))
-            && self.peek_nth_token(1).token == Token::Eq
-        {
-            self.next_token(); // keyword
-            self.next_token(); // =
-            if self.consume_token(&Token::LParen) {
-                let mut depth = 1i32;
-                while depth > 0 {
-                    match self.next_token().token {
-                        Token::LParen => depth += 1,
-                        Token::RParen => depth -= 1,
-                        Token::EOF => break,
-                        _ => {}
-                    }
-                }
-            } else {
-                let _ = self.parse_expr();
-            }
-        }
-
         Ok(CreateTableBuilder::new(table_name)
             .temporary(temporary)
             .columns(columns)
@@ -5288,6 +5353,7 @@ impl<'a> Parser<'a> {
             .table_options(table_options)
             .projections(projections)
             .copy_grants(copy_grants)
+            .location(location)
             .build())
     }
 
@@ -5930,7 +5996,8 @@ impl<'a> Parser<'a> {
 
     /// Skip an optional `TAG (qualified_name = 'value', ...)` clause (Snowflake).
     /// Consumes the TAG keyword and the parenthesized list if present.
-    fn parse_optional_tag_clause(&mut self) {
+    /// Returns true if a TAG clause was consumed.
+    fn parse_optional_tag_clause(&mut self) -> bool {
         if self.parse_keyword(Keyword::TAG) {
             if self.consume_token(&Token::LParen) {
                 let mut depth = 1i32;
@@ -5943,6 +6010,9 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
+            true
+        } else {
+            false
         }
     }
 
@@ -9172,6 +9242,12 @@ impl<'a> Parser<'a> {
             };
 
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+
+            // ClickHouse: SELECT ... FROM table [AS alias] FINAL
+            // Skip FINAL keyword (doesn't affect lineage)
+            if dialect_of!(self is ClickHouseDialect) {
+                let _ = self.parse_keyword(Keyword::FINAL);
+            }
 
             // MSSQL-specific table hints:
             let mut with_hints = vec![];

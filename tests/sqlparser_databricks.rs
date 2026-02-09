@@ -229,6 +229,20 @@ fn test_array_struct_access() {
 }
 
 #[test]
+fn test_create_table_with_location() {
+    // Databricks: CREATE TABLE with LOCATION and TBLPROPERTIES in various orders
+    databricks().verified_stmt(
+        "CREATE TABLE t (c1 INT) LOCATION 's3://bucket/path'",
+    );
+    databricks().verified_stmt(
+        "CREATE TABLE t (c1 INT) COMMENT 'test' LOCATION 's3://bucket/path'",
+    );
+    databricks().verified_stmt(
+        "CREATE TABLE t (c1 INT) LOCATION 's3://bucket/path' TBLPROPERTIES ('k1' = 'v1')",
+    );
+}
+
+#[test]
 fn test_cross_join() {
     databricks_and_generic().verified_stmt("SELECT * FROM tbl CROSS JOIN tbl2 ON tbl.id = tbl2.id");
 }
