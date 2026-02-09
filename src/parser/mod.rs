@@ -5370,12 +5370,37 @@ impl<'a> Parser<'a> {
                 Token::make_keyword("AUTO_INCREMENT"),
             ])))
         } else if self.parse_keyword(Keyword::AUTOINCREMENT)
-            && dialect_of!(self is SQLiteDialect |  GenericDialect)
+            && dialect_of!(self is SQLiteDialect | SnowflakeDialect | GenericDialect)
         {
-            // Support AUTOINCREMENT for SQLite
-            Ok(Some(ColumnOption::DialectSpecific(vec![
-                Token::make_keyword("AUTOINCREMENT"),
-            ])))
+            // Snowflake: AUTOINCREMENT [START n INCREMENT n] [ORDER|NOORDER]
+            if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                && self.parse_keyword(Keyword::START)
+            {
+                let seed = Some(self.parse_expr()?);
+                self.expect_keyword(Keyword::INCREMENT)?;
+                let increment = Some(self.parse_expr()?);
+                // Skip optional ORDER or NOORDER
+                let _ = self.parse_keyword(Keyword::ORDER)
+                    || self.parse_keyword(Keyword::NOORDER);
+                Ok(Some(ColumnOption::Identity { seed, increment }))
+            } else if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                && self.consume_token(&Token::LParen)
+            {
+                // AUTOINCREMENT(seed, increment)
+                let seed = Some(self.parse_expr()?);
+                self.expect_token(&Token::Comma)?;
+                let increment = Some(self.parse_expr()?);
+                self.expect_token(&Token::RParen)?;
+                // Skip optional ORDER or NOORDER
+                let _ = self.parse_keyword(Keyword::ORDER)
+                    || self.parse_keyword(Keyword::NOORDER);
+                Ok(Some(ColumnOption::Identity { seed, increment }))
+            } else {
+                // SQLite: just AUTOINCREMENT
+                Ok(Some(ColumnOption::DialectSpecific(vec![
+                    Token::make_keyword("AUTOINCREMENT"),
+                ])))
+            }
         } else if self.parse_keywords(&[Keyword::ON, Keyword::UPDATE])
             && dialect_of!(self is MySqlDialect | GenericDialect)
         {
