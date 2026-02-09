@@ -3116,6 +3116,13 @@ impl fmt::Display for Statement {
                 if let Some(cluster_by) = cluster_by {
                     write!(f, " CLUSTER BY ({})", display_comma_separated(cluster_by))?;
                 }
+                // Display LOCATION for non-external tables (Databricks/Redshift)
+                // External table LOCATION is handled above via hive_formats
+                if !*external {
+                    if let Some(loc) = location {
+                        write!(f, " LOCATION '{loc}'")?;
+                    }
+                }
                 if !table_options.is_empty() {
                     write!(f, " OPTIONS ({})", display_comma_separated(table_options))?;
                 }

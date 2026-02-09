@@ -1411,6 +1411,20 @@ fn parse_create_table_as_function() {
     );
 }
 
+#[test]
+fn parse_select_from_table_final() {
+    // ClickHouse: SELECT ... FROM table FINAL - FINAL is skipped (not stored in AST)
+    clickhouse().one_statement_parses_to(
+        "SELECT * FROM t FINAL",
+        "SELECT * FROM t",
+    );
+    // FINAL after alias
+    clickhouse().one_statement_parses_to(
+        "SELECT * FROM t AS t1 FINAL",
+        "SELECT * FROM t AS t1",
+    );
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],
