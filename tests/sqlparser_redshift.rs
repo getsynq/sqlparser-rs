@@ -335,6 +335,28 @@ fn test_materialized_view_auto_refresh() {
 }
 
 #[test]
+fn parse_create_materialized_view_with_redshift_clauses() {
+    // BACKUP and DISTSTYLE are skipped during parsing
+    redshift().one_statement_parses_to(
+        "CREATE MATERIALIZED VIEW mv BACKUP YES DISTSTYLE EVEN AS SELECT 1",
+        "CREATE MATERIALIZED VIEW mv AS SELECT 1",
+    );
+
+    // All Redshift-specific clauses combined; BACKUP/DISTSTYLE/DISTKEY/SORTKEY are skipped,
+    // AUTO REFRESH is preserved in the AST
+    redshift().one_statement_parses_to(
+        "CREATE MATERIALIZED VIEW mv BACKUP NO DISTSTYLE KEY DISTKEY (col1) SORTKEY (col1, col2) AUTO REFRESH YES AS SELECT 1",
+        "CREATE MATERIALIZED VIEW mv AUTO REFRESH YES AS SELECT 1",
+    );
+
+    // INTERLEAVED SORTKEY
+    redshift().one_statement_parses_to(
+        "CREATE MATERIALIZED VIEW mv BACKUP YES DISTSTYLE EVEN INTERLEAVED SORTKEY (col1, col2) AUTO REFRESH NO AS SELECT 1",
+        "CREATE MATERIALIZED VIEW mv AUTO REFRESH NO AS SELECT 1",
+    );
+}
+
+#[test]
 fn test_create_view_late_binding() {
     redshift()
         .verified_stmt("CREATE VIEW myevent AS SELECT eventname FROM event WITH NO SCHEMA BINDING");

@@ -4078,6 +4078,44 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Skip Redshift-specific CREATE MATERIALIZED VIEW clauses:
+        // BACKUP YES|NO, DISTSTYLE EVEN|ALL|AUTO|KEY, DISTKEY (col),
+        // SORTKEY (col1, ...), INTERLEAVED SORTKEY (col1, ...)
+        // These appear before AUTO REFRESH and AS in Redshift.
+        if materialized {
+            loop {
+                if self.parse_keyword(Keyword::BACKUP) {
+                    // BACKUP YES|NO
+                    let _ = self.parse_keyword(Keyword::YES)
+                        || self.parse_keyword(Keyword::NO);
+                } else if self.parse_keyword(Keyword::DISTSTYLE) {
+                    // DISTSTYLE EVEN|ALL|AUTO|KEY
+                    let _ = self.next_token();
+                } else if self.parse_keyword(Keyword::DISTKEY) {
+                    // DISTKEY (col)
+                    if self.consume_token(&Token::LParen) {
+                        let _ = self.parse_identifier(false);
+                        let _ = self.expect_token(&Token::RParen);
+                    }
+                } else if self.parse_keyword(Keyword::INTERLEAVED) {
+                    // INTERLEAVED SORTKEY (col1, col2, ...)
+                    let _ = self.parse_keyword(Keyword::SORTKEY);
+                    if self.consume_token(&Token::LParen) {
+                        let _ = self.parse_comma_separated(|p| p.parse_identifier(false));
+                        let _ = self.expect_token(&Token::RParen);
+                    }
+                } else if self.parse_keyword(Keyword::SORTKEY) {
+                    // SORTKEY (col1, col2, ...)
+                    if self.consume_token(&Token::LParen) {
+                        let _ = self.parse_comma_separated(|p| p.parse_identifier(false));
+                        let _ = self.expect_token(&Token::RParen);
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
         let auto_refresh = if self.parse_keywords(&[Keyword::AUTO, Keyword::REFRESH]) {
             if self.parse_keyword(Keyword::YES) {
                 Some(true)
