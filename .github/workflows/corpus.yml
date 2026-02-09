@@ -10,6 +10,12 @@ on:
   pull_request_target:
     types: [opened, synchronize]
   workflow_dispatch: {}
+
+# Cancel previous runs on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   corpus:
     name: Corpus Parsing Tests
