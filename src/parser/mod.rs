@@ -9395,7 +9395,15 @@ impl<'a> Parser<'a> {
             };
             PivotValueSource::Any(order_by)
         } else {
-            let pivot_values = self.parse_comma_separated(Parser::parse_value)?;
+            let pivot_values = self.parse_comma_separated(|p| {
+                let value = p.parse_value()?;
+                let alias = if p.parse_keyword(Keyword::AS) {
+                    Some(p.parse_identifier(false)?.unwrap())
+                } else {
+                    None
+                };
+                Ok(PivotValue { value, alias })
+            })?;
             PivotValueSource::List(pivot_values)
         };
 

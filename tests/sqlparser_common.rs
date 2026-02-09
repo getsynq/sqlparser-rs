@@ -8179,10 +8179,10 @@ fn parse_pivot_table() {
             }))],
             value_column: vec![Ident::new("a"), Ident::new("MONTH")],
             value_source: PivotValueSource::List(vec![
-                Value::SingleQuotedString("JAN".to_string()),
-                Value::SingleQuotedString("FEB".to_string()),
-                Value::SingleQuotedString("MAR".to_string()),
-                Value::SingleQuotedString("APR".to_string()),
+                PivotValue { value: Value::SingleQuotedString("JAN".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("FEB".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("MAR".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("APR".to_string()), alias: None },
             ]),
             alias: Some(TableAlias {
                 name: Ident {
@@ -8276,10 +8276,10 @@ fn parse_pivot_table_aliases() {
             ],
             value_column: vec![Ident::new("a"), Ident::new("MONTH")],
             value_source: PivotValueSource::List(vec![
-                Value::SingleQuotedString("JAN".to_string()),
-                Value::SingleQuotedString("FEB".to_string()),
-                Value::SingleQuotedString("MAR".to_string()),
-                Value::SingleQuotedString("APR".to_string()),
+                PivotValue { value: Value::SingleQuotedString("JAN".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("FEB".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("MAR".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("APR".to_string()), alias: None },
             ]),
             alias: Some(TableAlias {
                 name: Ident {
@@ -8290,6 +8290,23 @@ fn parse_pivot_table_aliases() {
                 columns: vec![Ident::new("c").empty_span(), Ident::new("d").empty_span()],
             }),
         }
+    );
+    assert_eq!(verified_stmt(sql).to_string(), sql);
+}
+
+#[test]
+fn parse_pivot_value_aliases() {
+    // PIVOT with aliased values in IN clause
+    let sql = concat!(
+        "SELECT * FROM monthly_sales ",
+        "PIVOT(SUM(amount) FOR MONTH IN ('JAN' AS jan, 'FEB' AS feb, 'MAR' AS mar))"
+    );
+    assert_eq!(verified_stmt(sql).to_string(), sql);
+
+    // Mixed: some values with aliases, some without
+    let sql = concat!(
+        "SELECT * FROM monthly_sales ",
+        "PIVOT(SUM(amount) FOR MONTH IN ('JAN' AS jan, 'FEB', 'MAR' AS mar))"
     );
     assert_eq!(verified_stmt(sql).to_string(), sql);
 }
@@ -8431,8 +8448,8 @@ fn parse_pivot_unpivot_table() {
             }))],
             value_column: vec![Ident::new("year")],
             value_source: PivotValueSource::List(vec![
-                Value::SingleQuotedString("population_2000".to_string()),
-                Value::SingleQuotedString("population_2010".to_string()),
+                PivotValue { value: Value::SingleQuotedString("population_2000".to_string()), alias: None },
+                PivotValue { value: Value::SingleQuotedString("population_2010".to_string()), alias: None },
             ]),
             alias: Some(TableAlias {
                 name: Ident::new("p").empty_span(),
