@@ -1367,7 +1367,7 @@ impl<'a> Tokenizer<'a> {
                     // consume
                     chars.next();
                     // slash escaping is specific to MySQL / BigQuery dialect.
-                    if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect)
+                    if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect)
                     {
                         if let Some(next) = chars.peek() {
                             if !self.unescape {
