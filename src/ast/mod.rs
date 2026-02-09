@@ -1269,6 +1269,8 @@ impl Display for WindowType {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct WindowSpec {
+    /// Optional base window name to inherit from
+    pub window_name: Option<Ident>,
     pub partition_by: Vec<Expr>,
     pub order_by: Vec<OrderByExpr>,
     pub window_frame: Option<WindowFrame>,
@@ -1277,7 +1279,12 @@ pub struct WindowSpec {
 impl fmt::Display for WindowSpec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut delim = "";
+        if let Some(window_name) = &self.window_name {
+            write!(f, "{window_name}")?;
+            delim = " ";
+        }
         if !self.partition_by.is_empty() {
+            f.write_str(delim)?;
             delim = " ";
             write!(
                 f,
