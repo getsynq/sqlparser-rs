@@ -9051,6 +9051,7 @@ impl<'a> Parser<'a> {
                 .map(|(kw, columns)| match kw {
                     Keyword::DELETE => Ok(Action::Delete),
                     Keyword::INSERT => Ok(Action::Insert { columns }),
+                    Keyword::OWNERSHIP => Ok(Action::Ownership),
                     Keyword::REFERENCES => Ok(Action::References { columns }),
                     Keyword::SELECT => Ok(Action::Select { columns }),
                     Keyword::TRIGGER => Ok(Action::Trigger),
@@ -9146,6 +9147,7 @@ impl<'a> Parser<'a> {
             Keyword::DELETE,
             Keyword::EXECUTE,
             Keyword::INSERT,
+            Keyword::OWNERSHIP,
             Keyword::REFERENCES,
             Keyword::SELECT,
             Keyword::TEMPORARY,

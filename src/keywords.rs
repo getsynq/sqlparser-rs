@@ -511,6 +511,7 @@ define_keywords!(
     OVERLAY,
     OVERWRITE,
     OWNED,
+    OWNERSHIP,
     PARAMETER,
     PARQUET,
     PART,
