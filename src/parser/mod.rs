@@ -5123,11 +5123,19 @@ impl<'a> Parser<'a> {
                     if !matches!(
                         w.keyword,
                         Keyword::SELECT | Keyword::WITH | Keyword::VALUES | Keyword::TABLE
-                    ) && !matches!(self.peek_nth_token(0).token, Token::LParen) =>
+                    ) =>
                 {
-                    // ClickHouse: CREATE TABLE t1 (...) AS t2
-                    // Wrap as SELECT * FROM t2 to preserve the source table reference
+                    // ClickHouse/Redshift: CREATE TABLE t1 AS t2 or AS func(args)
+                    // Wrap as SELECT * FROM t2 / SELECT * FROM func(args)
                     let table_name = self.parse_object_name(false)?;
+                    // Parse optional function arguments: AS func(1, 5)
+                    let args = if self.consume_token(&Token::LParen) {
+                        let args = self.parse_comma_separated(Parser::parse_function_args)?;
+                        self.expect_token(&Token::RParen)?;
+                        Some(args)
+                    } else {
+                        None
+                    };
                     Some(Box::new(Query {
                         with: None,
                         body: Box::new(SetExpr::Select(Box::new(Select {
@@ -5142,7 +5150,7 @@ impl<'a> Parser<'a> {
                                 relation: TableFactor::Table {
                                     name: table_name,
                                     alias: None,
-                                    args: None,
+                                    args,
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
