@@ -838,6 +838,26 @@ impl fmt::Display for PivotValueSource {
     }
 }
 
+/// Null handling for UNPIVOT operations.
+///
+/// Syntax: `UNPIVOT [ { INCLUDE NULLS | EXCLUDE NULLS } ] (...)`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum UnpivotNullHandling {
+    IncludeNulls,
+    ExcludeNulls,
+}
+
+impl fmt::Display for UnpivotNullHandling {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnpivotNullHandling::IncludeNulls => write!(f, "INCLUDE NULLS"),
+            UnpivotNullHandling::ExcludeNulls => write!(f, "EXCLUDE NULLS"),
+        }
+    }
+}
+
 /// A table name or a parenthesized subquery with an optional alias
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -935,7 +955,7 @@ pub enum TableFactor {
     ///
     /// Syntax:
     /// ```sql
-    /// table UNPIVOT(value FOR name IN (column1, [ column2, ... ])) [ alias ]
+    /// table UNPIVOT [ { INCLUDE NULLS | EXCLUDE NULLS } ] (value FOR name IN (column1, [ column2, ... ])) [ alias ]
     /// ```
     ///
     /// See <https://docs.snowflake.com/en/sql-reference/constructs/unpivot>.
@@ -945,6 +965,7 @@ pub enum TableFactor {
         value: WithSpan<Ident>,
         name: WithSpan<Ident>,
         columns: Vec<WithSpan<Ident>>,
+        null_handling: Option<UnpivotNullHandling>,
         alias: Option<TableAlias>,
     },
 
@@ -1113,12 +1134,16 @@ impl fmt::Display for TableFactor {
                 value,
                 name,
                 columns,
+                null_handling,
                 alias,
             } => {
+                write!(f, "{} UNPIVOT", table)?;
+                if let Some(nh) = null_handling {
+                    write!(f, " {nh}")?;
+                }
                 write!(
                     f,
-                    "{} UNPIVOT({} FOR {} IN ({}))",
-                    table,
+                    "({} FOR {} IN ({}))",
                     value,
                     name,
                     display_comma_separated(columns)
