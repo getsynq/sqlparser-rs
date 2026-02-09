@@ -21,7 +21,8 @@ cd "$REPO_ROOT"
 
 # Run tests (continue on error to get partial results)
 # Set RUST_MIN_STACK to 4MB to handle deeply nested queries without excessive memory
-RUST_MIN_STACK=4194304 cargo test --test sqlparser_corpus 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
+# Use nextest for better timeout handling (see .config/nextest.toml)
+RUST_MIN_STACK=4194304 cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
 
 # Check if report was generated
 if [ ! -f "$REPO_ROOT/target/corpus-report.json" ]; then

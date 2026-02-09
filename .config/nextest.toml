@@ -1,1 +1,11 @@
-[profile.dev]
+# Nextest configuration for sqlparser-rs
+# See: https://nexte.st/docs/configuration/
+
+[profile.default]
+# Default timeout for regular tests - terminate after 90 seconds
+slow-timeout = { period = "30s", terminate-after = 3 }
+
+# Corpus tests can take longer - give them more time
+[[profile.default.overrides]]
+filter = 'test(=sqlparser_corpus)'
+slow-timeout = { period = "5m", terminate-after = 6 }  # 30 minutes total
