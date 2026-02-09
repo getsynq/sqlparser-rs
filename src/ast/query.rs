@@ -791,6 +791,32 @@ impl Display for TableSampleSeed {
     }
 }
 
+/// Values that can appear in PIVOT's IN clause
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum PivotValueSource {
+    /// Concrete list of values: IN ('Q1', 'Q2', 'Q3', 'Q4')
+    List(Vec<Value>),
+    /// Dynamic: IN (ANY ORDER BY column)
+    Any(Option<OrderBy>),
+}
+
+impl fmt::Display for PivotValueSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PivotValueSource::List(values) => write!(f, "{}", display_comma_separated(values)),
+            PivotValueSource::Any(order_by) => {
+                write!(f, "ANY")?;
+                if let Some(order_by) = order_by {
+                    write!(f, " ORDER BY {}", display_comma_separated(&order_by.exprs))?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 /// A table name or a parenthesized subquery with an optional alias
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -874,13 +900,14 @@ pub enum TableFactor {
     },
     /// Represents PIVOT operation on a table.
     /// For example `FROM monthly_sales PIVOT(sum(amount) FOR MONTH IN ('JAN', 'FEB'))`
+    /// Or `FROM monthly_sales PIVOT(sum(amount) FOR MONTH IN (ANY ORDER BY MONTH))`
     /// See <https://docs.snowflake.com/en/sql-reference/constructs/pivot>
     Pivot {
         #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
         table: Box<TableFactor>,
         aggregates: Vec<AggregateItem>,
         value_column: Vec<Ident>,
-        pivot_values: Vec<Value>,
+        value_source: PivotValueSource,
         alias: Option<TableAlias>,
     },
     /// An UNPIVOT operation on a table.
@@ -1044,7 +1071,7 @@ impl fmt::Display for TableFactor {
                 table,
                 aggregates: aggregate_projections,
                 value_column,
-                pivot_values,
+                value_source,
                 alias,
             } => {
                 write!(
@@ -1053,7 +1080,7 @@ impl fmt::Display for TableFactor {
                     table,
                     display_comma_separated(aggregate_projections),
                     Expr::CompoundIdentifier(value_column.to_vec().empty_span()),
-                    display_comma_separated(pivot_values)
+                    value_source
                 )?;
                 if alias.is_some() {
                     write!(f, " AS {}", alias.as_ref().unwrap())?;

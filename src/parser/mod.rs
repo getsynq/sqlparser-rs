@@ -8931,7 +8931,22 @@ impl<'a> Parser<'a> {
         let value_column = self.parse_object_name(false)?.0;
         self.expect_keyword(Keyword::IN)?;
         self.expect_token(&Token::LParen)?;
-        let pivot_values = self.parse_comma_separated(Parser::parse_value)?;
+
+        let value_source = if self.parse_keyword(Keyword::ANY) {
+            let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                Some(OrderBy {
+                    exprs: self.parse_comma_separated(Parser::parse_order_by_expr)?,
+                    interpolate: None,
+                })
+            } else {
+                None
+            };
+            PivotValueSource::Any(order_by)
+        } else {
+            let pivot_values = self.parse_comma_separated(Parser::parse_value)?;
+            PivotValueSource::List(pivot_values)
+        };
+
         self.expect_token(&Token::RParen)?;
         self.expect_token(&Token::RParen)?;
         let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
@@ -8939,7 +8954,7 @@ impl<'a> Parser<'a> {
             table: Box::new(table),
             aggregates,
             value_column,
-            pivot_values,
+            value_source,
             alias,
         })
     }
