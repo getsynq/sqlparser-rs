@@ -4203,6 +4203,7 @@ pub enum Action {
     Insert {
         columns: Option<Vec<WithSpan<Ident>>>,
     },
+    Ownership,
     References {
         columns: Option<Vec<WithSpan<Ident>>>,
     },
@@ -4226,6 +4227,7 @@ impl fmt::Display for Action {
             Action::Delete => f.write_str("DELETE")?,
             Action::Execute => f.write_str("EXECUTE")?,
             Action::Insert { .. } => f.write_str("INSERT")?,
+            Action::Ownership => f.write_str("OWNERSHIP")?,
             Action::References { .. } => f.write_str("REFERENCES")?,
             Action::Select { .. } => f.write_str("SELECT")?,
             Action::Temporary => f.write_str("TEMPORARY")?,
