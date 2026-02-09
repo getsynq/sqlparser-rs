@@ -1689,6 +1689,24 @@ fn parse_binary_any() {
 }
 
 #[test]
+fn parse_binary_any_subquery() {
+    // = ANY (SELECT ...) should parse the subquery correctly
+    // Display adds extra parens around subquery: ANY((SELECT ...))
+    one_statement_parses_to(
+        "SELECT * FROM t WHERE col = ANY (SELECT DISTINCT col FROM t2)",
+        "SELECT * FROM t WHERE col = ANY((SELECT DISTINCT col FROM t2))",
+    );
+    one_statement_parses_to(
+        "SELECT * FROM t WHERE col = ANY (SELECT col FROM t2)",
+        "SELECT * FROM t WHERE col = ANY((SELECT col FROM t2))",
+    );
+    one_statement_parses_to(
+        "SELECT * FROM t WHERE col > ALL (SELECT col FROM t2)",
+        "SELECT * FROM t WHERE col > ALL((SELECT col FROM t2))",
+    );
+}
+
+#[test]
 fn parse_binary_all() {
     let select = verified_only_select("SELECT a = ALL(b)");
     assert_eq!(
