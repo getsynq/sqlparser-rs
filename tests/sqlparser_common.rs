@@ -268,6 +268,7 @@ fn parse_update_set_from() {
                                 joins: vec![],
                             }],
                             lateral_views: vec![],
+                sample: None,
                             selection: None,
                             group_by: GroupByExpr::Expressions(vec![Expr::Identifier(
                                 Ident::new("id").empty_span()
@@ -4057,6 +4058,7 @@ fn test_parse_named_window() {
             joins: vec![],
         }],
         lateral_views: vec![],
+                sample: None,
         selection: None,
         group_by: GroupByExpr::Expressions(vec![]),
         cluster_by: vec![],
@@ -4422,6 +4424,7 @@ fn parse_interval_and_or_xor() {
                 joins: vec![],
             }],
             lateral_views: vec![],
+                sample: None,
             selection: Some(
                 Expr::BinaryOp {
                     left: Box::new(Expr::BinaryOp {
@@ -7204,6 +7207,7 @@ fn parse_merge() {
                                 joins: vec![],
                             }],
                             lateral_views: vec![],
+                sample: None,
                             selection: None,
                             group_by: GroupByExpr::Expressions(vec![]),
                             cluster_by: vec![],
@@ -8611,6 +8615,7 @@ fn parse_unload() {
                         joins: vec![],
                     }],
                     lateral_views: vec![],
+                sample: None,
                     selection: None,
                     group_by: GroupByExpr::Expressions(vec![]),
                     cluster_by: vec![],

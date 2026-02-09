@@ -250,6 +250,8 @@ pub struct Select {
     pub from: Vec<TableWithJoins>,
     /// LATERAL VIEWs
     pub lateral_views: Vec<LateralView>,
+    /// SAMPLE (ClickHouse)
+    pub sample: Option<Expr>,
     /// WHERE
     pub selection: Option<WithSpan<Expr>>,
     /// GROUP BY
@@ -297,6 +299,9 @@ impl fmt::Display for Select {
             for lv in &self.lateral_views {
                 write!(f, "{lv}")?;
             }
+        }
+        if let Some(ref sample) = self.sample {
+            write!(f, " SAMPLE {sample}")?;
         }
         if let Some(ref selection) = self.selection {
             write!(f, " WHERE {selection}")?;

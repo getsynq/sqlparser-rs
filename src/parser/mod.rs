@@ -7731,6 +7731,7 @@ impl<'a> Parser<'a> {
                 into: None,
                 from: vec![],
                 lateral_views: vec![],
+                sample: None,
                 selection: None,
                 group_by: GroupByExpr::Expressions(vec![]),
                 cluster_by: vec![],
@@ -7954,6 +7955,12 @@ impl<'a> Parser<'a> {
             }
         }
 
+        let sample = if self.parse_keyword(Keyword::SAMPLE) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
         let selection = if self.parse_keyword(Keyword::WHERE) {
             let start_idx = self.index;
             let expr = self.parse_expr()?;
@@ -8016,6 +8023,7 @@ impl<'a> Parser<'a> {
             into,
             from,
             lateral_views,
+            sample,
             selection,
             group_by,
             cluster_by,
@@ -8590,12 +8598,21 @@ impl<'a> Parser<'a> {
             if let Some(mut table) =
                 self.maybe_parse(|parser| parser.parse_derived_table_factor(NotLateral))
             {
-                while let Some(kw) = self.parse_one_of_keywords(&[
-                    Keyword::PIVOT,
-                    Keyword::UNPIVOT,
-                    Keyword::TABLESAMPLE,
-                    Keyword::SAMPLE,
-                ]) {
+                let sample_keywords = if dialect_of!(self is ClickHouseDialect) {
+                    &[
+                        Keyword::PIVOT,
+                        Keyword::UNPIVOT,
+                        Keyword::TABLESAMPLE,
+                    ][..]
+                } else {
+                    &[
+                        Keyword::PIVOT,
+                        Keyword::UNPIVOT,
+                        Keyword::TABLESAMPLE,
+                        Keyword::SAMPLE,
+                    ][..]
+                };
+                while let Some(kw) = self.parse_one_of_keywords(sample_keywords) {
                     table = match kw {
                         Keyword::PIVOT => self.parse_pivot_table_factor(table)?,
                         Keyword::UNPIVOT => self.parse_unpivot_table_factor(table)?,
@@ -8797,12 +8814,21 @@ impl<'a> Parser<'a> {
                 partitions,
             };
 
-            while let Some(kw) = self.parse_one_of_keywords(&[
-                Keyword::PIVOT,
-                Keyword::UNPIVOT,
-                Keyword::TABLESAMPLE,
-                Keyword::SAMPLE,
-            ]) {
+            let sample_keywords = if dialect_of!(self is ClickHouseDialect) {
+                &[
+                    Keyword::PIVOT,
+                    Keyword::UNPIVOT,
+                    Keyword::TABLESAMPLE,
+                ][..]
+            } else {
+                &[
+                    Keyword::PIVOT,
+                    Keyword::UNPIVOT,
+                    Keyword::TABLESAMPLE,
+                    Keyword::SAMPLE,
+                ][..]
+            };
+            while let Some(kw) = self.parse_one_of_keywords(sample_keywords) {
                 table = match kw {
                     Keyword::PIVOT => self.parse_pivot_table_factor(table)?,
                     Keyword::UNPIVOT => self.parse_unpivot_table_factor(table)?,

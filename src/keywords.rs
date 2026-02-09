@@ -866,7 +866,8 @@ pub const RESERVED_FOR_COLUMN_ALIAS: &[Keyword] = &[
     Keyword::FROM,
     Keyword::INTO,
     Keyword::END,
-    // for ClickHouse SELECT * FROM t FORMAT... / SETTINGS ...
+    // for ClickHouse SELECT * FROM t FORMAT... / SETTINGS ... / SAMPLE ...
     Keyword::FORMAT,
     Keyword::SETTINGS,
+    Keyword::SAMPLE,
 ];
