@@ -113,16 +113,45 @@ type TestResults = BTreeMap<String, String>;
 struct ReportWriter {
     stats: Arc<Mutex<Stats>>,
     test_results: Arc<Mutex<TestResults>>,
+    write_every_n: usize,
+    count: Arc<Mutex<usize>>,
 }
 
-impl Drop for ReportWriter {
-    fn drop(&mut self) {
-        // Write report even if we're panicking
+impl ReportWriter {
+    fn new(stats: Arc<Mutex<Stats>>, test_results: Arc<Mutex<TestResults>>) -> Self {
+        let writer = Self {
+            stats,
+            test_results,
+            write_every_n: 50, // Write report every 50 tests
+            count: Arc::new(Mutex::new(0)),
+        };
+        // Write initial empty report so the file always exists
+        writer.write_report_now();
+        writer
+    }
+
+    fn increment_and_maybe_write(&self) {
+        let mut count = self.count.lock().unwrap();
+        *count += 1;
+        if *count % self.write_every_n == 0 {
+            drop(count); // Release lock before writing
+            self.write_report_now();
+        }
+    }
+
+    fn write_report_now(&self) {
         let stats = self.stats.lock().unwrap();
         let test_results = self.test_results.lock().unwrap();
         if !stats.is_empty() || !test_results.is_empty() {
             write_report(&stats, &test_results);
         }
+    }
+}
+
+impl Drop for ReportWriter {
+    fn drop(&mut self) {
+        // Write final report
+        self.write_report_now();
     }
 }
 
@@ -179,6 +208,10 @@ fn write_report(stats: &Stats, test_results: &TestResults) {
 }
 
 fn main() {
+    // Write empty report immediately so file always exists, even if we crash
+    let _ = std::fs::create_dir_all("target");
+    write_report(&BTreeMap::new(), &BTreeMap::new());
+
     let corpus_path = Path::new(CORPUS_ROOT);
     if !corpus_path.exists() {
         eprintln!("Corpus directory not found at {CORPUS_ROOT}, skipping corpus tests");
@@ -194,11 +227,8 @@ fn main() {
     let stats: Arc<Mutex<Stats>> = Arc::new(Mutex::new(BTreeMap::new()));
     let test_results: Arc<Mutex<TestResults>> = Arc::new(Mutex::new(BTreeMap::new()));
 
-    // Install report writer that will write even on panic
-    let _guard = ReportWriter {
-        stats: stats.clone(),
-        test_results: test_results.clone(),
-    };
+    // Install report writer that writes incrementally and on drop
+    let report_writer = Arc::new(ReportWriter::new(stats.clone(), test_results.clone()));
 
     let tests: Vec<libtest_mimic::Trial> = sql_files
         .into_iter()
@@ -211,6 +241,7 @@ fn main() {
             let test_path = path.clone();
             let stats = stats.clone();
             let test_results = test_results.clone();
+            let writer = report_writer.clone();
             let dialect = dialect_from_path(&path).to_string();
 
             libtest_mimic::Trial::test(name.clone(), move || {
@@ -240,6 +271,9 @@ fn main() {
 
                 // Store individual test result with relative path
                 tr.insert(name, status.to_string());
+
+                // Periodically write report to disk
+                writer.increment_and_maybe_write();
 
                 test_result
             })
