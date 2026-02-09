@@ -1545,3 +1545,23 @@ fn test_qualify_before_window() {
 fn test_json_number_start() {
     bigquery().verified_only_select("SELECT field.5k_clients_target AS clients_5k_target FROM tbl");
 }
+
+#[test]
+fn parse_bigquery_format_function() {
+    // format() as first select item
+    bigquery().verified_stmt(
+        "SELECT format('%f', round(col_15, 6)) AS swap_spread FROM t2",
+    );
+
+    // format() as non-first select item - tests trailing comma detection
+    // with RESERVED_FOR_COLUMN_ALIAS keywords followed by '('
+    bigquery().verified_stmt(
+        "SELECT col_1, format('test', col_2) AS c FROM t1",
+    );
+
+    // format() in CTE
+    bigquery().one_statement_parses_to(
+        "WITH scope AS (SELECT col_1, format('test', col_2) AS c FROM t1) SELECT * FROM tbl_1",
+        "",
+    );
+}

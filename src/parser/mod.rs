@@ -3132,7 +3132,13 @@ impl<'a> Parser<'a> {
                 Token::Word(ref kw)
                     if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&kw.keyword) =>
                 {
-                    true
+                    // If the reserved keyword is followed by '(', it's likely a
+                    // function call (e.g., `format(...)`) not a trailing comma
+                    if self.peek_nth_token_ref(1).token == Token::LParen {
+                        false
+                    } else {
+                        true
+                    }
                 }
                 Token::RParen | Token::SemiColon | Token::EOF | Token::RBracket | Token::RBrace => {
                     true
