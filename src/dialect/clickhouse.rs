@@ -28,4 +28,8 @@ impl Dialect for ClickHouseDialect {
     fn is_delimited_identifier_start(&self, ch: char) -> bool {
         ch == '`' || ch == '"'
     }
+
+    fn supports_group_by_expr(&self) -> bool {
+        true
+    }
 }

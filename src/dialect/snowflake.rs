@@ -84,6 +84,10 @@ impl Dialect for SnowflakeDialect {
 
         None
     }
+
+    fn supports_group_by_expr(&self) -> bool {
+        true
+    }
 }
 
 pub fn parse_create_stage(

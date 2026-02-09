@@ -47,4 +47,8 @@ impl Dialect for RedshiftSqlDialect {
         }
         None
     }
+
+    fn supports_group_by_expr(&self) -> bool {
+        true
+    }
 }
