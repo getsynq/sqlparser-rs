@@ -4333,6 +4333,10 @@ pub enum FunctionArgExpr {
     QualifiedWildcard(ObjectName),
     /// An unqualified `*`
     Wildcard,
+    /// Wildcard with additional options, e.g. `* EXCLUDE (col1, col2)`
+    WildcardWithOptions(WildcardAdditionalOptions),
+    /// Qualified wildcard with options, e.g. `alias.* EXCLUDE (col1)`
+    QualifiedWildcardWithOptions(ObjectName, WildcardAdditionalOptions),
 }
 
 impl fmt::Display for FunctionArgExpr {
@@ -4341,6 +4345,12 @@ impl fmt::Display for FunctionArgExpr {
             FunctionArgExpr::Expr(expr) => write!(f, "{expr}"),
             FunctionArgExpr::QualifiedWildcard(prefix) => write!(f, "{prefix}.*"),
             FunctionArgExpr::Wildcard => f.write_str("*"),
+            FunctionArgExpr::WildcardWithOptions(options) => {
+                write!(f, "*{options}")
+            }
+            FunctionArgExpr::QualifiedWildcardWithOptions(prefix, options) => {
+                write!(f, "{prefix}.*{options}")
+            }
         }
     }
 }

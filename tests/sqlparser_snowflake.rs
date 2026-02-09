@@ -1600,3 +1600,16 @@ fn test_snowflake_backslash_escape_in_strings() {
     let stmts = snowflake().parse_sql_statements(r"SELECT 'a\\b'").unwrap();
     assert_eq!(stmts.len(), 1);
 }
+
+#[test]
+fn parse_wildcard_exclude_in_function_args() {
+    // HASH(* EXCLUDE (col1, col2)) - Snowflake function with wildcard EXCLUDE
+    snowflake().verified_stmt(
+        "SELECT HASH(* EXCLUDE (col1, col2)) FROM t1",
+    );
+
+    // OBJECT_CONSTRUCT(* EXCLUDE province) - single column EXCLUDE
+    snowflake().verified_stmt(
+        "SELECT OBJECT_CONSTRUCT(* EXCLUDE province) FROM t1",
+    );
+}
