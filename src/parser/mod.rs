@@ -4081,6 +4081,9 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Skip optional TAG (...) clause (Snowflake)
+        self.parse_optional_tag_clause();
+
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
         // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` is widely supported here.
@@ -5009,6 +5012,9 @@ impl<'a> Parser<'a> {
 
         let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
 
+        // Skip optional TAG (...) clause (Snowflake)
+        self.parse_optional_tag_clause();
+
         // Parse optional `AS ( query )`
         let query = if self.parse_keyword(Keyword::AS) {
             Some(self.parse_boxed_query()?)
@@ -5248,6 +5254,9 @@ impl<'a> Parser<'a> {
             }
             None
         };
+
+        // Skip optional TAG (...) clause on columns (Snowflake)
+        self.parse_optional_tag_clause();
 
         let column_location = if dialect_of!(self is ClickHouseDialect) {
             if self.parse_keyword(Keyword::FIRST) {
@@ -5696,6 +5705,24 @@ impl<'a> Parser<'a> {
             Ok(options)
         } else {
             Ok(vec![])
+        }
+    }
+
+    /// Skip an optional `TAG (qualified_name = 'value', ...)` clause (Snowflake).
+    /// Consumes the TAG keyword and the parenthesized list if present.
+    fn parse_optional_tag_clause(&mut self) {
+        if self.parse_keyword(Keyword::TAG) {
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
         }
     }
 
