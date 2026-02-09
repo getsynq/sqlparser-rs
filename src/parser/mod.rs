@@ -3420,6 +3420,14 @@ impl<'a> Parser<'a> {
     pub fn parse_create_database(&mut self) -> Result<Statement, ParserError> {
         let ine = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
         let db_name = self.parse_object_name(false)?;
+
+        // Redshift: FROM INTEGRATION 'integration_id'
+        let from_integration = if self.parse_keywords(&[Keyword::FROM, Keyword::INTEGRATION]) {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
         let mut location = None;
         let mut managed_location = None;
         loop {
@@ -3481,6 +3489,7 @@ impl<'a> Parser<'a> {
             location,
             managed_location,
             comment,
+            from_integration,
         })
     }
 
