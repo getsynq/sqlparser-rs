@@ -89,9 +89,26 @@ fn collect_sql_files(dir: &Path) -> Vec<PathBuf> {
 /// Per-dialect pass/fail counts: [passed, failed]
 type Stats = BTreeMap<String, [usize; 2]>;
 
-/// Individual test results by test path (e.g., "bigquery/abc123.sql" -> status)
-/// Status can be "pass" or "fail"
+/// Individual test results by test path
+/// Value is "pass" or an error message (when --errors flag is used) or "fail"
 type TestResults = BTreeMap<String, String>;
+
+/// Escape a string for JSON output
+fn json_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            c if c < '\x20' => escaped.push_str(&format!("\\u{:04x}", c as u32)),
+            c => escaped.push(c),
+        }
+    }
+    escaped
+}
 
 fn write_report(stats: &Stats, test_results: &TestResults) {
     // Ensure target/ directory exists
@@ -132,10 +149,10 @@ fn write_report(stats: &Stats, test_results: &TestResults) {
     json.push_str("  \"test_results\": {\n");
     let test_count = test_results.len();
     for (i, (path, status)) in test_results.iter().enumerate() {
-        // Escape path for JSON
-        let escaped_path = path.replace('\\', "\\\\").replace('"', "\\\"");
+        let escaped_path = json_escape(path);
+        let escaped_status = json_escape(status);
         json.push_str(&format!(
-            "    \"{escaped_path}\": \"{status}\"{}",
+            "    \"{escaped_path}\": \"{escaped_status}\"{}",
             if i + 1 < test_count { ",\n" } else { "\n" }
         ));
     }
@@ -151,11 +168,17 @@ fn write_report(stats: &Stats, test_results: &TestResults) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let corpus_root = if args.len() > 1 {
-        &args[1]
-    } else {
-        DEFAULT_CORPUS_ROOT
-    };
+
+    // Parse flags
+    let include_errors = args.iter().any(|a| a == "--errors");
+
+    // Get corpus root (first non-flag argument, or default)
+    let corpus_root = args
+        .iter()
+        .skip(1)
+        .find(|a| !a.starts_with("--"))
+        .map(|s| s.as_str())
+        .unwrap_or(DEFAULT_CORPUS_ROOT);
 
     let corpus_path = Path::new(corpus_root);
     if !corpus_path.exists() {
@@ -167,6 +190,9 @@ fn main() {
     }
 
     eprintln!("Scanning corpus directory: {}", corpus_path.display());
+    if include_errors {
+        eprintln!("Including error messages in report (--errors)");
+    }
 
     let sql_files = collect_sql_files(corpus_path);
     if sql_files.is_empty() {
@@ -232,19 +258,40 @@ fn main() {
             let status = match result {
                 Ok(Ok(())) => {
                     entry[0] += 1;
-                    "pass"
+                    "pass".to_string()
                 }
-                Ok(Err(_e)) => {
+                Ok(Err(e)) => {
                     entry[1] += 1;
-                    "fail"
+                    if include_errors {
+                        // Take first line of error, truncate to 200 chars
+                        let first_line = e.lines().next().unwrap_or(&e);
+                        if first_line.len() > 200 {
+                            format!("fail: {}...", &first_line[..200])
+                        } else {
+                            format!("fail: {}", first_line)
+                        }
+                    } else {
+                        "fail".to_string()
+                    }
                 }
-                Err(_panic) => {
+                Err(panic) => {
                     entry[1] += 1;
-                    "fail"
+                    if include_errors {
+                        let msg = if let Some(s) = panic.downcast_ref::<String>() {
+                            s.clone()
+                        } else if let Some(s) = panic.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else {
+                            "unknown panic".to_string()
+                        };
+                        format!("panic: {}", msg)
+                    } else {
+                        "fail".to_string()
+                    }
                 }
             };
 
-            test_results_guard.insert(relative_path, status.to_string());
+            test_results_guard.insert(relative_path, status);
         }
 
         // Update progress counter
