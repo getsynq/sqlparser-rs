@@ -36,6 +36,9 @@ jobs:
 
       - name: Run corpus tests
         continue-on-error: true
+        env:
+          # Increase stack size to 16MB to prevent stack overflow in deeply nested parser tests
+          RUST_MIN_STACK: 16777216
         run: cargo test --test sqlparser_corpus
 
       - name: Create fallback report if tests crashed

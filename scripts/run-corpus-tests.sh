@@ -20,7 +20,8 @@ echo "==> Running corpus tests..."
 cd "$REPO_ROOT"
 
 # Run tests (continue on error to get partial results)
-cargo test --test sqlparser_corpus 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
+# Set RUST_MIN_STACK to 16MB to handle deeply nested queries
+RUST_MIN_STACK=16777216 cargo test --test sqlparser_corpus 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
 
 # Check if report was generated
 if [ ! -f "$REPO_ROOT/target/corpus-report.json" ]; then
@@ -47,6 +48,13 @@ echo ""
 echo "==> Summary"
 echo "  Passed: $PASSED / $TOTAL ($PASS_RATE%)"
 echo "  Failed: $FAILED"
+
+# Check if we hit stack overflow
+if grep -q "stack overflow" "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" 2>/dev/null; then
+    echo ""
+    echo "⚠️  Stack overflow detected - some tests may have crashed"
+    echo "  Consider increasing RUST_MIN_STACK or investigating deeply nested queries"
+fi
 
 # Compare with previous run if requested
 if [ "$COMPARE" = true ]; then

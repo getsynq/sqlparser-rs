@@ -52,6 +52,9 @@ Corpus tests in `tests/sqlparser_corpus.rs` parse real SQL from `tests/corpus/{d
 # Run corpus tests with timestamped results and comparison
 ./scripts/run-corpus-tests.sh --compare
 
+# Run manually with increased stack size (if needed)
+RUST_MIN_STACK=16777216 cargo test --test sqlparser_corpus
+
 # Compare two specific reports
 node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
 
@@ -63,7 +66,13 @@ ls -lht target/corpus-results/corpus-report-*.json
 - Uses custom test harness (`harness = false` in Cargo.toml with libtest_mimic)
 - `customer_*` dialect prefixes are automatically stripped (customer_bigquery → bigquery)
 - Reports track individual test results for regression detection
+- Stack size increased to 16MB (`RUST_MIN_STACK=16777216`) to handle deeply nested queries
 - See `scripts/README.md` for detailed usage
+
+**Debugging stack overflows:**
+- If tests crash despite increased stack, use binary search to find problematic files
+- Run subsets: `cargo test --test sqlparser_corpus -- dialect/category/`
+- Check test logs for patterns before crash
 
 ## Architecture
 
