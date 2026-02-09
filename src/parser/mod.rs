@@ -3370,6 +3370,27 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Skip additional dialect-specific clauses (DATA_RETENTION_TIME_IN_DAYS, DEFAULT_DDL_COLLATION, etc.)
+        while matches!(self.peek_token().token, Token::Word(_))
+            && self.peek_nth_token(1).token == Token::Eq
+        {
+            self.next_token(); // keyword
+            self.next_token(); // =
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            } else {
+                let _ = self.parse_expr();
+            }
+        }
+
         Ok(Statement::CreateSchema {
             schema_name,
             if_not_exists,
@@ -4972,6 +4993,27 @@ impl<'a> Parser<'a> {
         //Databricks has TBLPROPERTIES after COMMENT
         let _table_properties = self.parse_options(Keyword::TBLPROPERTIES)?;
         table_properties.extend(_table_properties);
+
+        // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
+        while matches!(self.peek_token().token, Token::Word(_))
+            && self.peek_nth_token(1).token == Token::Eq
+        {
+            self.next_token(); // keyword
+            self.next_token(); // =
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            } else {
+                let _ = self.parse_expr();
+            }
+        }
 
         Ok(CreateTableBuilder::new(table_name)
             .temporary(temporary)
