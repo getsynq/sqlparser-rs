@@ -1527,6 +1527,21 @@ fn test_table_cte() {
 }
 
 #[test]
+fn test_qualify_before_window() {
+    // BigQuery supports QUALIFY before WINDOW clause
+    // Display always outputs WINDOW before QUALIFY
+    bigquery().one_statement_parses_to(
+        "SELECT col_1, SUM(col_2) OVER w FROM tbl QUALIFY ROW_NUMBER() OVER w = 1 WINDOW w AS (PARTITION BY col_1)",
+        "SELECT col_1, SUM(col_2) OVER w FROM tbl WINDOW w AS (PARTITION BY col_1) QUALIFY ROW_NUMBER() OVER w = 1",
+    );
+
+    // Standard ordering (WINDOW before QUALIFY) also works
+    bigquery().verified_only_select(
+        "SELECT col_1, SUM(col_2) OVER w FROM tbl WINDOW w AS (PARTITION BY col_1) QUALIFY ROW_NUMBER() OVER w = 1",
+    );
+}
+
+#[test]
 fn test_json_number_start() {
     bigquery().verified_only_select("SELECT field.5k_clients_target AS clients_5k_target FROM tbl");
 }

@@ -8291,7 +8291,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let named_windows = if self.parse_keyword(Keyword::WINDOW) {
+        let mut named_windows = if self.parse_keyword(Keyword::WINDOW) {
             self.parse_comma_separated(Parser::parse_named_window)?
         } else {
             vec![]
@@ -8302,6 +8302,13 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+
+        // Support WINDOW after QUALIFY (BigQuery uses QUALIFY before WINDOW)
+        if named_windows.is_empty() {
+            if self.parse_keyword(Keyword::WINDOW) {
+                named_windows = self.parse_comma_separated(Parser::parse_named_window)?;
+            }
+        }
 
         Ok(Select {
             distinct,
