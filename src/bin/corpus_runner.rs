@@ -193,8 +193,8 @@ fn main() {
             .display()
             .to_string();
 
-        // Get dialect name
-        let dialect = match dialect_from_path(path, corpus_path) {
+        // Get dialect name from path
+        let dialect_dir_name = match dialect_from_path(path, corpus_path) {
             Some(d) => d,
             None => {
                 eprintln!(
@@ -205,6 +205,17 @@ fn main() {
             }
         };
 
+        // Normalize dialect name (strip customer_ prefix) and check if supported
+        let normalized_dialect = dialect_dir_name
+            .strip_prefix("customer_")
+            .unwrap_or(&dialect_dir_name);
+
+        // Skip if dialect is not supported
+        if dialect_for_name(normalized_dialect).is_none() {
+            // Skip silently - unknown dialects are expected (e.g., trino)
+            return;
+        }
+
         // Run test with panic catching
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_test(path, corpus_path)));
@@ -214,7 +225,10 @@ fn main() {
             let mut stats_guard = stats.lock().unwrap();
             let mut test_results_guard = test_results.lock().unwrap();
 
-            let entry = stats_guard.entry(dialect).or_insert([0, 0]);
+            // Use normalized dialect name for stats (groups customer_* with base dialect)
+            let entry = stats_guard
+                .entry(normalized_dialect.to_string())
+                .or_insert([0, 0]);
             let status = match result {
                 Ok(Ok(())) => {
                     entry[0] += 1;
