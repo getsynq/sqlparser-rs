@@ -9083,12 +9083,21 @@ impl<'a> Parser<'a> {
                 let name = self.parse_object_name(false)?;
                 self.expect_token(&Token::LParen)?;
                 let args = self.parse_optional_args()?;
+                // Snowflake table functions can have OVER (PARTITION BY ... ORDER BY ...)
+                let over = if self.parse_keyword(Keyword::OVER) {
+                    self.expect_token(&Token::LParen)?;
+                    let window_spec = self.parse_window_spec()?;
+                    Some(window_spec)
+                } else {
+                    None
+                };
                 let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
                 Ok(TableFactor::Function {
                     lateral: true,
                     name,
                     args,
                     alias,
+                    over,
                 })
             }
         } else if self.parse_keyword_with_tokens(Keyword::TABLE, &[Token::LParen]) {
