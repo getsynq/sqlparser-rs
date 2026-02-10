@@ -54,6 +54,7 @@ fn parse_array_access_expr() {
                                 Value::SingleQuotedString("endpoint".to_string())
                             ))),
                         ],
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: false,
@@ -102,6 +103,7 @@ fn parse_array_access_expr() {
                                         Value::SingleQuotedString("app".to_string())
                                     ))),
                                 ],
+                                parameters: None,
                                 over: None,
                                 distinct: false,
                                 special: false,
@@ -162,6 +164,7 @@ fn parse_array_fn() {
                     Ident::new("x2").empty_span()
                 ))),
             ],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -262,6 +265,7 @@ fn parse_delimited_identifiers() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::with_quote('"', "myfun")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -623,6 +627,7 @@ fn parse_create_table_with_variant_default_expressions() {
                             option: ColumnOption::Materialized(Expr::Function(Function {
                                 name: ObjectName(vec![Ident::new("now")]),
                                 args: vec![],
+                                parameters: None,
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
@@ -648,6 +653,7 @@ fn parse_create_table_with_variant_default_expressions() {
                             option: ColumnOption::Ephemeral(Some(Expr::Function(Function {
                                 name: ObjectName(vec![Ident::new("now")]),
                                 args: vec![],
+                                parameters: None,
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
@@ -689,6 +695,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
                                     Expr::Identifier(Ident::new("c").empty_span())
                                 ))],
+                                parameters: None,
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
@@ -1391,6 +1398,43 @@ fn test_create_table_index_expression() {
         }
         _ => unreachable!(),
     }
+}
+
+#[test]
+fn test_parametric_aggregate_functions() {
+    // Basic parametric aggregate
+    clickhouse().one_statement_parses_to(
+        "SELECT groupArrayResample(30, 75, 30)(name, age) FROM people",
+        "",
+    );
+
+    // Parametric aggregate with string parameter
+    clickhouse().one_statement_parses_to(
+        "SELECT sequenceMatch('(?1)(?2)')(time, number = 1, number = 2, number = 3) FROM t",
+        "",
+    );
+
+    // Parametric aggregate with single parameter
+    clickhouse().one_statement_parses_to(
+        "SELECT histogram(5)(number + 1) FROM (SELECT * FROM system.numbers LIMIT 20)",
+        "",
+    );
+
+    // Parametric aggregate in HAVING
+    clickhouse().one_statement_parses_to(
+        "SELECT SearchPhrase FROM SearchLog GROUP BY SearchPhrase HAVING uniqUpTo(4)(UserID) >= 5",
+        "",
+    );
+
+    // Multiple parametric aggregates with aliases
+    clickhouse().one_statement_parses_to(
+        "SELECT countResample(30, 75, 30)(name, age) AS amount, avgResample(30, 75, 30)(wage, age) AS avg_wage FROM people",
+        "",
+    );
+
+    // Verify round-trip for simple case
+    let sql = "SELECT groupArrayResample(30, 75, 30)(name, age) FROM people";
+    clickhouse().verified_only_select(sql);
 }
 
 #[test]

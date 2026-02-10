@@ -815,6 +815,7 @@ impl<'a> Parser<'a> {
                     Ok(Expr::Function(Function {
                         name: ObjectName(vec![w.to_ident()]),
                         args: vec![],
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: true,
@@ -1031,11 +1032,28 @@ impl<'a> Parser<'a> {
         let (args, on_overflow, order_by, limit, mut null_treatment) =
             self.parse_optional_args_with_orderby()?;
 
-        if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
-            null_treatment = Some(NullTreatment::IGNORE)
-        } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
-            null_treatment = Some(NullTreatment::RESPECT)
-        }
+        // ClickHouse parametric aggregate functions: func(params)(args)
+        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment) =
+            if self.peek_token_is(&Token::LParen) && dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                let parameters = Some(args);
+                self.expect_token(&Token::LParen)?;
+                let distinct2 = self.parse_all_or_distinct()?.is_some();
+                let (args2, on_overflow2, order_by2, limit2, mut null_treatment2) =
+                    self.parse_optional_args_with_orderby()?;
+                if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
+                    null_treatment2 = Some(NullTreatment::IGNORE);
+                } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
+                    null_treatment2 = Some(NullTreatment::RESPECT);
+                }
+                (parameters, args2, distinct2, on_overflow2, order_by2, limit2, null_treatment2)
+            } else {
+                if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
+                    null_treatment = Some(NullTreatment::IGNORE);
+                } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
+                    null_treatment = Some(NullTreatment::RESPECT);
+                }
+                (None, args, distinct, on_overflow, order_by, limit, null_treatment)
+            };
 
         let within_group = if self.parse_keywords(&[Keyword::WITHIN, Keyword::GROUP]) {
             self.expect_token(&Token::LParen)?;
@@ -1052,6 +1070,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::Function(Function {
             name,
             args,
+            parameters,
             over,
             distinct,
             special: false,
@@ -1076,6 +1095,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::Function(Function {
             name,
             args,
+            parameters: None,
             over: None,
             distinct: false,
             special,
@@ -1377,6 +1397,7 @@ impl<'a> Parser<'a> {
             Ok(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new(func_name)]),
                 args,
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -1502,6 +1523,7 @@ impl<'a> Parser<'a> {
             Ok(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new("overlay")]),
                 args,
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -6426,6 +6448,7 @@ impl<'a> Parser<'a> {
             Ok(Statement::Call(Function {
                 name: object_name,
                 args: vec![],
+                parameters: None,
                 within_group: None,
                 over: None,
                 distinct: false,

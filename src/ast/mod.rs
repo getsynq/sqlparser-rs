@@ -4445,6 +4445,9 @@ impl fmt::Display for CloseCursor {
 pub struct Function {
     pub name: ObjectName,
     pub args: Vec<FunctionArg>,
+    /// ClickHouse parametric aggregate function parameters.
+    /// Syntax: `func(params)(args)` e.g. `groupArrayResample(30, 75, 30)(name, age)`
+    pub parameters: Option<Vec<FunctionArg>>,
     // WITHIN GROUP (ORDER BY <order_by_expr>)
     pub within_group: Option<Vec<OrderByExpr>>,
     pub over: Option<WindowType>,
@@ -4520,13 +4523,28 @@ impl fmt::Display for Function {
                 "".to_string()
             };
 
-            write!(
-                f,
-                "{}({}{}{order_by}{limit}{on_overflow}){null_treatment}",
-                self.name,
-                if self.distinct { "DISTINCT " } else { "" },
-                display_comma_separated(&self.args),
-            )?;
+            if let Some(ref parameters) = self.parameters {
+                write!(
+                    f,
+                    "{}({})({}{}{}{}{})",
+                    self.name,
+                    display_comma_separated(parameters),
+                    if self.distinct { "DISTINCT " } else { "" },
+                    display_comma_separated(&self.args),
+                    order_by,
+                    limit,
+                    on_overflow,
+                )?;
+                write!(f, "{null_treatment}")?;
+            } else {
+                write!(
+                    f,
+                    "{}({}{}{order_by}{limit}{on_overflow}){null_treatment}",
+                    self.name,
+                    if self.distinct { "DISTINCT " } else { "" },
+                    display_comma_separated(&self.args),
+                )?;
+            }
 
             if let Some(within_group) = &self.within_group {
                 write!(

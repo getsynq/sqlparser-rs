@@ -921,6 +921,7 @@ fn parse_select_count_wildcard() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("COUNT")]),
             args: vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -945,6 +946,7 @@ fn parse_select_count_distinct() {
                 op: UnaryOperator::Plus,
                 expr: Box::new(Expr::Identifier(Ident::new("x").empty_span())),
             }))],
+            parameters: None,
             over: None,
             distinct: true,
             special: false,
@@ -2016,6 +2018,7 @@ fn parse_select_having() {
             left: Box::new(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new("COUNT")]),
                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Wildcard)],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -2045,6 +2048,7 @@ fn parse_select_qualify() {
             left: Box::new(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new("ROW_NUMBER")]),
                 args: vec![],
+                parameters: None,
                 over: Some(WindowType::WindowSpec(WindowSpec {
                     window_name: None,
                     partition_by: vec![Expr::Identifier(Ident::new("p").empty_span())],
@@ -2409,6 +2413,7 @@ fn parse_listagg() {
                     Value::SingleQuotedString(", ".to_string())
                 ))),
             ],
+            parameters: None,
             within_group: Some(within_group),
             over: None,
             distinct: true,
@@ -3786,6 +3791,7 @@ fn parse_scalar_function_in_projection() {
                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
                     Expr::Identifier(Ident::new("id").empty_span())
                 ))],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -3911,6 +3917,7 @@ fn parse_named_argument_function() {
                     ))),
                 },
             ],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -3946,6 +3953,7 @@ fn parse_window_functions() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("row_number")]),
             args: vec![],
+            parameters: None,
             over: Some(WindowType::WindowSpec(WindowSpec {
                 window_name: None,
                 partition_by: vec![],
@@ -3998,6 +4006,7 @@ fn test_parse_named_window() {
                             .empty_span(),
                         ),
                     ))],
+                    parameters: None,
                     over: Some(WindowType::NamedWindow(
                         Ident {
                             value: "window1".to_string(),
@@ -4036,6 +4045,7 @@ fn test_parse_named_window() {
                             .empty_span(),
                         ),
                     ))],
+                    parameters: None,
                     over: Some(WindowType::NamedWindow(
                         Ident {
                             value: "window2".to_string(),
@@ -4560,6 +4570,7 @@ fn parse_at_timezone() {
                     quote_style: None,
                 }]),
                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(zero.clone()))],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -4591,6 +4602,7 @@ fn parse_at_timezone() {
                                 quote_style: None,
                             },],),
                             args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(zero))],
+                            parameters: None,
                             over: None,
                             distinct: false,
                             special: false,
@@ -4606,6 +4618,7 @@ fn parse_at_timezone() {
                         Value::SingleQuotedString("%Y-%m-%dT%H".to_string()),
                     ),),),
                 ],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -4771,6 +4784,7 @@ fn parse_table_function() {
                 args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(
                     Value::SingleQuotedString("1".to_owned()),
                 )))],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -4920,6 +4934,7 @@ fn parse_unnest_in_from_clause() {
                         FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("2")))),
                         FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("3")))),
                     ],
+                    parameters: None,
                     over: None,
                     distinct: false,
                     special: false,
@@ -4953,6 +4968,7 @@ fn parse_unnest_in_from_clause() {
                             FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("2")))),
                             FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("3")))),
                         ],
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: false,
@@ -4968,6 +4984,7 @@ fn parse_unnest_in_from_clause() {
                             FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("5")))),
                             FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(number("6")))),
                         ],
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: false,
@@ -7671,6 +7688,7 @@ fn parse_time_functions() {
         let select_localtime_func_call_ast = Function {
             name: ObjectName(vec![Ident::new(func_name)]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -8168,6 +8186,7 @@ fn parse_pivot_table() {
                         vec![Ident::new("a"), Ident::new("amount")].empty_span()
                     )
                 ))]),
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
@@ -8243,6 +8262,7 @@ fn parse_pivot_table_aliases() {
                                 vec![Ident::new("a"), Ident::new("EMPID")].empty_span()
                             )
                         ))]),
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: false,
@@ -8262,6 +8282,7 @@ fn parse_pivot_table_aliases() {
                                 vec![Ident::new("a"), Ident::new("amount")].empty_span()
                             )
                         ))]),
+                        parameters: None,
                         over: None,
                         distinct: false,
                         special: false,
@@ -8323,6 +8344,7 @@ fn parse_within_group() {
             args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
                 Expr::Identifier(Ident::new("fractions").empty_span())
             ))],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,
@@ -8461,6 +8483,7 @@ fn parse_pivot_unpivot_table() {
                 args: (vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(
                     Expr::Identifier(Ident::new("population").empty_span())
                 ))]),
+                parameters: None,
                 within_group: None,
                 over: None,
                 distinct: false,
