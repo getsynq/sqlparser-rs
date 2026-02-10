@@ -10,6 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::iter::Peekable;
+use std::str::Chars;
+
 use crate::ast::Statement;
 use crate::dialect::Dialect;
 use crate::keywords::Keyword;
@@ -46,6 +49,21 @@ impl Dialect for RedshiftSqlDialect {
             return Some(crate::dialect::postgresql::parse_comment(parser));
         }
         None
+    }
+
+    fn is_proper_identifier_inside_quotes(&self, mut chars: Peekable<Chars<'_>>) -> bool {
+        // The chars iterator starts at the opening quote character
+        match chars.next() {
+            Some('[') => {
+                // For bracket-delimited identifiers, reject numeric content
+                // so [0] is tokenized as array subscript, not as identifier
+                match chars.peek() {
+                    Some(ch) if ch.is_ascii_digit() => false,
+                    _ => true,
+                }
+            }
+            _ => true,
+        }
     }
 
     fn supports_group_by_expr(&self) -> bool {
