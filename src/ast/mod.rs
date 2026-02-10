@@ -1462,6 +1462,31 @@ pub enum Password {
     NullPassword,
 }
 
+/// Source for UNLOAD statement - either a parsed query or a raw query string.
+///
+/// Redshift allows `UNLOAD('select ...')` with the query as a string literal,
+/// while Athena uses a parsed query: `UNLOAD(SELECT ...)`.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum UnloadSource {
+    /// A parsed SQL query
+    Query(Box<Query>),
+    /// A raw query string (Redshift style: `UNLOAD('select ...')`)
+    QueryString(String),
+}
+
+impl fmt::Display for UnloadSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UnloadSource::Query(query) => write!(f, "{query}"),
+            UnloadSource::QueryString(s) => {
+                write!(f, "'{}'", value::escape_single_quote_string(s))
+            }
+        }
+    }
+}
+
 /// A top-level statement (SELECT, INSERT, CREATE, etc.)
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -2301,7 +2326,7 @@ pub enum Statement {
     /// See Redshift <https://docs.aws.amazon.com/redshift/latest/dg/r_UNLOAD.html> and
     // Athena <https://docs.aws.amazon.com/athena/latest/ug/unload.html>
     Unload {
-        query: Box<Query>,
+        query: UnloadSource,
         to: WithSpan<Ident>,
         with: Vec<SqlOption>,
     },

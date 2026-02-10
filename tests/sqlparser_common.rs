@@ -8344,7 +8344,7 @@ fn parse_within_group() {
 fn parse_unpivot_table() {
     let sql = concat!(
         "SELECT * FROM sales AS s ",
-        "UNPIVOT(quantity FOR quarter IN (Q1, Q2, Q3, Q4)) AS u (product, quarter, quantity)"
+        "UNPIVOT (quantity FOR quarter IN (Q1, Q2, Q3, Q4)) AS u (product, quarter, quantity)"
     );
 
     pretty_assertions::assert_eq!(
@@ -8382,7 +8382,7 @@ fn parse_unpivot_table() {
 
     let sql_without_aliases = concat!(
         "SELECT * FROM sales ",
-        "UNPIVOT(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+        "UNPIVOT (quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
     );
 
     assert_matches!(
@@ -8403,20 +8403,20 @@ fn parse_unpivot_table() {
 fn parse_unpivot_include_nulls() {
     let sql = concat!(
         "SELECT * FROM sales ",
-        "UNPIVOT INCLUDE NULLS(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+        "UNPIVOT INCLUDE NULLS (quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
     );
     assert_eq!(verified_stmt(sql).to_string(), sql);
 
     let sql = concat!(
         "SELECT * FROM sales ",
-        "UNPIVOT EXCLUDE NULLS(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+        "UNPIVOT EXCLUDE NULLS (quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
     );
     assert_eq!(verified_stmt(sql).to_string(), sql);
 
     // Without null handling (default)
     let sql = concat!(
         "SELECT * FROM sales ",
-        "UNPIVOT(quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
+        "UNPIVOT (quantity FOR quarter IN (Q1, Q2, Q3, Q4))"
     );
     assert_eq!(verified_stmt(sql).to_string(), sql);
 }
@@ -8425,7 +8425,7 @@ fn parse_unpivot_include_nulls() {
 fn parse_pivot_unpivot_table() {
     let sql = concat!(
         "SELECT * FROM census AS c ",
-        "UNPIVOT(population FOR year IN (population_2000, population_2010)) AS u ",
+        "UNPIVOT (population FOR year IN (population_2000, population_2010)) AS u ",
         "PIVOT(sum(population) FOR year IN ('population_2000', 'population_2010')) AS p"
     );
 
@@ -8655,7 +8655,7 @@ fn parse_unload() {
     assert_eq!(
         unload,
         Statement::Unload {
-            query: Box::new(Query {
+            query: UnloadSource::Query(Box::new(Query {
                 body: Box::new(SetExpr::Select(Box::new(Select {
                     distinct: None,
                     top: None,
@@ -8696,7 +8696,7 @@ fn parse_unload() {
                 order_by: None,
                 settings: None,
                 format_clause: None,
-            }),
+            })),
             to: Ident {
                 value: "s3://...".to_string(),
                 quote_style: Some('\'')
@@ -8711,6 +8711,19 @@ fn parse_unload() {
             }]
         }
     );
+
+    // Test string-quoted query (Redshift style)
+    let sql = "UNLOAD('SELECT * FROM t1') TO 's3://bucket/path'";
+    let stmt = all_dialects().verified_stmt(sql);
+    match &stmt {
+        Statement::Unload { query, to, with } => {
+            assert!(matches!(query, UnloadSource::QueryString(s) if s == "SELECT * FROM t1"));
+            assert_eq!(to.value, "s3://bucket/path");
+            assert!(with.is_empty());
+        }
+        _ => panic!("Expected UNLOAD statement"),
+    }
+    assert_eq!(stmt.to_string(), sql);
 }
 
 #[test]
