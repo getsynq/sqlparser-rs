@@ -1605,6 +1605,7 @@ pub enum Statement {
     /// are allowed to have custom Statements.
     CopyIntoSnowflake {
         into: ObjectName,
+        columns: Vec<WithSpan<Ident>>,
         from_stage: ObjectName,
         from_stage_alias: Option<Ident>,
         stage_params: StageParamsObject,
@@ -3833,6 +3834,7 @@ impl fmt::Display for Statement {
             }
             Statement::CopyIntoSnowflake {
                 into,
+                columns,
                 from_stage,
                 from_stage_alias,
                 stage_params,
@@ -3844,6 +3846,9 @@ impl fmt::Display for Statement {
                 validation_mode,
             } => {
                 write!(f, "COPY INTO {}", into)?;
+                if !columns.is_empty() {
+                    write!(f, " ({})", display_comma_separated(columns))?;
+                }
                 if from_transformations.is_none() {
                     // Standard data load
                     write!(f, " FROM {}{}", from_stage, stage_params)?;

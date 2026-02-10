@@ -844,6 +844,34 @@ fn test_copy_into() {
         _ => unreachable!(),
     };
     assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
+
+    // Test with columns and various options
+    let sql = concat!(
+        "COPY INTO my_schema.my_table (\"COL_A\", \"COL_B\") ",
+        "FROM stage1 ",
+        "FILES = ('file1.csv') ",
+        "PATTERN = '.*[.]csv' ",
+        "FILE_FORMAT=(TYPE='csv' SKIP_HEADER=1 COMPRESSION='zstd') ",
+        "COPY_OPTIONS=(ON_ERROR=CONTINUE)"
+    );
+    match snowflake().verified_stmt(sql) {
+        Statement::CopyIntoSnowflake {
+            into,
+            columns,
+            pattern,
+            copy_options,
+            ..
+        } => {
+            assert_eq!(
+                into,
+                ObjectName(vec![Ident::new("my_schema"), Ident::new("my_table")])
+            );
+            assert_eq!(columns.len(), 2);
+            assert!(pattern.is_some());
+            assert!(copy_options.options.iter().any(|o| o.option_name == "ON_ERROR"));
+        }
+        _ => unreachable!(),
+    };
 }
 
 #[test]
