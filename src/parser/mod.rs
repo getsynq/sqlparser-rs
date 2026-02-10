@@ -531,7 +531,8 @@ impl<'a> Parser<'a> {
                 // ClickHouse SYSTEM statements (SYSTEM RELOAD, SYSTEM RESTORE, etc.)
                 Keyword::SYSTEM if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     // Skip remaining tokens until end of statement
-                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon) {
+                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
+                    {
                         self.next_token();
                     }
                     Ok(Statement::SetVariable {
@@ -1046,27 +1047,45 @@ impl<'a> Parser<'a> {
             self.parse_optional_args_with_orderby()?;
 
         // ClickHouse parametric aggregate functions: func(params)(args)
-        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment) =
-            if self.peek_token_is(&Token::LParen) && dialect_of!(self is ClickHouseDialect | GenericDialect) {
-                let parameters = Some(args);
-                self.expect_token(&Token::LParen)?;
-                let distinct2 = self.parse_all_or_distinct()?.is_some();
-                let (args2, on_overflow2, order_by2, limit2, mut null_treatment2) =
-                    self.parse_optional_args_with_orderby()?;
-                if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
-                    null_treatment2 = Some(NullTreatment::IGNORE);
-                } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
-                    null_treatment2 = Some(NullTreatment::RESPECT);
-                }
-                (parameters, args2, distinct2, on_overflow2, order_by2, limit2, null_treatment2)
-            } else {
-                if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
-                    null_treatment = Some(NullTreatment::IGNORE);
-                } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
-                    null_treatment = Some(NullTreatment::RESPECT);
-                }
-                (None, args, distinct, on_overflow, order_by, limit, null_treatment)
-            };
+        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment) = if self
+            .peek_token_is(&Token::LParen)
+            && dialect_of!(self is ClickHouseDialect | GenericDialect)
+        {
+            let parameters = Some(args);
+            self.expect_token(&Token::LParen)?;
+            let distinct2 = self.parse_all_or_distinct()?.is_some();
+            let (args2, on_overflow2, order_by2, limit2, mut null_treatment2) =
+                self.parse_optional_args_with_orderby()?;
+            if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
+                null_treatment2 = Some(NullTreatment::IGNORE);
+            } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
+                null_treatment2 = Some(NullTreatment::RESPECT);
+            }
+            (
+                parameters,
+                args2,
+                distinct2,
+                on_overflow2,
+                order_by2,
+                limit2,
+                null_treatment2,
+            )
+        } else {
+            if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
+                null_treatment = Some(NullTreatment::IGNORE);
+            } else if self.parse_keywords(&[Keyword::RESPECT, Keyword::NULLS]) {
+                null_treatment = Some(NullTreatment::RESPECT);
+            }
+            (
+                None,
+                args,
+                distinct,
+                on_overflow,
+                order_by,
+                limit,
+                null_treatment,
+            )
+        };
 
         let within_group = if self.parse_keywords(&[Keyword::WITHIN, Keyword::GROUP]) {
             self.expect_token(&Token::LParen)?;
@@ -1724,8 +1743,10 @@ impl<'a> Parser<'a> {
                     "HOUR" | "H" | "HRS" | "HOURS" => Ok(DateTimeField::Hour),
                     "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Ok(DateTimeField::Minute),
                     "SECOND" | "S" | "SEC" | "SECS" | "SECONDS" => Ok(DateTimeField::Second),
-                    "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS" | "MILLISECONDS" => Ok(DateTimeField::Millisecond),
-                    "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS" | "MICROSECONDS" => Ok(DateTimeField::Microsecond),
+                    "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS"
+                    | "MILLISECONDS" => Ok(DateTimeField::Millisecond),
+                    "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS"
+                    | "MICROSECONDS" => Ok(DateTimeField::Microsecond),
                     "QUARTER" | "QTR" | "QTRS" | "QUARTERS" => Ok(DateTimeField::Quarter),
                     "DOW" => Ok(DateTimeField::Dow),
                     "DOY" => Ok(DateTimeField::Doy),
@@ -1743,7 +1764,8 @@ impl<'a> Parser<'a> {
                     }
                     _ => {
                         // For dialects that support custom date parts
-                        if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect) {
+                        if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect)
+                        {
                             Ok(DateTimeField::Custom(Ident::with_quote('\'', s)))
                         } else {
                             self.expected("date/time field", next_token)
@@ -2302,15 +2324,14 @@ impl<'a> Parser<'a> {
             if let Some(keyword) = self.parse_one_of_keywords(&[Keyword::ANY, Keyword::ALL]) {
                 self.expect_token(&Token::LParen)?;
                 // Check if this is a subquery (SELECT/WITH) inside ANY/ALL
-                let right = if self.parse_keyword(Keyword::SELECT)
-                    || self.parse_keyword(Keyword::WITH)
-                {
-                    self.prev_token();
-                    let subquery = self.parse_boxed_query()?;
-                    Expr::Subquery(subquery)
-                } else {
-                    self.parse_subexpr(precedence)?
-                };
+                let right =
+                    if self.parse_keyword(Keyword::SELECT) || self.parse_keyword(Keyword::WITH) {
+                        self.prev_token();
+                        let subquery = self.parse_boxed_query()?;
+                        Expr::Subquery(subquery)
+                    } else {
+                        self.parse_subexpr(precedence)?
+                    };
                 self.expect_token(&Token::RParen)?;
 
                 if !matches!(
@@ -4191,8 +4212,7 @@ impl<'a> Parser<'a> {
             loop {
                 if self.parse_keyword(Keyword::BACKUP) {
                     // BACKUP YES|NO
-                    let _ = self.parse_keyword(Keyword::YES)
-                        || self.parse_keyword(Keyword::NO);
+                    let _ = self.parse_keyword(Keyword::YES) || self.parse_keyword(Keyword::NO);
                 } else if self.parse_keyword(Keyword::DISTSTYLE) {
                     // DISTSTYLE EVEN|ALL|AUTO|KEY
                     let _ = self.next_token();
@@ -5199,9 +5219,7 @@ impl<'a> Parser<'a> {
             }
 
             // PARTITION BY expr
-            if partitioned_by.is_none()
-                && self.parse_keywords(&[Keyword::PARTITION, Keyword::BY])
-            {
+            if partitioned_by.is_none() && self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
                 partitioned_by = Some(self.parse_expr()?);
                 continue;
             }
@@ -5235,8 +5253,7 @@ impl<'a> Parser<'a> {
 
             // SETTINGS key=val, ... (ClickHouse)
             if clickhouse_settings.is_none() && self.parse_keyword(Keyword::SETTINGS) {
-                clickhouse_settings =
-                    Some(self.parse_comma_separated(Parser::parse_sql_option)?);
+                clickhouse_settings = Some(self.parse_comma_separated(Parser::parse_sql_option)?);
                 continue;
             }
 
@@ -5735,8 +5752,7 @@ impl<'a> Parser<'a> {
                 self.expect_keyword(Keyword::INCREMENT)?;
                 let increment = Some(self.parse_expr()?);
                 // Skip optional ORDER or NOORDER
-                let _ = self.parse_keyword(Keyword::ORDER)
-                    || self.parse_keyword(Keyword::NOORDER);
+                let _ = self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
                 Ok(Some(ColumnOption::Identity { seed, increment }))
             } else if dialect_of!(self is SnowflakeDialect | GenericDialect)
                 && self.consume_token(&Token::LParen)
@@ -5747,8 +5763,7 @@ impl<'a> Parser<'a> {
                 let increment = Some(self.parse_expr()?);
                 self.expect_token(&Token::RParen)?;
                 // Skip optional ORDER or NOORDER
-                let _ = self.parse_keyword(Keyword::ORDER)
-                    || self.parse_keyword(Keyword::NOORDER);
+                let _ = self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
                 Ok(Some(ColumnOption::Identity { seed, increment }))
             } else {
                 // SQLite: just AUTOINCREMENT
@@ -5990,10 +6005,7 @@ impl<'a> Parser<'a> {
                                 Token::LParen => depth += 1,
                                 Token::RParen => depth -= 1,
                                 Token::EOF => {
-                                    return self.expected(
-                                        "closing parenthesis",
-                                        self.peek_token(),
-                                    )
+                                    return self.expected("closing parenthesis", self.peek_token())
                                 }
                                 _ => {}
                             }
@@ -6554,9 +6566,7 @@ impl<'a> Parser<'a> {
         // Skip Redshift-specific trailing options (iam_role, allowoverwrite,
         // emptyasnull, region, delimiter, etc.) that are not standard PostgreSQL COPY
         if dialect_of!(self is RedshiftSqlDialect) {
-            while !self.peek_token_is(&Token::EOF)
-                && !self.peek_token_is(&Token::SemiColon)
-            {
+            while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon) {
                 self.next_token();
             }
         }
@@ -8746,15 +8756,12 @@ impl<'a> Parser<'a> {
             && dialect_of!(self is BigQueryDialect | GenericDialect)
         {
             self.expect_token(&Token::LParen)?;
-            let vars = self.parse_comma_separated(|p| {
-                p.parse_identifier(false).map(|i| i.unwrap())
-            })?;
+            let vars =
+                self.parse_comma_separated(|p| p.parse_identifier(false).map(|i| i.unwrap()))?;
             self.expect_token(&Token::RParen)?;
             self.expect_token(&Token::Eq)?;
             let value = self.parse_expr()?;
-            let variable = ObjectName(
-                vars.into_iter().map(|i| i.into()).collect(),
-            );
+            let variable = ObjectName(vars.into_iter().map(|i| i.into()).collect());
             return Ok(Statement::SetVariable {
                 local: modifier == Some(Keyword::LOCAL),
                 hivevar: Some(Keyword::HIVEVAR) == modifier,
@@ -9945,9 +9952,7 @@ impl<'a> Parser<'a> {
         // ClickHouse: ALTER DELETE, ALTER UPDATE compound privileges
         // Consume ALTER prefix and return the sub-keyword
         if self.parse_keyword(Keyword::ALTER) {
-            if let Some(sub_kw) =
-                self.parse_one_of_keywords(&[Keyword::DELETE, Keyword::UPDATE])
-            {
+            if let Some(sub_kw) = self.parse_one_of_keywords(&[Keyword::DELETE, Keyword::UPDATE]) {
                 return Ok((sub_kw, None));
             }
             // Plain ALTER - not a compound privilege, return as-is
@@ -11017,9 +11022,7 @@ impl<'a> Parser<'a> {
 
         // Skip Redshift-specific trailing options (iam_role, allowoverwrite,
         // delimiter, header, parallel, manifest, maxfilesize, etc.)
-        while !self.peek_token_is(&Token::EOF)
-            && !self.peek_token_is(&Token::SemiColon)
-        {
+        while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon) {
             self.next_token();
         }
 

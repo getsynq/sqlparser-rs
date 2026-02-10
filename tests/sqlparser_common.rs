@@ -8198,10 +8198,22 @@ fn parse_pivot_table() {
             }))],
             value_column: vec![Ident::new("a"), Ident::new("MONTH")],
             value_source: PivotValueSource::List(vec![
-                PivotValue { value: Value::SingleQuotedString("JAN".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("FEB".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("MAR".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("APR".to_string()), alias: None },
+                PivotValue {
+                    value: Value::SingleQuotedString("JAN".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("FEB".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("MAR".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("APR".to_string()),
+                    alias: None
+                },
             ]),
             alias: Some(TableAlias {
                 name: Ident {
@@ -8297,10 +8309,22 @@ fn parse_pivot_table_aliases() {
             ],
             value_column: vec![Ident::new("a"), Ident::new("MONTH")],
             value_source: PivotValueSource::List(vec![
-                PivotValue { value: Value::SingleQuotedString("JAN".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("FEB".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("MAR".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("APR".to_string()), alias: None },
+                PivotValue {
+                    value: Value::SingleQuotedString("JAN".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("FEB".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("MAR".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("APR".to_string()),
+                    alias: None
+                },
             ]),
             alias: Some(TableAlias {
                 name: Ident {
@@ -8495,8 +8519,14 @@ fn parse_pivot_unpivot_table() {
             }))],
             value_column: vec![Ident::new("year")],
             value_source: PivotValueSource::List(vec![
-                PivotValue { value: Value::SingleQuotedString("population_2000".to_string()), alias: None },
-                PivotValue { value: Value::SingleQuotedString("population_2010".to_string()), alias: None },
+                PivotValue {
+                    value: Value::SingleQuotedString("population_2000".to_string()),
+                    alias: None
+                },
+                PivotValue {
+                    value: Value::SingleQuotedString("population_2010".to_string()),
+                    alias: None
+                },
             ]),
             alias: Some(TableAlias {
                 name: Ident::new("p").empty_span(),

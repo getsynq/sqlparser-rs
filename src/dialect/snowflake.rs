@@ -337,15 +337,9 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
                     } else {
                         let value_token = parser.next_token();
                         let (value, option_type) = match value_token.token {
-                            Token::SingleQuotedString(s) => {
-                                (s, DataLoadingOptionType::STRING)
-                            }
-                            Token::Word(v) => {
-                                (v.value, DataLoadingOptionType::ENUM)
-                            }
-                            Token::Number(n, _) => {
-                                (n.to_string(), DataLoadingOptionType::ENUM)
-                            }
+                            Token::SingleQuotedString(s) => (s, DataLoadingOptionType::STRING),
+                            Token::Word(v) => (v.value, DataLoadingOptionType::ENUM),
+                            Token::Number(n, _) => (n.to_string(), DataLoadingOptionType::ENUM),
                             _ => {
                                 parser.prev_token();
                                 parser.prev_token(); // back past =
