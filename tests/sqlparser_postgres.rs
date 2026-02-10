@@ -2453,6 +2453,7 @@ fn test_composite_value() {
                             named: true
                         }
                     )))],
+                    parameters: None,
                     over: None,
                     distinct: false,
                     special: false,
@@ -2620,6 +2621,7 @@ fn parse_current_functions() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("CURRENT_CATALOG")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: true,
@@ -2635,6 +2637,7 @@ fn parse_current_functions() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("CURRENT_USER")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: true,
@@ -2650,6 +2653,7 @@ fn parse_current_functions() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("SESSION_USER")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: true,
@@ -2665,6 +2669,7 @@ fn parse_current_functions() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::new("USER")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: true,
@@ -3143,6 +3148,7 @@ fn parse_delimited_identifiers() {
         &Expr::Function(Function {
             name: ObjectName(vec![Ident::with_quote('"', "myfun")]),
             args: vec![],
+            parameters: None,
             over: None,
             distinct: false,
             special: false,

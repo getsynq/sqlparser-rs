@@ -1230,6 +1230,7 @@ fn parse_map_access_offset() {
                     args: vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(
                         number("0")
                     ))),],
+                    parameters: None,
                     over: None,
                     distinct: false,
                     special: false,
@@ -1337,6 +1338,7 @@ fn test_select_json_field() {
                                     Ident::new("response_json".to_string()).empty_span()
                                 )
                             ))],
+                            parameters: None,
                             over: None,
                             distinct: false,
                             special: false,
@@ -1352,6 +1354,7 @@ fn test_select_json_field() {
                         ))),
                     }
                 ))],
+                parameters: None,
                 over: None,
                 distinct: false,
                 special: false,
