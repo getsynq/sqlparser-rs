@@ -528,6 +528,19 @@ impl<'a> Parser<'a> {
                 Keyword::OPTIMIZE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     Ok(self.parse_optimize_table()?)
                 }
+                // ClickHouse SYSTEM statements (SYSTEM RELOAD, SYSTEM RESTORE, etc.)
+                Keyword::SYSTEM if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
+                    // Skip remaining tokens until end of statement
+                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon) {
+                        self.next_token();
+                    }
+                    Ok(Statement::SetVariable {
+                        local: false,
+                        hivevar: false,
+                        variable: ObjectName(vec!["SYSTEM".into()]),
+                        value: vec![],
+                    })
+                }
                 // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
                 Keyword::CASE if dialect_of!(self is SnowflakeDialect | BigQueryDialect) => {
                     self.prev_token();
@@ -8727,6 +8740,29 @@ impl<'a> Parser<'a> {
             });
         }
 
+        // BigQuery: SET (a, b, c) = (expr1, expr2, expr3)
+        // Handle tuple assignment by parsing as SetVariable with first var name
+        if self.peek_token_is(&Token::LParen)
+            && dialect_of!(self is BigQueryDialect | GenericDialect)
+        {
+            self.expect_token(&Token::LParen)?;
+            let vars = self.parse_comma_separated(|p| {
+                p.parse_identifier(false).map(|i| i.unwrap())
+            })?;
+            self.expect_token(&Token::RParen)?;
+            self.expect_token(&Token::Eq)?;
+            let value = self.parse_expr()?;
+            let variable = ObjectName(
+                vars.into_iter().map(|i| i.into()).collect(),
+            );
+            return Ok(Statement::SetVariable {
+                local: modifier == Some(Keyword::LOCAL),
+                hivevar: Some(Keyword::HIVEVAR) == modifier,
+                variable,
+                value: vec![value],
+            });
+        }
+
         let variable = if self.parse_keywords(&[Keyword::TIME, Keyword::ZONE]) {
             ObjectName(vec!["TIMEZONE".into()])
         } else {
@@ -10044,6 +10080,15 @@ impl<'a> Parser<'a> {
             let file_format = if self.parse_keywords(&[Keyword::STORED, Keyword::AS]) {
                 Some(self.parse_file_format()?)
             } else {
+                // Hive/Databricks: ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+                // Skip tokens until we hit SELECT/WITH
+                while !matches!(
+                    self.peek_token().token,
+                    Token::Word(ref w) if matches!(w.keyword, Keyword::SELECT | Keyword::WITH)
+                ) && !self.peek_token_is(&Token::EOF)
+                {
+                    self.next_token();
+                }
                 None
             };
             let source = self.parse_boxed_query()?;
@@ -10057,7 +10102,30 @@ impl<'a> Parser<'a> {
         } else {
             // Hive lets you put table here regardless
             let table = self.parse_keyword(Keyword::TABLE);
-            let table_name = self.parse_object_name(false)?;
+
+            // ClickHouse: INSERT INTO [TABLE] FUNCTION func(...) VALUES/SELECT
+            // Skip the FUNCTION call and use the function name as table name
+            let table_name = if self.parse_keyword(Keyword::FUNCTION) {
+                let func_name = self.parse_object_name(false)?;
+                if self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => {
+                                return Err(ParserError::ParserError(
+                                    "Unexpected EOF in INSERT INTO FUNCTION".to_string(),
+                                ))
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                func_name
+            } else {
+                self.parse_object_name(false)?
+            };
             let is_mysql = dialect_of!(self is MySqlDialect);
 
             // Parse optional column list, but be careful not to consume a parenthesized query
@@ -10247,7 +10315,15 @@ impl<'a> Parser<'a> {
                         FunctionArgExpr::QualifiedWildcardWithOptions(prefix, options)
                     }
                 }
-                WildcardExpr::Expr(expr) => FunctionArgExpr::Expr(expr),
+                WildcardExpr::Expr(expr) => {
+                    // ClickHouse allows inline aliases in function args: func(expr AS alias)
+                    if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                        && self.parse_keyword(Keyword::AS)
+                    {
+                        let _alias = self.parse_identifier(false)?;
+                    }
+                    FunctionArgExpr::Expr(expr)
+                }
             };
             Ok(FunctionArg::Unnamed(arg))
         }
