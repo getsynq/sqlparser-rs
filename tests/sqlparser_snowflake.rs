@@ -1110,7 +1110,10 @@ fn test_copy_into_on_error_before_file_format() {
             ..
         } => {
             assert_eq!(on_error, Some("CONTINUE".to_string()));
-            assert!(file_format.options.iter().any(|o| o.option_name == "FORMAT_NAME"));
+            assert!(file_format
+                .options
+                .iter()
+                .any(|o| o.option_name == "FORMAT_NAME"));
         }
         _ => unreachable!(),
     };
@@ -1122,9 +1125,14 @@ fn test_copy_into_without_from() {
     let input_sql = "COPY INTO mytable PURGE = TRUE";
     let expected_sql = "COPY INTO mytable COPY_OPTIONS=(PURGE=TRUE)";
     match snowflake().one_statement_parses_to(input_sql, expected_sql) {
-        Statement::CopyIntoSnowflake { into, copy_options, .. } => {
+        Statement::CopyIntoSnowflake {
+            into, copy_options, ..
+        } => {
             assert_eq!(into, ObjectName(vec![Ident::new("mytable")]));
-            assert!(copy_options.options.iter().any(|o| o.option_name == "PURGE"));
+            assert!(copy_options
+                .options
+                .iter()
+                .any(|o| o.option_name == "PURGE"));
         }
         _ => unreachable!(),
     };
@@ -1150,7 +1158,11 @@ fn test_copy_into_copy_options() {
     );
 
     match snowflake().one_statement_parses_to(input_sql, expected_sql) {
-        Statement::CopyIntoSnowflake { on_error, copy_options, .. } => {
+        Statement::CopyIntoSnowflake {
+            on_error,
+            copy_options,
+            ..
+        } => {
             assert_eq!(on_error, Some("CONTINUE".to_string()));
             assert!(copy_options.options.contains(&DataLoadingOption {
                 option_name: "FORCE".to_string(),
@@ -1621,9 +1633,7 @@ fn test_snowflake_autoincrement_start_increment() {
     assert_eq!(stmts.len(), 1);
     // AUTOINCREMENT with START/INCREMENT/NOORDER
     let stmts = snowflake()
-        .parse_sql_statements(
-            "CREATE TABLE t (id INT AUTOINCREMENT START 1 INCREMENT 1 NOORDER)",
-        )
+        .parse_sql_statements("CREATE TABLE t (id INT AUTOINCREMENT START 1 INCREMENT 1 NOORDER)")
         .unwrap();
     assert_eq!(stmts.len(), 1);
     // AUTOINCREMENT with parenthesized seed/increment
@@ -1659,16 +1669,12 @@ fn test_snowflake_tag_clause() {
     assert_eq!(stmts.len(), 1);
     // Column-level TAG
     let stmts = snowflake()
-        .parse_sql_statements(
-            "CREATE TABLE t (a INT TAG (db.schema.tag_name = 'value'), b INT)",
-        )
+        .parse_sql_statements("CREATE TABLE t (a INT TAG (db.schema.tag_name = 'value'), b INT)")
         .unwrap();
     assert_eq!(stmts.len(), 1);
     // Multiple tags
     let stmts = snowflake()
-        .parse_sql_statements(
-            "CREATE TABLE t (a INT) TAG (s.t1 = 'v1', s.t2 = 'v2')",
-        )
+        .parse_sql_statements("CREATE TABLE t (a INT) TAG (s.t1 = 'v1', s.t2 = 'v2')")
         .unwrap();
     assert_eq!(stmts.len(), 1);
 }
@@ -1691,14 +1697,10 @@ fn test_snowflake_backslash_escape_in_strings() {
 #[test]
 fn parse_wildcard_exclude_in_function_args() {
     // HASH(* EXCLUDE (col1, col2)) - Snowflake function with wildcard EXCLUDE
-    snowflake().verified_stmt(
-        "SELECT HASH(* EXCLUDE (col1, col2)) FROM t1",
-    );
+    snowflake().verified_stmt("SELECT HASH(* EXCLUDE (col1, col2)) FROM t1");
 
     // OBJECT_CONSTRUCT(* EXCLUDE province) - single column EXCLUDE
-    snowflake().verified_stmt(
-        "SELECT OBJECT_CONSTRUCT(* EXCLUDE province) FROM t1",
-    );
+    snowflake().verified_stmt("SELECT OBJECT_CONSTRUCT(* EXCLUDE province) FROM t1");
 }
 
 #[test]

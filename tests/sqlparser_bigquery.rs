@@ -167,9 +167,7 @@ fn parse_invalid_brackets() {
     let sql = "SELECT STRUCT<INT64>>(NULL)";
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError(
-            "Expected (, found: >\nNear `SELECT STRUCT<INT64>`".to_string()
-        )
+        ParserError::ParserError("Expected (, found: >\nNear `SELECT STRUCT<INT64>`".to_string())
     );
 
     let sql = "SELECT STRUCT<STRUCT<INT64>>>(NULL)";
@@ -1552,15 +1550,11 @@ fn test_json_number_start() {
 #[test]
 fn parse_bigquery_format_function() {
     // format() as first select item
-    bigquery().verified_stmt(
-        "SELECT format('%f', round(col_15, 6)) AS swap_spread FROM t2",
-    );
+    bigquery().verified_stmt("SELECT format('%f', round(col_15, 6)) AS swap_spread FROM t2");
 
     // format() as non-first select item - tests trailing comma detection
     // with RESERVED_FOR_COLUMN_ALIAS keywords followed by '('
-    bigquery().verified_stmt(
-        "SELECT col_1, format('test', col_2) AS c FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col_1, format('test', col_2) AS c FROM t1");
 
     // format() in CTE
     bigquery().one_statement_parses_to(
