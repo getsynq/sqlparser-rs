@@ -19,7 +19,7 @@ use crate::ast::helpers::stmt_data_loading::{
 use crate::ast::{Ident, ObjectName, Statement};
 use crate::dialect::Dialect;
 use crate::keywords::Keyword;
-use crate::parser::{Parser, ParserError};
+use crate::parser::{IsOptional, Parser, ParserError};
 use crate::tokenizer::Token;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
@@ -154,6 +154,7 @@ pub fn parse_create_stage(
 
 pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
     let into: ObjectName = parser.parse_object_name(false)?;
+    let columns = parser.parse_parenthesized_column_list(IsOptional::Optional, false)?;
     let mut files: Vec<String> = vec![];
     let mut from_transformations: Option<Vec<StageLoadSelectItem>> = None;
     let from_stage_alias;
@@ -203,22 +204,31 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
     // [ files ]
     if parser.parse_keyword(Keyword::FILES) {
         parser.expect_token(&Token::Eq)?;
-        parser.expect_token(&Token::LParen)?;
-        let mut continue_loop = true;
-        while continue_loop {
-            continue_loop = false;
+        // FILES can be a single string or parenthesized list
+        if parser.consume_token(&Token::LParen) {
+            let mut continue_loop = true;
+            while continue_loop {
+                continue_loop = false;
+                let next_token = parser.next_token();
+                match next_token.token {
+                    Token::SingleQuotedString(s) => files.push(s),
+                    _ => parser.expected("file token", next_token)?,
+                };
+                if parser.next_token().token.eq(&Token::Comma) {
+                    continue_loop = true;
+                } else {
+                    parser.prev_token(); // not a comma, need to go back
+                }
+            }
+            parser.expect_token(&Token::RParen)?;
+        } else {
+            // Single string without parens: FILES = 'filename'
             let next_token = parser.next_token();
             match next_token.token {
                 Token::SingleQuotedString(s) => files.push(s),
                 _ => parser.expected("file token", next_token)?,
             };
-            if parser.next_token().token.eq(&Token::Comma) {
-                continue_loop = true;
-            } else {
-                parser.prev_token(); // not a comma, need to go back
-            }
         }
-        parser.expect_token(&Token::RParen)?;
     }
 
     // [ pattern ]
@@ -253,8 +263,50 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
         validation_mode = Some(parser.next_token().token.to_string());
     }
 
+    // Parse remaining key=value options (ON_ERROR, FORCE, etc.)
+    // These go into copy_options
+    while !parser.peek_token_is(&Token::EOF)
+        && !parser.peek_token_is(&Token::SemiColon)
+    {
+        let next_token = parser.next_token();
+        match next_token.token {
+            Token::Word(w) => {
+                parser.expect_token(&Token::Eq)?;
+                let value_token = parser.next_token();
+                let (value, option_type) = match value_token.token {
+                    Token::SingleQuotedString(s) => {
+                        (s, DataLoadingOptionType::STRING)
+                    }
+                    Token::Word(v) => {
+                        (v.value, DataLoadingOptionType::ENUM)
+                    }
+                    Token::Number(n, _) => {
+                        (n.to_string(), DataLoadingOptionType::ENUM)
+                    }
+                    _ => {
+                        // Unknown value format, stop parsing options
+                        parser.prev_token();
+                        parser.prev_token(); // back past =
+                        parser.prev_token(); // back past key
+                        break;
+                    }
+                };
+                copy_options.push(DataLoadingOption {
+                    option_name: w.value.to_uppercase(),
+                    option_type,
+                    value,
+                });
+            }
+            _ => {
+                parser.prev_token();
+                break;
+            }
+        }
+    }
+
     Ok(Statement::CopyIntoSnowflake {
         into,
+        columns,
         from_stage,
         from_stage_alias,
         stage_params,
@@ -453,6 +505,22 @@ fn parse_parentheses_options(parser: &mut Parser) -> Result<Vec<DataLoadingOptio
                                 option_name: key.value,
                                 option_type: DataLoadingOptionType::ENUM,
                                 value: word.value,
+                            });
+                            Ok(())
+                        }
+                        Token::Number(n, _) => {
+                            options.push(DataLoadingOption {
+                                option_name: key.value,
+                                option_type: DataLoadingOptionType::ENUM,
+                                value: n.to_string(),
+                            });
+                            Ok(())
+                        }
+                        Token::DoubleQuotedString(value) => {
+                            options.push(DataLoadingOption {
+                                option_name: key.value,
+                                option_type: DataLoadingOptionType::STRING,
+                                value,
                             });
                             Ok(())
                         }
