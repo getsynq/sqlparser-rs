@@ -9383,6 +9383,24 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr()?;
             Ok(Some(TableVersion::ForSystemTimeAsOf(expr)))
         } else if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+            // Snowflake CHANGES clause: table CHANGES (INFORMATION => append_only) AT (STREAM => 'name')
+            if self.parse_keyword(Keyword::CHANGES) {
+                self.expect_token(&Token::LParen)?;
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => {
+                            return Err(ParserError::ParserError(
+                                "Unexpected EOF in CHANGES clause".to_string(),
+                            ))
+                        }
+                        _ => {}
+                    }
+                }
+                // CHANGES is always followed by AT and optionally END
+            }
             // Snowflake AT/BEFORE time travel:
             // table AT(TIMESTAMP => expr) or table BEFORE(STATEMENT => 'id')
             let is_at = self.parse_keyword(Keyword::AT);
@@ -9411,6 +9429,23 @@ impl<'a> Parser<'a> {
                             ))
                         }
                         _ => {}
+                    }
+                }
+                // Snowflake CHANGES may have an optional END clause
+                if self.parse_keyword(Keyword::END) {
+                    self.expect_token(&Token::LParen)?;
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => {
+                                return Err(ParserError::ParserError(
+                                    "Unexpected EOF in END clause".to_string(),
+                                ))
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 Ok(Some(TableVersion::ForSystemTimeAsOf(Expr::Value(
