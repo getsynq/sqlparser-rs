@@ -2993,7 +2993,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Check if peek_nth_token matches a specific token (optimized, no clone)
+    /// Kept for upstream compatibility with potential future usage.
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn peek_nth_token_is(&self, n: usize, expected: &Token) -> bool {
         self.peek_nth_token_ref(n).token.eq(expected)
     }
