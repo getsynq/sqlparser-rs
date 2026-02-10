@@ -845,8 +845,8 @@ fn test_copy_into() {
     };
     assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
 
-    // Test with columns and various options
-    let sql = concat!(
+    // Test with columns and various options (ON_ERROR extracted from COPY_OPTIONS to top-level field)
+    let input_sql = concat!(
         "COPY INTO my_schema.my_table (\"COL_A\", \"COL_B\") ",
         "FROM stage1 ",
         "FILES = ('file1.csv') ",
@@ -854,11 +854,20 @@ fn test_copy_into() {
         "FILE_FORMAT=(TYPE='csv' SKIP_HEADER=1 COMPRESSION='zstd') ",
         "COPY_OPTIONS=(ON_ERROR=CONTINUE)"
     );
-    match snowflake().verified_stmt(sql) {
+    let expected_sql = concat!(
+        "COPY INTO my_schema.my_table (\"COL_A\", \"COL_B\") ",
+        "FROM stage1 ",
+        "FILES = ('file1.csv') ",
+        "PATTERN = '.*[.]csv' ",
+        "FILE_FORMAT=(TYPE='csv' SKIP_HEADER=1 COMPRESSION='zstd') ",
+        "ON_ERROR = CONTINUE"
+    );
+    match snowflake().one_statement_parses_to(input_sql, expected_sql) {
         Statement::CopyIntoSnowflake {
             into,
             columns,
             pattern,
+            on_error,
             copy_options,
             ..
         } => {
@@ -868,7 +877,8 @@ fn test_copy_into() {
             );
             assert_eq!(columns.len(), 2);
             assert!(pattern.is_some());
-            assert!(copy_options.options.iter().any(|o| o.option_name == "ON_ERROR"));
+            assert_eq!(on_error, Some("CONTINUE".to_string()));
+            assert!(copy_options.options.is_empty());
         }
         _ => unreachable!(),
     };
@@ -1076,22 +1086,71 @@ fn test_copy_into_file_format() {
 }
 
 #[test]
+fn test_copy_into_on_error_before_file_format() {
+    // ON_ERROR as bare option before FILE_FORMAT should parse correctly
+    let input_sql = concat!(
+        "COPY INTO sch1.tbl1 (\"COL_A\") ",
+        "FROM stage1 ",
+        "PATTERN = '.*[.]csv' ",
+        "ON_ERROR = CONTINUE ",
+        "FILE_FORMAT = (FORMAT_NAME='my_csv')"
+    );
+    let expected_sql = concat!(
+        "COPY INTO sch1.tbl1 (\"COL_A\") ",
+        "FROM stage1 ",
+        "PATTERN = '.*[.]csv' ",
+        "FILE_FORMAT=(FORMAT_NAME='my_csv') ",
+        "ON_ERROR = CONTINUE"
+    );
+    match snowflake().one_statement_parses_to(input_sql, expected_sql) {
+        Statement::CopyIntoSnowflake {
+            on_error,
+            file_format,
+            ..
+        } => {
+            assert_eq!(on_error, Some("CONTINUE".to_string()));
+            assert!(file_format.options.iter().any(|o| o.option_name == "FORMAT_NAME"));
+        }
+        _ => unreachable!(),
+    };
+}
+
+#[test]
+fn test_copy_into_without_from() {
+    // COPY INTO with bare options and no FROM clause
+    let input_sql = "COPY INTO mytable PURGE = TRUE";
+    let expected_sql = "COPY INTO mytable COPY_OPTIONS=(PURGE=TRUE)";
+    match snowflake().one_statement_parses_to(input_sql, expected_sql) {
+        Statement::CopyIntoSnowflake { into, copy_options, .. } => {
+            assert_eq!(into, ObjectName(vec![Ident::new("mytable")]));
+            assert!(copy_options.options.iter().any(|o| o.option_name == "PURGE"));
+        }
+        _ => unreachable!(),
+    };
+}
+
+#[test]
 fn test_copy_into_copy_options() {
-    let sql = concat!(
+    // ON_ERROR is extracted from COPY_OPTIONS into the top-level on_error field
+    let input_sql = concat!(
         "COPY INTO my_company.emp_basic ",
         "FROM 'gcs://mybucket/./../a.csv' ",
         "FILES = ('file1.json', 'file2.json') ",
         "PATTERN = '.*employees0[1-5].csv.gz' ",
         "COPY_OPTIONS=(ON_ERROR=CONTINUE FORCE=TRUE)"
     );
+    let expected_sql = concat!(
+        "COPY INTO my_company.emp_basic ",
+        "FROM 'gcs://mybucket/./../a.csv' ",
+        "FILES = ('file1.json', 'file2.json') ",
+        "PATTERN = '.*employees0[1-5].csv.gz' ",
+        "ON_ERROR = CONTINUE ",
+        "COPY_OPTIONS=(FORCE=TRUE)"
+    );
 
-    match snowflake().verified_stmt(sql) {
-        Statement::CopyIntoSnowflake { copy_options, .. } => {
-            assert!(copy_options.options.contains(&DataLoadingOption {
-                option_name: "ON_ERROR".to_string(),
-                option_type: DataLoadingOptionType::ENUM,
-                value: "CONTINUE".to_string()
-            }));
+    match snowflake().one_statement_parses_to(input_sql, expected_sql) {
+        Statement::CopyIntoSnowflake { on_error, copy_options, .. } => {
+            assert_eq!(on_error, Some("CONTINUE".to_string()));
             assert!(copy_options.options.contains(&DataLoadingOption {
                 option_name: "FORCE".to_string(),
                 option_type: DataLoadingOptionType::BOOLEAN,
@@ -1100,7 +1159,6 @@ fn test_copy_into_copy_options() {
         }
         _ => unreachable!(),
     };
-    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
 }
 
 #[test]

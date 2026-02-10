@@ -1615,6 +1615,7 @@ pub enum Statement {
         file_format: DataLoadingOptions,
         copy_options: DataLoadingOptions,
         validation_mode: Option<String>,
+        on_error: Option<String>,
     },
     /// ```sql
     /// CLOSE
@@ -3844,30 +3845,33 @@ impl fmt::Display for Statement {
                 file_format,
                 copy_options,
                 validation_mode,
+                on_error,
             } => {
                 write!(f, "COPY INTO {}", into)?;
                 if !columns.is_empty() {
                     write!(f, " ({})", display_comma_separated(columns))?;
                 }
-                if from_transformations.is_none() {
-                    // Standard data load
-                    write!(f, " FROM {}{}", from_stage, stage_params)?;
-                    if from_stage_alias.as_ref().is_some() {
-                        write!(f, " AS {}", from_stage_alias.as_ref().unwrap())?;
+                if !from_stage.0.is_empty() {
+                    if from_transformations.is_none() {
+                        // Standard data load
+                        write!(f, " FROM {}{}", from_stage, stage_params)?;
+                        if from_stage_alias.as_ref().is_some() {
+                            write!(f, " AS {}", from_stage_alias.as_ref().unwrap())?;
+                        }
+                    } else {
+                        // Data load with transformation
+                        write!(
+                            f,
+                            " FROM (SELECT {} FROM {}{}",
+                            display_separated(from_transformations.as_ref().unwrap(), ", "),
+                            from_stage,
+                            stage_params,
+                        )?;
+                        if from_stage_alias.as_ref().is_some() {
+                            write!(f, " AS {}", from_stage_alias.as_ref().unwrap())?;
+                        }
+                        write!(f, ")")?;
                     }
-                } else {
-                    // Data load with transformation
-                    write!(
-                        f,
-                        " FROM (SELECT {} FROM {}{}",
-                        display_separated(from_transformations.as_ref().unwrap(), ", "),
-                        from_stage,
-                        stage_params,
-                    )?;
-                    if from_stage_alias.as_ref().is_some() {
-                        write!(f, " AS {}", from_stage_alias.as_ref().unwrap())?;
-                    }
-                    write!(f, ")")?;
                 }
                 if files.is_some() {
                     write!(
@@ -3881,6 +3885,9 @@ impl fmt::Display for Statement {
                 }
                 if !file_format.options.is_empty() {
                     write!(f, " FILE_FORMAT=({})", file_format)?;
+                }
+                if let Some(ref on_error) = on_error {
+                    write!(f, " ON_ERROR = {on_error}")?;
                 }
                 if !copy_options.options.is_empty() {
                     write!(f, " COPY_OPTIONS=({})", copy_options)?;
