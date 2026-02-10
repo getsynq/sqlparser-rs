@@ -2442,8 +2442,8 @@ impl<'a> Parser<'a> {
                 return self.parse_array_index(expr);
             }
             let expr = self.parse_map_access(expr)?;
-            // Snowflake and BigQuery allows col[1].key syntax
-            return if dialect_of!(self is SnowflakeDialect | BigQueryDialect | DatabricksDialect)
+            // Snowflake, BigQuery, Redshift, and Databricks allow col[1].key syntax
+            return if dialect_of!(self is SnowflakeDialect | BigQueryDialect | DatabricksDialect | RedshiftSqlDialect)
                 && self.consume_token(&Token::Period)
             {
                 Ok(Expr::JsonAccess {
