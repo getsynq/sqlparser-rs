@@ -6951,6 +6951,11 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Expr::Value(Value::SingleQuotedString(value)))
             }
+            // Handle SQL keywords used as functions inside brackets (e.g., [CAST(x AS INTEGER) - 1])
+            Token::Word(Word { keyword, .. }) if keyword != Keyword::NoKeyword => {
+                self.prev_token();
+                self.parse_expr()
+            }
             Token::LParen => {
                 let r = self.parse_map_key()?;
                 self.expect_token(&Token::RParen)?;
