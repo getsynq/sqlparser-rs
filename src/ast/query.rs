@@ -1143,7 +1143,7 @@ impl fmt::Display for TableFactor {
                 }
                 write!(
                     f,
-                    "({} FOR {} IN ({}))",
+                    " ({} FOR {} IN ({}))",
                     value,
                     name,
                     display_comma_separated(columns)

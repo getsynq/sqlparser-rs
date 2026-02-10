@@ -10746,13 +10746,39 @@ impl<'a> Parser<'a> {
 
     pub fn parse_unload(&mut self) -> Result<Statement, ParserError> {
         self.expect_token(&Token::LParen)?;
-        let query = self.parse_boxed_query()?;
-        self.expect_token(&Token::RParen)?;
+
+        // Redshift UNLOAD takes a string-quoted query: UNLOAD ('select ...')
+        // Accept both string literal and actual query syntax
+        let query = if matches!(
+            self.peek_token().token,
+            Token::SingleQuotedString(_) | Token::EscapedStringLiteral(_)
+        ) {
+            // Consume the string literal containing the query text
+            let token = self.next_token();
+            let query_str = match token.token {
+                Token::SingleQuotedString(s) | Token::EscapedStringLiteral(s) => s,
+                _ => unreachable!(),
+            };
+            self.expect_token(&Token::RParen)?;
+            UnloadSource::QueryString(query_str)
+        } else {
+            let query = self.parse_boxed_query()?;
+            self.expect_token(&Token::RParen)?;
+            UnloadSource::Query(query)
+        };
 
         self.expect_keyword(Keyword::TO)?;
         let to = self.parse_identifier(false)?;
 
         let with_options = self.parse_options(Keyword::WITH)?;
+
+        // Skip Redshift-specific trailing options (iam_role, allowoverwrite,
+        // delimiter, header, parallel, manifest, maxfilesize, etc.)
+        while !self.peek_token_is(&Token::EOF)
+            && !self.peek_token_is(&Token::SemiColon)
+        {
+            self.next_token();
+        }
 
         Ok(Statement::Unload {
             query,
