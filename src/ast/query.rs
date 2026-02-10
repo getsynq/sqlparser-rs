@@ -898,12 +898,14 @@ pub enum TableFactor {
         expr: Expr,
         alias: Option<TableAlias>,
     },
-    /// `e.g. LATERAL FLATTEN(<args>)[ AS <alias> ]`
+    /// `e.g. LATERAL FLATTEN(<args>)[ OVER (PARTITION BY ...) ][ AS <alias> ]`
     Function {
         lateral: bool,
         name: ObjectName,
         args: Vec<FunctionArg>,
         alias: Option<TableAlias>,
+        /// Optional OVER clause for Snowflake table functions
+        over: Option<WindowSpec>,
     },
     /// ```sql
     /// SELECT * FROM UNNEST ([10,20,30]) as numbers WITH OFFSET;
@@ -1038,12 +1040,16 @@ impl fmt::Display for TableFactor {
                 name,
                 args,
                 alias,
+                over,
             } => {
                 if *lateral {
                     write!(f, "LATERAL ")?;
                 }
                 write!(f, "{name}")?;
                 write!(f, "({})", display_comma_separated(args))?;
+                if let Some(over) = over {
+                    write!(f, " OVER ({over})")?;
+                }
                 if let Some(alias) = alias {
                     write!(f, " AS {alias}")?;
                 }
