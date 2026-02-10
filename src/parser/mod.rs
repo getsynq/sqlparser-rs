@@ -6514,6 +6514,17 @@ impl<'a> Parser<'a> {
         while let Some(opt) = self.maybe_parse(|parser| parser.parse_copy_legacy_option()) {
             legacy_options.push(opt);
         }
+
+        // Skip Redshift-specific trailing options (iam_role, allowoverwrite,
+        // emptyasnull, region, delimiter, etc.) that are not standard PostgreSQL COPY
+        if dialect_of!(self is RedshiftSqlDialect) {
+            while !self.peek_token_is(&Token::EOF)
+                && !self.peek_token_is(&Token::SemiColon)
+            {
+                self.next_token();
+            }
+        }
+
         let values = if let CopyTarget::Stdin = target {
             self.expect_token(&Token::SemiColon)?;
             self.parse_tsv()
@@ -8934,7 +8945,26 @@ impl<'a> Parser<'a> {
             _ => None,
         };
 
-        let db_name = self.parse_object_name(false)?;
+        // Snowflake: USE SCHEMA IDENTIFIER($var) - skip IDENTIFIER(...) wrapper
+        let db_name = if matches!(self.peek_token().token, Token::Word(ref w) if w.value.to_uppercase() == "IDENTIFIER")
+            && matches!(self.peek_nth_token_ref(1).token, Token::LParen)
+        {
+            self.next_token(); // consume IDENTIFIER
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+            ObjectName(vec![Ident::new("IDENTIFIER")])
+        } else {
+            self.parse_object_name(false)?
+        };
         Ok(Statement::Use {
             db_name,
             object_type,
