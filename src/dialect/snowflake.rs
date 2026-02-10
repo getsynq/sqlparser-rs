@@ -157,149 +157,210 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
     let columns = parser.parse_parenthesized_column_list(IsOptional::Optional, false)?;
     let mut files: Vec<String> = vec![];
     let mut from_transformations: Option<Vec<StageLoadSelectItem>> = None;
-    let from_stage_alias;
-    let from_stage: ObjectName;
-    let stage_params: StageParamsObject;
-
-    parser.expect_keyword(Keyword::FROM)?;
-    // check if data load transformations are present
-    match parser.next_token().token {
-        Token::LParen => {
-            // data load with transformations
-            parser.expect_keyword(Keyword::SELECT)?;
-            from_transformations = parse_select_items_for_data_load(parser)?;
-
-            parser.expect_keyword(Keyword::FROM)?;
-            from_stage = parser.parse_object_name(true)?;
-            stage_params = parse_stage_params(parser)?;
-
-            // as
-            from_stage_alias = if parser.parse_keyword(Keyword::AS) {
-                Some(match parser.next_token().token {
-                    Token::Word(w) => Ok(Ident::new(w.value)),
-                    _ => parser.expected("stage alias", parser.peek_token()),
-                }?)
-            } else {
-                None
-            };
-            parser.expect_token(&Token::RParen)?;
-        }
-        _ => {
-            parser.prev_token();
-            from_stage = parser.parse_object_name(false)?;
-            stage_params = parse_stage_params(parser)?;
-
-            // as
-            from_stage_alias = if parser.parse_keyword(Keyword::AS) {
-                Some(match parser.next_token().token {
-                    Token::Word(w) => Ok(Ident::new(w.value)),
-                    _ => parser.expected("stage alias", parser.peek_token()),
-                }?)
-            } else {
-                None
-            };
-        }
+    let mut from_stage_alias = None;
+    let mut from_stage = ObjectName(vec![]);
+    let mut stage_params = StageParamsObject {
+        url: None,
+        encryption: DataLoadingOptions { options: vec![] },
+        endpoint: None,
+        storage_integration: None,
+        credentials: DataLoadingOptions { options: vec![] },
     };
 
-    // [ files ]
-    if parser.parse_keyword(Keyword::FILES) {
-        parser.expect_token(&Token::Eq)?;
-        // FILES can be a single string or parenthesized list
-        if parser.consume_token(&Token::LParen) {
-            let mut continue_loop = true;
-            while continue_loop {
-                continue_loop = false;
+    // FROM clause (optional for some Snowflake variants like COPY INTO table PURGE=TRUE)
+    if parser.parse_keyword(Keyword::FROM) {
+        // check if data load transformations are present
+        match parser.next_token().token {
+            Token::LParen => {
+                // data load with transformations
+                parser.expect_keyword(Keyword::SELECT)?;
+                from_transformations = parse_select_items_for_data_load(parser)?;
+
+                parser.expect_keyword(Keyword::FROM)?;
+                from_stage = parser.parse_object_name(true)?;
+                stage_params = parse_stage_params(parser)?;
+
+                // as
+                from_stage_alias = if parser.parse_keyword(Keyword::AS) {
+                    Some(match parser.next_token().token {
+                        Token::Word(w) => Ok(Ident::new(w.value)),
+                        _ => parser.expected("stage alias", parser.peek_token()),
+                    }?)
+                } else {
+                    None
+                };
+                parser.expect_token(&Token::RParen)?;
+            }
+            _ => {
+                parser.prev_token();
+                from_stage = parser.parse_object_name(false)?;
+                stage_params = parse_stage_params(parser)?;
+
+                // as
+                from_stage_alias = if parser.parse_keyword(Keyword::AS) {
+                    Some(match parser.next_token().token {
+                        Token::Word(w) => Ok(Ident::new(w.value)),
+                        _ => parser.expected("stage alias", parser.peek_token()),
+                    }?)
+                } else {
+                    None
+                };
+            }
+        };
+    }
+
+    // Parse all options in any order using a single loop
+    let mut pattern = None;
+    let mut file_format = Vec::new();
+    let mut copy_options = Vec::new();
+    let mut validation_mode = None;
+    let mut on_error = None;
+
+    loop {
+        if parser.peek_token_is(&Token::EOF) || parser.peek_token_is(&Token::SemiColon) {
+            break;
+        }
+
+        if parser.parse_keyword(Keyword::FILES) {
+            parser.expect_token(&Token::Eq)?;
+            if parser.consume_token(&Token::LParen) {
+                let mut continue_loop = true;
+                while continue_loop {
+                    continue_loop = false;
+                    let next_token = parser.next_token();
+                    match next_token.token {
+                        Token::SingleQuotedString(s) => files.push(s),
+                        _ => parser.expected("file token", next_token)?,
+                    };
+                    if parser.next_token().token.eq(&Token::Comma) {
+                        continue_loop = true;
+                    } else {
+                        parser.prev_token();
+                    }
+                }
+                parser.expect_token(&Token::RParen)?;
+            } else {
                 let next_token = parser.next_token();
                 match next_token.token {
                     Token::SingleQuotedString(s) => files.push(s),
                     _ => parser.expected("file token", next_token)?,
                 };
-                if parser.next_token().token.eq(&Token::Comma) {
-                    continue_loop = true;
-                } else {
-                    parser.prev_token(); // not a comma, need to go back
+            }
+        } else if parser.parse_keyword(Keyword::PATTERN) {
+            parser.expect_token(&Token::Eq)?;
+            let next_token = parser.next_token();
+            pattern = Some(match next_token.token {
+                Token::SingleQuotedString(s) => s,
+                _ => parser.expected("pattern", next_token)?,
+            });
+        } else if parser.parse_keyword(Keyword::FILE_FORMAT) {
+            parser.expect_token(&Token::Eq)?;
+            if parser.peek_token_is(&Token::LParen) {
+                file_format = parse_parentheses_options(parser)?;
+            } else {
+                // FILE_FORMAT = 'format_name' (string shorthand)
+                let next_token = parser.next_token();
+                match next_token.token {
+                    Token::SingleQuotedString(s) => {
+                        file_format.push(DataLoadingOption {
+                            option_name: "FORMAT_NAME".to_string(),
+                            option_type: DataLoadingOptionType::STRING,
+                            value: s,
+                        });
+                    }
+                    Token::Word(w) => {
+                        file_format.push(DataLoadingOption {
+                            option_name: "FORMAT_NAME".to_string(),
+                            option_type: DataLoadingOptionType::ENUM,
+                            value: w.value,
+                        });
+                    }
+                    _ => parser.expected("file format", next_token)?,
                 }
             }
-            parser.expect_token(&Token::RParen)?;
+        } else if parser.parse_keyword(Keyword::COPY_OPTIONS) {
+            parser.expect_token(&Token::Eq)?;
+            let mut opts = parse_parentheses_options(parser)?;
+            // Extract ON_ERROR from COPY_OPTIONS into the top-level field
+            opts.retain(|opt| {
+                if opt.option_name.eq_ignore_ascii_case("ON_ERROR") {
+                    on_error = Some(opt.value.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            copy_options.extend(opts);
+        } else if parser.parse_keyword(Keyword::VALIDATION_MODE) {
+            parser.expect_token(&Token::Eq)?;
+            validation_mode = Some(parser.next_token().token.to_string());
         } else {
-            // Single string without parens: FILES = 'filename'
-            let next_token = parser.next_token();
-            match next_token.token {
-                Token::SingleQuotedString(s) => files.push(s),
-                _ => parser.expected("file token", next_token)?,
-            };
-        }
-    }
-
-    // [ pattern ]
-    let mut pattern = None;
-    if parser.parse_keyword(Keyword::PATTERN) {
-        parser.expect_token(&Token::Eq)?;
-        let next_token = parser.next_token();
-        pattern = Some(match next_token.token {
-            Token::SingleQuotedString(s) => s,
-            _ => parser.expected("pattern", next_token)?,
-        });
-    }
-
-    // [ file_format]
-    let mut file_format = Vec::new();
-    if parser.parse_keyword(Keyword::FILE_FORMAT) {
-        parser.expect_token(&Token::Eq)?;
-        file_format = parse_parentheses_options(parser)?;
-    }
-
-    // [ copy_options ]
-    let mut copy_options = Vec::new();
-    if parser.parse_keyword(Keyword::COPY_OPTIONS) {
-        parser.expect_token(&Token::Eq)?;
-        copy_options = parse_parentheses_options(parser)?;
-    }
-
-    // [ VALIDATION_MODE ]
-    let mut validation_mode = None;
-    if parser.parse_keyword(Keyword::VALIDATION_MODE) {
-        parser.expect_token(&Token::Eq)?;
-        validation_mode = Some(parser.next_token().token.to_string());
-    }
-
-    // Parse remaining key=value options (ON_ERROR, FORCE, etc.)
-    // These go into copy_options
-    while !parser.peek_token_is(&Token::EOF)
-        && !parser.peek_token_is(&Token::SemiColon)
-    {
-        let next_token = parser.next_token();
-        match next_token.token {
-            Token::Word(w) => {
-                parser.expect_token(&Token::Eq)?;
-                let value_token = parser.next_token();
-                let (value, option_type) = match value_token.token {
-                    Token::SingleQuotedString(s) => {
-                        (s, DataLoadingOptionType::STRING)
-                    }
-                    Token::Word(v) => {
-                        (v.value, DataLoadingOptionType::ENUM)
-                    }
-                    Token::Number(n, _) => {
-                        (n.to_string(), DataLoadingOptionType::ENUM)
-                    }
-                    _ => {
-                        // Unknown value format, stop parsing options
+            // Try to parse generic KEY = VALUE options
+            match parser.peek_token().token {
+                Token::Word(_) => {
+                    let next_token = parser.next_token();
+                    let key = match &next_token.token {
+                        Token::Word(w) => w.value.to_uppercase(),
+                        _ => unreachable!(),
+                    };
+                    if !parser.consume_token(&Token::Eq) {
                         parser.prev_token();
-                        parser.prev_token(); // back past =
-                        parser.prev_token(); // back past key
                         break;
                     }
-                };
-                copy_options.push(DataLoadingOption {
-                    option_name: w.value.to_uppercase(),
-                    option_type,
-                    value,
-                });
-            }
-            _ => {
-                parser.prev_token();
-                break;
+                    if key == "ON_ERROR" {
+                        let value_token = parser.next_token();
+                        on_error = Some(match value_token.token {
+                            Token::SingleQuotedString(s) => s,
+                            Token::Word(v) => v.value,
+                            Token::Number(n, _) => n.to_string(),
+                            _ => parser.expected("ON_ERROR value", value_token)?,
+                        });
+                    } else if parser.peek_token_is(&Token::LParen) {
+                        // KEY = (...) - parenthesized sub-options (e.g. INCLUDE_METADATA)
+                        let sub_opts = parse_parentheses_options(parser)?;
+                        // Store as copy_options with prefixed key
+                        for opt in sub_opts {
+                            copy_options.push(opt);
+                        }
+                    } else if parser.parse_keyword(Keyword::TRUE) {
+                        copy_options.push(DataLoadingOption {
+                            option_name: key,
+                            option_type: DataLoadingOptionType::BOOLEAN,
+                            value: "TRUE".to_string(),
+                        });
+                    } else if parser.parse_keyword(Keyword::FALSE) {
+                        copy_options.push(DataLoadingOption {
+                            option_name: key,
+                            option_type: DataLoadingOptionType::BOOLEAN,
+                            value: "FALSE".to_string(),
+                        });
+                    } else {
+                        let value_token = parser.next_token();
+                        let (value, option_type) = match value_token.token {
+                            Token::SingleQuotedString(s) => {
+                                (s, DataLoadingOptionType::STRING)
+                            }
+                            Token::Word(v) => {
+                                (v.value, DataLoadingOptionType::ENUM)
+                            }
+                            Token::Number(n, _) => {
+                                (n.to_string(), DataLoadingOptionType::ENUM)
+                            }
+                            _ => {
+                                parser.prev_token();
+                                parser.prev_token(); // back past =
+                                parser.prev_token(); // back past key
+                                break;
+                            }
+                        };
+                        copy_options.push(DataLoadingOption {
+                            option_name: key,
+                            option_type,
+                            value,
+                        });
+                    }
+                }
+                _ => break,
             }
         }
     }
@@ -320,6 +381,7 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
             options: copy_options,
         },
         validation_mode,
+        on_error,
     })
 }
 
