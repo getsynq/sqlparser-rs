@@ -5946,7 +5946,25 @@ impl<'a> Parser<'a> {
                 let index_expr = self.parse_expr()?;
 
                 let index_type = if self.parse_keyword(Keyword::TYPE) {
-                    Some(self.parse_object_name(false)?)
+                    let name = self.parse_object_name(false)?;
+                    // ClickHouse index types can have parameters: TYPE text(tokenizer = splitByNonAlpha)
+                    if self.consume_token(&Token::LParen) {
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => {
+                                    return self.expected(
+                                        "closing parenthesis",
+                                        self.peek_token(),
+                                    )
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Some(name)
                 } else {
                     None
                 };
