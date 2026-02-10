@@ -9974,6 +9974,11 @@ impl<'a> Parser<'a> {
         let into = action == Some(Keyword::INTO);
         let overwrite = action == Some(Keyword::OVERWRITE);
 
+        // Snowflake: INSERT OVERWRITE INTO table - consume INTO after OVERWRITE
+        if overwrite {
+            let _ = self.parse_keyword(Keyword::INTO);
+        }
+
         let local = self.parse_keyword(Keyword::LOCAL);
 
         if self.parse_keyword(Keyword::DIRECTORY) {
