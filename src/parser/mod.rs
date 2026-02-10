@@ -5137,7 +5137,7 @@ impl<'a> Parser<'a> {
 
             // PRIMARY KEY (cols)
             if primary_key.is_none() && self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY]) {
-                primary_key = Some(self.parse_parenthesized_column_list(Optional, false)?);
+                primary_key = Some(self.parse_parenthesized_identifier_list_with_func_skip()?);
                 continue;
             }
 
@@ -5145,7 +5145,7 @@ impl<'a> Parser<'a> {
             if order_by.is_none() && self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
                 order_by = if self.consume_token(&Token::LParen) {
                     let columns = if !self.peek_token_is(&Token::RParen) {
-                        self.parse_comma_separated(|p| p.parse_identifier(false))?
+                        self.parse_comma_separated(|p| p.parse_identifier_with_func_skip())?
                     } else {
                         vec![]
                     };
@@ -5158,7 +5158,7 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::RParen)?;
                     Some(vec![])
                 } else {
-                    Some(vec![self.parse_identifier(false)?])
+                    Some(vec![self.parse_identifier_with_func_skip()?])
                 };
                 continue;
             }
@@ -7695,6 +7695,48 @@ impl<'a> Parser<'a> {
             Ok(vec![])
         } else {
             self.expected("a list of columns in parentheses", self.peek_token())
+        }
+    }
+
+    /// Parse an identifier, and if followed by `(`, skip the parenthesized content.
+    /// This is used for ClickHouse ORDER BY / PRIMARY KEY which accept expressions
+    /// like `toDateTime(col)` but the AST stores only identifiers.
+    fn parse_identifier_with_func_skip(&mut self) -> Result<WithSpan<Ident>, ParserError> {
+        let ident = self.parse_identifier(false)?;
+        // Skip function call arguments if present
+        if self.consume_token(&Token::LParen) {
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => {
+                        return Err(ParserError::ParserError(
+                            "Unexpected EOF in function arguments".to_string(),
+                        ))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(ident)
+    }
+
+    /// Parse a parenthesized list of identifiers, skipping function call arguments.
+    /// Used for ClickHouse PRIMARY KEY which accepts expressions like `(col, toDateTime(col))`.
+    fn parse_parenthesized_identifier_list_with_func_skip(
+        &mut self,
+    ) -> Result<Vec<WithSpan<Ident>>, ParserError> {
+        if self.consume_token(&Token::LParen) {
+            let cols = if !self.peek_token_is(&Token::RParen) {
+                self.parse_comma_separated(|p| p.parse_identifier_with_func_skip())?
+            } else {
+                vec![]
+            };
+            self.expect_token(&Token::RParen)?;
+            Ok(cols)
+        } else {
+            Ok(vec![self.parse_identifier_with_func_skip()?])
         }
     }
 

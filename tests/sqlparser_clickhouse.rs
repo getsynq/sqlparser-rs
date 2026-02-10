@@ -1341,6 +1341,42 @@ fn test_create_table_projection() {
 }
 
 #[test]
+fn test_create_table_codec_with_complex_types() {
+    // Map type with CODEC
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t (col Map(LowCardinality(String), String) CODEC(ZSTD(1)))",
+        "",
+    );
+
+    // Array(Map) with CODEC
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t (col Array(Map(LowCardinality(String), String)) CODEC(ZSTD(1)))",
+        "",
+    );
+
+    // Multi-arg CODEC with Delta
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t (col DateTime64(9) CODEC(Delta(8), ZSTD(1)))",
+        "",
+    );
+}
+
+#[test]
+fn test_create_table_order_by_with_functions() {
+    // ORDER BY with function calls (ClickHouse expressions in ORDER BY)
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t (col DateTime64(9)) ORDER BY (col, toDateTime(col))",
+        "",
+    );
+
+    // PRIMARY KEY with function calls
+    clickhouse().one_statement_parses_to(
+        "CREATE TABLE t (col String) PRIMARY KEY (col, toDateTime(col)) ORDER BY (col, toDateTime(col))",
+        "",
+    );
+}
+
+#[test]
 fn test_create_table_index_expression() {
     let sql = "CREATE TABLE default.statuses (INDEX idx_created_at DATE(created_at) TYPE MinMax GRANULARITY 1)";
     match clickhouse().verified_stmt(sql) {
