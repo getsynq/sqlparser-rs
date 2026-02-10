@@ -55,11 +55,22 @@ impl Dialect for RedshiftSqlDialect {
         // The chars iterator starts at the opening quote character
         match chars.next() {
             Some('[') => {
-                // For bracket-delimited identifiers, reject numeric content
-                // so [0] is tokenized as array subscript, not as identifier
+                // For bracket-delimited identifiers, reject content that looks
+                // like an expression rather than an identifier:
+                // - [0], [1] -> array subscript (starts with digit)
+                // - [CAST(x AS INTEGER) - 1] -> expression (contains parentheses)
+                // - [column_name] -> valid delimited identifier
                 match chars.peek() {
                     Some(ch) if ch.is_ascii_digit() => false,
-                    _ => true,
+                    _ => {
+                        // Scan for parentheses - identifiers don't contain them
+                        for ch in chars {
+                            if ch == '(' {
+                                return false;
+                            }
+                        }
+                        true
+                    }
                 }
             }
             _ => true,
