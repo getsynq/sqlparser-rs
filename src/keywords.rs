@@ -144,6 +144,7 @@ define_keywords!(
     CENTURY,
     CHAIN,
     CHANGE,
+    CHANGES,
     CHAR,
     CHARACTER,
     CHARACTERS,
