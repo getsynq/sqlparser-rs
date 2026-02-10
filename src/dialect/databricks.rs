@@ -28,6 +28,10 @@ impl Dialect for DatabricksDialect {
         ch.is_ascii_lowercase() || ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_'
     }
 
+    fn supports_filter_during_aggregation(&self) -> bool {
+        true
+    }
+
     fn supports_group_by_expr(&self) -> bool {
         true
     }
