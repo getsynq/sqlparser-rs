@@ -1292,6 +1292,12 @@ fn test_select_as_struct() {
     bigquery().verified_only_select("SELECT * FROM (SELECT AS VALUE STRUCT(123 AS a, false AS b))");
     let select = bigquery().verified_only_select("SELECT AS STRUCT 1 AS a, 2 AS b");
     assert_eq!(Some(ValueTableMode::AsStruct), select.value_table_mode);
+    assert_eq!(None, select.distinct);
+
+    // BigQuery supports SELECT DISTINCT AS STRUCT
+    let select = bigquery().verified_only_select("SELECT DISTINCT AS STRUCT 1 AS a, 2 AS b");
+    assert_eq!(Some(ValueTableMode::AsStruct), select.value_table_mode);
+    assert_eq!(Some(Distinct::Distinct), select.distinct);
 }
 
 #[test]
