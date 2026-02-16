@@ -3319,6 +3319,7 @@ fn parse_create_function() {
         Statement::CreateFunction {
             or_replace: false,
             temporary: false,
+            table_function: false,
             name: ObjectName(vec![Ident::new("add")]),
             args: Some(vec![
                 OperateFunctionArg::unnamed(DataType::Integer(None)),
@@ -3343,6 +3344,7 @@ fn parse_create_function() {
         Statement::CreateFunction {
             or_replace: true,
             temporary: false,
+            table_function: false,
             name: ObjectName(vec![Ident::new("add")]),
             args: Some(vec![
                 OperateFunctionArg::with_name("a", DataType::Integer(None)),
@@ -3374,6 +3376,7 @@ fn parse_create_function() {
         Statement::CreateFunction {
             or_replace: true,
             temporary: false,
+            table_function: false,
             name: ObjectName(vec![Ident::new("increment")]),
             args: Some(vec![OperateFunctionArg::with_name(
                 "i",
@@ -3389,6 +3392,7 @@ fn parse_create_function() {
                 as_: Some(FunctionDefinition::DoubleDollarDef(
                     " BEGIN RETURN i + 1; END; ".into()
                 )),
+                as_query: None,
                 using: None
             },
         }

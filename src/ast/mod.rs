@@ -2111,6 +2111,8 @@ pub enum Statement {
     CreateFunction {
         or_replace: bool,
         temporary: bool,
+        /// BigQuery supports `CREATE TABLE FUNCTION` for table-valued functions
+        table_function: bool,
         name: ObjectName,
         args: Option<Vec<OperateFunctionArg>>,
         return_type: Option<DataType>,
@@ -2736,6 +2738,7 @@ impl fmt::Display for Statement {
             Statement::CreateFunction {
                 or_replace,
                 temporary,
+                table_function,
                 name,
                 args,
                 return_type,
@@ -2744,9 +2747,10 @@ impl fmt::Display for Statement {
             } => {
                 write!(
                     f,
-                    "CREATE {or_replace}{temp}FUNCTION {name}",
+                    "CREATE {or_replace}{temp}{table}FUNCTION {name}",
                     temp = if *temporary { "TEMPORARY " } else { "" },
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    table = if *table_function { "TABLE " } else { "" },
                 )?;
                 if let Some(args) = args {
                     write!(f, "({})", display_comma_separated(args))?;
@@ -5328,6 +5332,8 @@ pub struct CreateFunctionBody {
     ///
     /// Note that Hive's `AS class_name` is also parsed here.
     pub as_: Option<FunctionDefinition>,
+    /// AS query (BigQuery TABLE FUNCTION body)
+    pub as_query: Option<Query>,
     /// RETURN expression
     pub return_: Option<Expr>,
     /// RETURN SELECT
@@ -5346,6 +5352,9 @@ impl fmt::Display for CreateFunctionBody {
         }
         if let Some(definition) = &self.as_ {
             write!(f, " AS {definition}")?;
+        }
+        if let Some(query) = &self.as_query {
+            write!(f, " AS {query}")?;
         }
         if let Some(expr) = &self.return_ {
             write!(f, " RETURN {expr}")?;
