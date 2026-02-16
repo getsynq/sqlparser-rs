@@ -8539,6 +8539,8 @@ impl<'a> Parser<'a> {
     /// Parse a restricted `SELECT` statement (no CTEs / `UNION` / `ORDER BY`),
     /// assuming the initial `SELECT` was already consumed
     pub fn parse_select(&mut self) -> Result<Select, ParserError> {
+        let distinct = self.parse_all_or_distinct()?;
+
         let value_table_mode =
             if dialect_of!(self is BigQueryDialect) && self.parse_keyword(Keyword::AS) {
                 if self.parse_keyword(Keyword::VALUE) {
@@ -8551,8 +8553,6 @@ impl<'a> Parser<'a> {
             } else {
                 None
             };
-
-        let distinct = self.parse_all_or_distinct()?;
 
         let top = if self.parse_keyword(Keyword::TOP) {
             Some(self.parse_top()?)

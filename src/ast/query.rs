@@ -276,12 +276,12 @@ impl fmt::Display for Select {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "SELECT")?;
 
-        if let Some(value_table_mode) = self.value_table_mode {
-            write!(f, " {value_table_mode}")?;
-        }
-
         if let Some(ref distinct) = self.distinct {
             write!(f, " {distinct}")?;
+        }
+
+        if let Some(value_table_mode) = self.value_table_mode {
+            write!(f, " {value_table_mode}")?;
         }
         if let Some(ref top) = self.top {
             write!(f, " {top}")?;
