@@ -1610,3 +1610,9 @@ fn parse_bigquery_format_function() {
         "",
     );
 }
+
+#[test]
+fn parse_update_from_multiple_tables() {
+    let sql = "UPDATE dataset.DetailedInventory SET supply_constrained = true FROM dataset.NewArrivals, dataset.Warehouse WHERE DetailedInventory.product = NewArrivals.product AND NewArrivals.warehouse = Warehouse.warehouse AND Warehouse.state = 'WA'";
+    bigquery().verified_stmt(sql);
+}

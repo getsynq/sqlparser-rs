@@ -1633,7 +1633,7 @@ pub enum Statement {
         /// Column assignments
         assignments: Vec<Assignment>,
         /// Table which provide value to be set
-        from: Option<TableWithJoins>,
+        from: Option<Vec<TableWithJoins>>,
         /// WHERE
         selection: Option<Expr>,
         /// RETURNING
@@ -2670,7 +2670,7 @@ impl fmt::Display for Statement {
                     write!(f, " SET {}", display_comma_separated(assignments))?;
                 }
                 if let Some(from) = from {
-                    write!(f, " FROM {from}")?;
+                    write!(f, " FROM {}", display_comma_separated(from))?;
                 }
                 if let Some(selection) = selection {
                     write!(f, " WHERE {selection}")?;
