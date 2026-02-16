@@ -1622,3 +1622,18 @@ fn parse_update_from_multiple_tables() {
     let sql = "UPDATE dataset.DetailedInventory SET supply_constrained = true FROM dataset.NewArrivals, dataset.Warehouse WHERE DetailedInventory.product = NewArrivals.product AND NewArrivals.warehouse = Warehouse.warehouse AND Warehouse.state = 'WA'";
     bigquery().verified_stmt(sql);
 }
+
+#[test]
+fn parse_wildcard_table() {
+    // BigQuery wildcard table syntax
+    // https://cloud.google.com/bigquery/docs/querying-wildcard-tables
+    bigquery().verified_stmt("SELECT * FROM x.y*");
+    // Backtick-quoted identifiers with dots get split into parts
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM `project.dataset.table_prefix*`",
+        "SELECT * FROM `project`.`dataset`.`table_prefix*`",
+    );
+    bigquery().verified_stmt(
+        "SELECT * FROM x.y* WHERE _TABLE_SUFFIX BETWEEN '20230101' AND '20231231'",
+    );
+}

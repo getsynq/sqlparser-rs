@@ -7549,6 +7549,17 @@ impl<'a> Parser<'a> {
                 .collect()
         }
 
+        // BigQuery supports wildcard tables: `FROM dataset.table_prefix*`
+        // https://cloud.google.com/bigquery/docs/querying-wildcard-tables
+        if in_table_clause
+            && dialect_of!(self is BigQueryDialect | GenericDialect)
+            && self.consume_token(&Token::Mul)
+        {
+            if let Some(last) = idents.last_mut() {
+                last.value.push('*');
+            }
+        }
+
         Ok(ObjectName(idents))
     }
 
