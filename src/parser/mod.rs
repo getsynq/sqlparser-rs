@@ -10287,7 +10287,7 @@ impl<'a> Parser<'a> {
         let from = if self.parse_keyword(Keyword::FROM)
             && dialect_of!(self is GenericDialect | PostgreSqlDialect | DuckDbDialect | BigQueryDialect | SnowflakeDialect | RedshiftSqlDialect | MsSqlDialect)
         {
-            Some(self.parse_table_and_joins()?)
+            Some(self.parse_comma_separated(Parser::parse_table_and_joins)?)
         } else {
             None
         };

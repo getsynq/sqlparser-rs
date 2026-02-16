@@ -237,7 +237,7 @@ fn parse_update_set_from() {
                     vec![Ident::new("t2"), Ident::new("name")].empty_span()
                 ),
             }],
-            from: Some(TableWithJoins {
+            from: Some(vec![TableWithJoins {
                 relation: TableFactor::Derived {
                     lateral: false,
                     subquery: Box::new(Query {
@@ -296,7 +296,7 @@ fn parse_update_set_from() {
                     }),
                 },
                 joins: vec![],
-            }),
+            }]),
             selection: Some(Expr::BinaryOp {
                 left: Box::new(Expr::CompoundIdentifier(
                     vec![Ident::new("t1"), Ident::new("id")].empty_span()
