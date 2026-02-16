@@ -307,6 +307,10 @@ pub enum DataType {
     /// [hive]: https://docs.cloudera.com/cdw-runtime/cloud/impala-sql-reference/topics/impala-struct.html
     /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types#struct_type
     Struct(Vec<StructField>),
+    /// TABLE type used in BigQuery for table-valued function return types.
+    ///
+    /// [bigquery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_function
+    Table(Vec<StructField>),
     /// MAP<>
     DatabricksMap(Vec<StructField>),
     /// Nullable - special marker NULL represents in ClickHouse as a data type.
@@ -534,6 +538,13 @@ impl fmt::Display for DataType {
                     write!(f, "STRUCT<{}>", display_comma_separated(fields))
                 } else {
                     write!(f, "STRUCT")
+                }
+            }
+            DataType::Table(fields) => {
+                if !fields.is_empty() {
+                    write!(f, "TABLE<{}>", display_comma_separated(fields))
+                } else {
+                    write!(f, "TABLE")
                 }
             }
             DataType::DatabricksMap(fields) => {

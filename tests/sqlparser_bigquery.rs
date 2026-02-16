@@ -1548,6 +1548,54 @@ fn test_json_number_start() {
 }
 
 #[test]
+fn parse_bigquery_create_table_function() {
+    // CREATE TABLE FUNCTION with RETURNS TABLE<...> and AS query (non-roundtrip due to backtick parsing)
+    bigquery().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE FUNCTION mydataset.names_by_year(y INT64) RETURNS TABLE<name STRING, year INT64, total INT64> AS SELECT year, name, SUM(number) AS total FROM `bigquery-public-data.usa_names.usa_1910_current` WHERE year = y GROUP BY year, name",
+        "",
+    );
+
+    // CREATE TABLE FUNCTION without RETURNS (inferred return type)
+    bigquery().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE FUNCTION mydataset.names_by_year(y INT64) AS SELECT year, name, SUM(number) AS total FROM `bigquery-public-data.usa_names.usa_1910_current` WHERE year = y GROUP BY year, name",
+        "",
+    );
+
+    // Simple CREATE TABLE FUNCTION - roundtrip
+    bigquery().verified_stmt(
+        "CREATE TABLE FUNCTION a(x INT64) RETURNS TABLE<q STRING, r INT64> AS SELECT s, t",
+    );
+
+    // Verify the AST structure
+    let sql = "CREATE TABLE FUNCTION a(x INT64) RETURNS TABLE<q STRING, r INT64> AS SELECT s, t";
+    match bigquery().verified_stmt(sql) {
+        Statement::CreateFunction {
+            or_replace,
+            temporary,
+            table_function,
+            name,
+            args,
+            return_type,
+            ..
+        } => {
+            assert!(!or_replace);
+            assert!(!temporary);
+            assert!(table_function);
+            assert_eq!(name.to_string(), "a");
+            assert!(args.is_some());
+            assert!(return_type.is_some());
+            match return_type.unwrap() {
+                DataType::Table(fields) => {
+                    assert_eq!(fields.len(), 2);
+                }
+                other => panic!("Expected DataType::Table, got {:?}", other),
+            }
+        }
+        other => panic!("Expected CreateFunction, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_bigquery_format_function() {
     // format() as first select item
     bigquery().verified_stmt("SELECT format('%f', round(col_15, 6)) AS swap_spread FROM t2");

@@ -3406,14 +3406,19 @@ impl<'a> Parser<'a> {
             .parse_one_of_keywords(&[Keyword::TEMP, Keyword::TEMPORARY])
             .is_some();
         if self.parse_keyword(Keyword::TABLE) {
-            self.parse_create_table(or_replace, temporary, global, transient)
+            if self.parse_keyword(Keyword::FUNCTION) {
+                // CREATE TABLE FUNCTION (BigQuery table-valued function)
+                self.parse_create_function(or_replace, temporary, true)
+            } else {
+                self.parse_create_table(or_replace, temporary, global, transient)
+            }
         } else if self.parse_keyword(Keyword::MATERIALIZED) || self.parse_keyword(Keyword::VIEW) {
             self.prev_token();
             self.parse_create_view(or_replace)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             self.parse_create_external_table(or_replace)
         } else if self.parse_keyword(Keyword::FUNCTION) {
-            self.parse_create_function(or_replace, temporary)
+            self.parse_create_function(or_replace, temporary, false)
         } else if self.parse_keyword(Keyword::MACRO) {
             self.parse_create_macro(or_replace, temporary)
         } else if self.parse_keyword(Keyword::INDEX) {
@@ -3768,6 +3773,7 @@ impl<'a> Parser<'a> {
         &mut self,
         or_replace: bool,
         temporary: bool,
+        table_function: bool,
     ) -> Result<Statement, ParserError> {
         if dialect_of!(self is HiveDialect) {
             let name = self.parse_object_name(false)?;
@@ -3782,6 +3788,7 @@ impl<'a> Parser<'a> {
             Ok(Statement::CreateFunction {
                 or_replace,
                 temporary,
+                table_function,
                 name,
                 args: None,
                 return_type: None,
@@ -3801,6 +3808,7 @@ impl<'a> Parser<'a> {
             Ok(Statement::CreateFunction {
                 or_replace,
                 temporary,
+                table_function,
                 name,
                 args: None,
                 return_type: None,
@@ -3846,6 +3854,7 @@ impl<'a> Parser<'a> {
             Ok(Statement::CreateFunction {
                 or_replace,
                 temporary,
+                table_function,
                 name,
                 args,
                 return_type,
@@ -3906,8 +3915,17 @@ impl<'a> Parser<'a> {
                 Ok(())
             }
             if self.parse_keyword(Keyword::AS) {
-                ensure_not_set(&body.as_, "AS")?;
-                body.as_ = Some(self.parse_function_definition()?);
+                if matches!(
+                    self.peek_token().token,
+                    Token::Word(w) if matches!(w.keyword, Keyword::SELECT | Keyword::WITH)
+                ) {
+                    // BigQuery TABLE FUNCTION: AS SELECT ... or AS WITH ...
+                    ensure_not_set(&body.as_query, "AS query")?;
+                    body.as_query = Some(self.parse_query()?);
+                } else {
+                    ensure_not_set(&body.as_, "AS")?;
+                    body.as_ = Some(self.parse_function_definition()?);
+                }
             } else if self.parse_keyword(Keyword::LANGUAGE) {
                 ensure_not_set(&body.language, "LANGUAGE")?;
                 body.language = Some(self.parse_identifier(false)?.unwrap());
@@ -7299,6 +7317,13 @@ impl<'a> Parser<'a> {
                     )?;
                     trailing_bracket = _trailing_bracket;
                     Ok(DataType::Struct(field_defs))
+                }
+                Keyword::TABLE if dialect_of!(self is BigQueryDialect | GenericDialect) => {
+                    self.prev_token();
+                    let (field_defs, _trailing_bracket) =
+                        self.parse_struct_type_def(Self::parse_struct_field_def, Keyword::TABLE)?;
+                    trailing_bracket = _trailing_bracket;
+                    Ok(DataType::Table(field_defs))
                 }
                 Keyword::NULLABLE if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     Ok(self.parse_sub_type(DataType::Nullable)?)
