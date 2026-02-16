@@ -12,9 +12,15 @@ use walkdir::WalkDir;
 const DEFAULT_CORPUS_ROOT: &str = "tests/corpus";
 const REPORT_PATH: &str = "target/corpus-report.json";
 
+/// Extract the dialect name from a directory name.
+/// Uses the part after the last `_` as the dialect (e.g., `sqlglot_bigquery` -> `bigquery`,
+/// `customer_bigquery` -> `bigquery`). If no `_` exists, uses the whole name.
+fn normalize_dialect_name(name: &str) -> &str {
+    name.rsplit_once('_').map(|(_, suffix)| suffix).unwrap_or(name)
+}
+
 fn dialect_for_name(name: &str) -> Option<Box<dyn sqlparser::dialect::Dialect>> {
-    // Strip customer_ prefix if present (e.g., customer_bigquery -> bigquery)
-    let base_name = name.strip_prefix("customer_").unwrap_or(name);
+    let base_name = normalize_dialect_name(name);
     dialect_from_str(base_name)
 }
 
@@ -231,10 +237,8 @@ fn main() {
             }
         };
 
-        // Normalize dialect name (strip customer_ prefix) and check if supported
-        let normalized_dialect = dialect_dir_name
-            .strip_prefix("customer_")
-            .unwrap_or(&dialect_dir_name);
+        // Normalize dialect name (extract base dialect from directory name)
+        let normalized_dialect = normalize_dialect_name(&dialect_dir_name);
 
         // Skip if dialect is not supported
         if dialect_for_name(normalized_dialect).is_none() {
