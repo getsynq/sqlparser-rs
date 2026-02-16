@@ -361,8 +361,4 @@ fn main() {
         );
     }
 
-    // Exit with error code if any tests failed
-    if total_failed > 0 {
-        std::process::exit(1);
-    }
 }

@@ -44,7 +44,6 @@ jobs:
         run: cargo build --release --bin corpus-runner
 
       - name: Run corpus tests
-        continue-on-error: true
         env:
           # Increase stack size to 4MB to handle deeply nested queries without excessive memory
           RUST_MIN_STACK: 4194304
