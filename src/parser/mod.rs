@@ -6629,7 +6629,7 @@ impl<'a> Parser<'a> {
                     cascade,
                 }
             } else if self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY])
-                && dialect_of!(self is MySqlDialect | GenericDialect)
+                && dialect_of!(self is MySqlDialect | BigQueryDialect | GenericDialect)
             {
                 AlterTableOperation::DropPrimaryKey
             } else if self.parse_keyword(Keyword::PROJECTION) {

@@ -1826,3 +1826,12 @@ fn parse_bigquery_empty_struct() {
         "SELECT * FROM ML.FORECAST(MODEL `mydataset`.`mymodel`, (SELECT * FROM t1), STRUCT())",
     );
 }
+
+#[test]
+fn parse_bigquery_alter_table_drop_primary_key() {
+    bigquery().verified_stmt("ALTER TABLE tab DROP PRIMARY KEY");
+    bigquery().one_statement_parses_to(
+        "ALTER TABLE myTable DROP PRIMARY KEY",
+        "ALTER TABLE myTable DROP PRIMARY KEY",
+    );
+}
