@@ -7237,6 +7237,7 @@ impl<'a> Parser<'a> {
                     buf.push('[')
                 }
                 Token::RBracket => buf.push(']'),
+                Token::Mul => buf.push('*'),
                 Token::Colon => buf.push(':'),
                 Token::DoubleQuotedString(ref s) => write!(buf, "\"{}\"", s).unwrap(),
                 Token::SingleQuotedString(ref s) => write!(buf, "'{}'", s).unwrap(),
