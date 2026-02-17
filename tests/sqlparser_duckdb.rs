@@ -308,8 +308,14 @@ fn test_select_union_by_name() {
 fn test_numeric_literal_underscores() {
     // Underscores in numeric literals are stripped during tokenization
     duckdb_and_generic().one_statement_parses_to("SELECT 1_000_000", "SELECT 1000000");
+    #[cfg(not(feature = "bigdecimal"))]
     duckdb_and_generic()
         .one_statement_parses_to("SELECT 1_2E+1_0::FLOAT", "SELECT CAST(12E+10 AS FLOAT)");
+    #[cfg(feature = "bigdecimal")]
+    duckdb_and_generic().one_statement_parses_to(
+        "SELECT 1_2E+1_0::FLOAT",
+        "SELECT CAST(120000000000 AS FLOAT)",
+    );
     duckdb_and_generic().one_statement_parses_to("SELECT 1_000.50_0", "SELECT 1000.500");
 }
 
@@ -437,8 +443,5 @@ fn test_escaped_string_literal() {
 
     duckdb().verified_only_select(r"SELECT E'\t'");
     duckdb().verified_only_select(r"SELECT E'\n'");
-    duckdb().one_statement_parses_to(
-        r"SELECT e'\n'",
-        r"SELECT E'\n'",
-    );
+    duckdb().one_statement_parses_to(r"SELECT e'\n'", r"SELECT E'\n'");
 }

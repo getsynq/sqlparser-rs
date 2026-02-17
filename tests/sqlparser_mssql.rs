@@ -59,7 +59,7 @@ fn parse_table_time_travel() {
                     Value::SingleQuotedString(version)
                 ))),
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![]
         },]
@@ -560,7 +560,7 @@ fn parse_substring_in_select() {
                                 with_hints: vec![],
                                 version: None,
                                 partitions: vec![],
-                    with_ordinality: false,
+                                with_ordinality: false,
                             },
                             joins: vec![]
                         }],

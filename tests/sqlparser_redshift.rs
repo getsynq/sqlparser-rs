@@ -54,7 +54,7 @@ fn test_square_brackets_over_db_schema_table_name() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![],
         }
@@ -107,7 +107,7 @@ fn test_double_quotes_over_db_schema_table_name() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![],
         }
@@ -497,9 +497,8 @@ fn test_grant_with_group_grantee() {
     redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users");
 
     // GRANT ... TO multiple GROUP grantees with TABLE keyword
-    redshift().verified_stmt(
-        "GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users, GROUP ro_users",
-    );
+    redshift()
+        .verified_stmt("GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users, GROUP ro_users");
 
     // GRANT with column-level privileges
     redshift().verified_stmt(

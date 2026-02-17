@@ -616,7 +616,10 @@ fn test_alter_table_row_access_policy() {
             match &operations[1] {
                 AlterTableOperation::AddRowAccessPolicy { policy, on } => {
                     assert_eq!("rap_t1_version_2", policy.to_string());
-                    assert_eq!(vec!["empl_id"], on.iter().map(|i| i.to_string()).collect::<Vec<_>>());
+                    assert_eq!(
+                        vec!["empl_id"],
+                        on.iter().map(|i| i.to_string()).collect::<Vec<_>>()
+                    );
                 }
                 _ => unreachable!(),
             }
@@ -1259,10 +1262,7 @@ fn test_snowflake_stage_with_quoted_identifiers() {
     let select = snowflake().verified_only_select(sql);
     match &select.from[0].relation {
         TableFactor::Table { name, .. } => {
-            assert_eq!(
-                name.0,
-                vec![Ident::new(r#"@"myschema"."mystage"/file.gz"#)]
-            );
+            assert_eq!(name.0, vec![Ident::new(r#"@"myschema"."mystage"/file.gz"#)]);
         }
         _ => unreachable!(),
     }
@@ -1683,10 +1683,8 @@ fn test_describe_object_types() {
     // DESCRIBE WAREHOUSE
     snowflake().verified_stmt("DESCRIBE WAREHOUSE temporary_warehouse");
     // DESC SEQUENCE (DESC is alias for DESCRIBE)
-    snowflake().one_statement_parses_to(
-        "DESC SEQUENCE my_sequence",
-        "DESCRIBE SEQUENCE my_sequence",
-    );
+    snowflake()
+        .one_statement_parses_to("DESC SEQUENCE my_sequence", "DESCRIBE SEQUENCE my_sequence");
     // DESC STREAM (DESC is alias for DESCRIBE)
     snowflake().one_statement_parses_to("DESC STREAM mystream", "DESCRIBE STREAM mystream");
     // DESCRIBE VIEW
@@ -2021,10 +2019,7 @@ fn test_set_tuple_assignment() {
         "SET (V1, V2) = (10, 'example')",
         "SET (V1, V2) = (10, 'example')",
     );
-    snowflake().one_statement_parses_to(
-        "SET (min, max) = (40, 70)",
-        "SET (min, max) = (40, 70)",
-    );
+    snowflake().one_statement_parses_to("SET (min, max) = (40, 70)", "SET (min, max) = (40, 70)");
     // With session variable references
     snowflake().one_statement_parses_to(
         "SET (min, max) = (50, 2 * $min)",

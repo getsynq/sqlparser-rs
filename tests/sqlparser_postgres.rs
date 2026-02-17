@@ -619,9 +619,7 @@ fn parse_alter_table_set_storage_parameters() {
         "ALTER TABLE t1 SET (fillfactor = 5, autovacuum_enabled = TRUE)",
         "ALTER TABLE t1 SET (fillfactor = 5, autovacuum_enabled = true)",
     );
-    pg().verified_stmt(
-        "ALTER TABLE t1 SET (autovacuum_vacuum_scale_factor = 0.01)",
-    );
+    pg().verified_stmt("ALTER TABLE t1 SET (autovacuum_vacuum_scale_factor = 0.01)");
 }
 
 #[test]
@@ -3671,14 +3669,17 @@ fn parse_select_group_by_grouping_sets() {
         "SELECT brand, size, sum(sales) FROM items_sold GROUP BY size, GROUPING SETS ((brand), (size), ())"
     );
     assert_eq!(
-        GroupByExpr::Expressions(vec![
-            Expr::Identifier(Ident::new("size").empty_span()),
-            Expr::GroupingSets(vec![
-                vec![Expr::Identifier(Ident::new("brand").empty_span())],
-                vec![Expr::Identifier(Ident::new("size").empty_span())],
-                vec![],
-            ]),
-        ], vec![]),
+        GroupByExpr::Expressions(
+            vec![
+                Expr::Identifier(Ident::new("size").empty_span()),
+                Expr::GroupingSets(vec![
+                    vec![Expr::Identifier(Ident::new("brand").empty_span())],
+                    vec![Expr::Identifier(Ident::new("size").empty_span())],
+                    vec![],
+                ]),
+            ],
+            vec![]
+        ),
         select.group_by
     );
 }
@@ -3689,13 +3690,16 @@ fn parse_select_group_by_rollup() {
         "SELECT brand, size, sum(sales) FROM items_sold GROUP BY size, ROLLUP (brand, size)",
     );
     assert_eq!(
-        GroupByExpr::Expressions(vec![
-            Expr::Identifier(Ident::new("size").empty_span()),
-            Expr::Rollup(vec![
-                vec![Expr::Identifier(Ident::new("brand").empty_span())],
-                vec![Expr::Identifier(Ident::new("size").empty_span())],
-            ]),
-        ], vec![]),
+        GroupByExpr::Expressions(
+            vec![
+                Expr::Identifier(Ident::new("size").empty_span()),
+                Expr::Rollup(vec![
+                    vec![Expr::Identifier(Ident::new("brand").empty_span())],
+                    vec![Expr::Identifier(Ident::new("size").empty_span())],
+                ]),
+            ],
+            vec![]
+        ),
         select.group_by
     );
 }
@@ -3706,22 +3710,24 @@ fn parse_select_group_by_cube() {
         "SELECT brand, size, sum(sales) FROM items_sold GROUP BY size, CUBE (brand, size)",
     );
     assert_eq!(
-        GroupByExpr::Expressions(vec![
-            Expr::Identifier(Ident::new("size").empty_span()),
-            Expr::Cube(vec![
-                vec![Expr::Identifier(Ident::new("brand").empty_span())],
-                vec![Expr::Identifier(Ident::new("size").empty_span())],
-            ]),
-        ], vec![]),
+        GroupByExpr::Expressions(
+            vec![
+                Expr::Identifier(Ident::new("size").empty_span()),
+                Expr::Cube(vec![
+                    vec![Expr::Identifier(Ident::new("brand").empty_span())],
+                    vec![Expr::Identifier(Ident::new("size").empty_span())],
+                ]),
+            ],
+            vec![]
+        ),
         select.group_by
     );
 }
 
 #[test]
 fn parse_with_ordinality() {
-    pg_and_generic().verified_stmt(
-        "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY",
-    );
+    pg_and_generic()
+        .verified_stmt("SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY");
     pg_and_generic().verified_stmt(
         "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY AS kv_json",
     );
@@ -3741,9 +3747,7 @@ fn parse_lateral_with_ordinality() {
 
 #[test]
 fn parse_unnest_with_ordinality() {
-    pg_and_generic().verified_stmt(
-        "SELECT * FROM UNNEST(x) WITH ORDINALITY",
-    );
+    pg_and_generic().verified_stmt("SELECT * FROM UNNEST(x) WITH ORDINALITY");
 }
 
 #[test]

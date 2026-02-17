@@ -684,7 +684,7 @@ mod tests {
             .unwrap();
 
         let mut visitor = TestVisitor::default();
-        s.visit(&mut visitor);
+        let _ = s.visit(&mut visitor);
         visitor.visited
     }
 

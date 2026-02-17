@@ -45,14 +45,14 @@ pub use self::ddl::{
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
     AggregateItem, ColumnTransformer, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
-    FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint,
-    JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NamedWindowExpr, NonBlock, Offset,
-    OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query, RenameSelectItem,
-    ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem,
-    SelectionCount, SetExpr, SetOperator, SetQuantifier, Setting, Table, TableAlias, TableFactor,
-    TableSampleSeed, TableVersion, TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling,
-    ValueTableMode,
-    Values, WildcardAdditionalOptions, With, WithFill,
+    FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr,
+    Join, JoinConstraint, JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition,
+    NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue,
+    PivotValueSource, Query, RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem,
+    SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr, SetOperator,
+    SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed, TableVersion,
+    TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling, ValueTableMode, Values,
+    WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,
@@ -1252,11 +1252,7 @@ impl fmt::Display for Expr {
                 write!(f, "{set}")
             }
             Expr::TypedArray { data_type, values } => {
-                write!(
-                    f,
-                    "ARRAY<{data_type}>[{}]",
-                    display_comma_separated(values)
-                )
+                write!(f, "ARRAY<{data_type}>[{}]", display_comma_separated(values))
             }
             Expr::JsonAccess {
                 left,
@@ -3168,7 +3164,11 @@ impl fmt::Display for Statement {
                     }
                     write!(f, "{}", display_comma_separated(projections))?;
                     write!(f, ")")?;
-                } else if query.is_none() && like.is_none() && clone.is_none() && using_template.is_none() {
+                } else if query.is_none()
+                    && like.is_none()
+                    && clone.is_none()
+                    && using_template.is_none()
+                {
                     // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
                     write!(f, " ()")?;
                 }
@@ -3830,11 +3830,7 @@ impl fmt::Display for Statement {
                     write!(f, " COMMENT='{c}'")?;
                 }
                 if !with_properties.is_empty() {
-                    write!(
-                        f,
-                        " WITH ({})",
-                        display_comma_separated(with_properties)
-                    )?;
+                    write!(f, " WITH ({})", display_comma_separated(with_properties))?;
                 }
                 Ok(())
             }

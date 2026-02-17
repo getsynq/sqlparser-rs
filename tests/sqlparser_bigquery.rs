@@ -91,10 +91,7 @@ fn parse_raw_literal() {
 fn parse_raw_literal_triple_quoted() {
     // Simple triple-quoted raw string
     let sql = "SELECT R\"\"\"hello world\"\"\"";
-    let stmt = bigquery_unescaped().one_statement_parses_to(
-        sql,
-        "SELECT R'hello world'",
-    );
+    let stmt = bigquery_unescaped().one_statement_parses_to(sql, "SELECT R'hello world'");
     if let Statement::Query(query) = stmt {
         if let SetExpr::Select(select) = *query.body {
             assert_eq!(1, select.projection.len());
@@ -111,10 +108,7 @@ fn parse_raw_literal_triple_quoted() {
 
     // Triple-quoted raw string with embedded quotes and newlines
     let sql = "SELECT R\"\"\"\n  return x*y;\n\"\"\"";
-    let stmt = bigquery_unescaped().one_statement_parses_to(
-        sql,
-        "SELECT R'\n  return x*y;\n'",
-    );
+    let stmt = bigquery_unescaped().one_statement_parses_to(sql, "SELECT R'\n  return x*y;\n'");
     if let Statement::Query(query) = stmt {
         if let SetExpr::Select(select) = *query.body {
             assert_eq!(1, select.projection.len());
@@ -921,7 +915,7 @@ fn parse_table_time_travel() {
                     Value::SingleQuotedString(version)
                 ))),
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![],
         },]
@@ -1389,9 +1383,7 @@ fn test_typed_array_constructor() {
     bigquery().verified_expr("ARRAY<INT64>[]");
 
     // Typed array with STRUCT type
-    bigquery().verified_expr(
-        "ARRAY<STRUCT<x INT64>>[STRUCT(1), STRUCT(2)]",
-    );
+    bigquery().verified_expr("ARRAY<STRUCT<x INT64>>[STRUCT(1), STRUCT(2)]");
 
     // Typed array with STRUCT containing multiple fields
     bigquery().verified_expr(
@@ -1402,14 +1394,10 @@ fn test_typed_array_constructor() {
     bigquery().verified_expr("ARRAY<STRUCT<x INT64>>[]");
 
     // Typed array in SELECT context
-    bigquery().verified_only_select(
-        "SELECT ARRAY<INT64>[1, 2, 3] AS arr",
-    );
+    bigquery().verified_only_select("SELECT ARRAY<INT64>[1, 2, 3] AS arr");
 
     // Typed array in UNNEST
-    bigquery().verified_only_select(
-        "SELECT * FROM UNNEST(ARRAY<STRUCT<x INT64>>[])",
-    );
+    bigquery().verified_only_select("SELECT * FROM UNNEST(ARRAY<STRUCT<x INT64>>[])");
 }
 
 #[test]
@@ -1795,25 +1783,15 @@ fn parse_bigquery_gap_fill() {
 #[test]
 fn parse_bigquery_chained_subscript_access() {
     // col[OFFSET(0)].field
-    bigquery().verified_stmt(
-        "SELECT col[OFFSET(0)].source_type AS x FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col[OFFSET(0)].source_type AS x FROM t1");
     // col[SAFE_OFFSET(0)].field[SAFE_OFFSET(0)]
-    bigquery().verified_stmt(
-        "SELECT col[SAFE_OFFSET(0)].source_ids[SAFE_OFFSET(0)] AS x FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col[SAFE_OFFSET(0)].source_ids[SAFE_OFFSET(0)] AS x FROM t1");
     // col[OFFSET(0)].field[OFFSET(0)] chained
-    bigquery().verified_stmt(
-        "SELECT col[OFFSET(0)].ids[OFFSET(0)] AS x FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col[OFFSET(0)].ids[OFFSET(0)] AS x FROM t1");
     // Simple subscript still works
-    bigquery().verified_stmt(
-        "SELECT col[OFFSET(0)] AS x FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col[OFFSET(0)] AS x FROM t1");
     // Subscript with field access
-    bigquery().verified_stmt(
-        "SELECT col[0].field AS x FROM t1",
-    );
+    bigquery().verified_stmt("SELECT col[0].field AS x FROM t1");
 }
 
 #[test]
@@ -1868,7 +1846,5 @@ fn test_bigquery_window_named_ref() {
     );
 
     // Simple case: one window referencing another
-    bigquery().verified_stmt(
-        "SELECT SUM(x) OVER (b) FROM t WINDOW a AS (ORDER BY x), b AS a",
-    );
+    bigquery().verified_stmt("SELECT SUM(x) OVER (b) FROM t WINDOW a AS (ORDER BY x), b AS a");
 }
