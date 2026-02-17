@@ -1600,6 +1600,13 @@ fn test_query_parameters() {
     // ClickHouse query parameters: {name: Type}
     let sql = "SELECT * FROM users WHERE id = {id: UInt32} AND name = {name: String}";
     clickhouse_and_generic().one_statement_parses_to(sql, sql);
+
+    // ClickHouse query parameters in FROM clause: {name: Identifier}
+    let sql = "SELECT * FROM {mytablename: Identifier}";
+    clickhouse_and_generic().one_statement_parses_to(sql, sql);
+
+    let sql = "SELECT * FROM {table: Identifier}";
+    clickhouse_and_generic().one_statement_parses_to(sql, sql);
 }
 
 #[test]

@@ -10293,6 +10293,13 @@ impl<'a> Parser<'a> {
                 with_offset_alias,
                 with_ordinality,
             })
+        } else if dialect_of!(self is ClickHouseDialect | GenericDialect)
+            && self.peek_token().token == Token::LBrace
+        {
+            // ClickHouse query parameters in FROM clause: SELECT * FROM {table:Identifier}
+            let expr = self.parse_expr()?;
+            let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+            Ok(TableFactor::FieldAccessor { expr, alias })
         } else {
             let name = self.parse_object_name(true)?;
 
