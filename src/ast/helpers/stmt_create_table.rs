@@ -86,6 +86,7 @@ pub struct CreateTableBuilder {
     pub table_ttl: Option<Expr>,
     pub clickhouse_settings: Option<Vec<SqlOption>>,
     pub using: Option<ObjectName>,
+    pub using_template: Option<Box<Expr>>,
     pub copy_grants: bool,
 }
 
@@ -131,6 +132,7 @@ impl CreateTableBuilder {
             table_ttl: None,
             clickhouse_settings: None,
             using: None,
+            using_template: None,
             copy_grants: false,
         }
     }
@@ -322,6 +324,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn using_template(mut self, using_template: Option<Box<Expr>>) -> Self {
+        self.using_template = using_template;
+        self
+    }
+
     pub fn copy_grants(mut self, copy_grants: bool) -> Self {
         self.copy_grants = copy_grants;
         self
@@ -368,6 +375,7 @@ impl CreateTableBuilder {
             table_ttl: self.table_ttl,
             clickhouse_settings: self.clickhouse_settings,
             using: self.using,
+            using_template: self.using_template,
             copy_grants: self.copy_grants,
         }
     }
@@ -420,6 +428,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                using_template,
                 copy_grants,
             } => Ok(Self {
                 or_replace,
@@ -461,6 +470,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                using_template,
                 copy_grants,
             }),
             _ => Err(ParserError::ParserError(format!(

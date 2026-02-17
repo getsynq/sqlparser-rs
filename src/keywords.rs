@@ -696,6 +696,7 @@ define_keywords!(
     TAG,
     TBLPROPERTIES,
     TEMP,
+    TEMPLATE,
     TEMPORARY,
     TEXT,
     TEXTFILE,

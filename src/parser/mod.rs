@@ -5196,10 +5196,17 @@ impl<'a> Parser<'a> {
         // parse optional column list (schema)
         let (columns, constraints, projections) = self.parse_columns()?;
 
-        let using = if self.parse_keyword(Keyword::USING) {
-            Some(self.parse_object_name(false)?)
+        let (using, using_template) = if self.parse_keyword(Keyword::USING) {
+            if self.parse_keyword(Keyword::TEMPLATE) {
+                // Snowflake: USING TEMPLATE (query_expr)
+                let expr = self.parse_expr()?;
+                (None, Some(Box::new(expr)))
+            } else {
+                // Databricks: USING DELTA
+                (Some(self.parse_object_name(false)?), None)
+            }
         } else {
-            None
+            (None, None)
         };
 
         // Redshift allows specifying DISTSTYLE after column definitions
@@ -5634,6 +5641,7 @@ impl<'a> Parser<'a> {
             .table_ttl(table_ttl)
             .clickhouse_settings(clickhouse_settings)
             .using(using)
+            .using_template(using_template)
             .table_options(table_options)
             .projections(projections)
             .copy_grants(copy_grants)
