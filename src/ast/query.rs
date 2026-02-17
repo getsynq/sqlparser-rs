@@ -390,11 +390,31 @@ impl fmt::Display for LateralView {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
-pub struct NamedWindowDefinition(pub WithSpan<Ident>, pub WindowSpec);
+pub struct NamedWindowDefinition(pub WithSpan<Ident>, pub NamedWindowExpr);
 
 impl fmt::Display for NamedWindowDefinition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} AS ({})", self.0, self.1)
+        write!(f, "{} AS {}", self.0, self.1)
+    }
+}
+
+/// Expression for a named window definition: either a window spec in parens or a reference to another window name.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum NamedWindowExpr {
+    /// A full window specification: `(PARTITION BY .. ORDER BY .. etc.)`
+    WindowSpec(WindowSpec),
+    /// A reference to another named window: `existing_window_name`
+    NamedWindow(Ident),
+}
+
+impl fmt::Display for NamedWindowExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NamedWindowExpr::WindowSpec(spec) => write!(f, "({})", spec),
+            NamedWindowExpr::NamedWindow(name) => write!(f, "{}", name),
+        }
     }
 }
 

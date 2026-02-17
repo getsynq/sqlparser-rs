@@ -4143,7 +4143,7 @@ fn test_parse_named_window() {
                     quote_style: None,
                 }
                 .empty_span(),
-                WindowSpec {
+                NamedWindowExpr::WindowSpec(WindowSpec {
                     window_name: None,
                     partition_by: vec![],
                     order_by: vec![OrderByExpr {
@@ -4159,7 +4159,7 @@ fn test_parse_named_window() {
                         with_fill: None,
                     }],
                     window_frame: None,
-                },
+                }),
             ),
             NamedWindowDefinition(
                 Ident {
@@ -4167,7 +4167,7 @@ fn test_parse_named_window() {
                     quote_style: None,
                 }
                 .empty_span(),
-                WindowSpec {
+                NamedWindowExpr::WindowSpec(WindowSpec {
                     window_name: None,
                     partition_by: vec![Expr::Identifier(
                         Ident {
@@ -4178,7 +4178,7 @@ fn test_parse_named_window() {
                     )],
                     order_by: vec![],
                     window_frame: None,
-                },
+                }),
             ),
         ],
         qualify: None,
