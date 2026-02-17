@@ -8698,6 +8698,7 @@ impl<'a> Parser<'a> {
         match token {
             Token::Word(w) if w.keyword == Keyword::UNION => Some(SetOperator::Union),
             Token::Word(w) if w.keyword == Keyword::EXCEPT => Some(SetOperator::Except),
+            Token::Word(w) if w.keyword == Keyword::MINUS => Some(SetOperator::Except),
             Token::Word(w) if w.keyword == Keyword::INTERSECT => Some(SetOperator::Intersect),
             _ => None,
         }
