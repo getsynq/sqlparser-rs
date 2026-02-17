@@ -46,7 +46,7 @@ pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
     AggregateItem, ColumnTransformer, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
     FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint,
-    JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NonBlock, Offset,
+    JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NamedWindowExpr, NonBlock, Offset,
     OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query, RenameSelectItem,
     ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem,
     SelectionCount, SetExpr, SetOperator, SetQuantifier, Setting, Table, TableAlias, TableFactor,

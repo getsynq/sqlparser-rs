@@ -12437,9 +12437,14 @@ impl<'a> Parser<'a> {
     pub fn parse_named_window(&mut self) -> Result<NamedWindowDefinition, ParserError> {
         let ident = self.parse_identifier(false)?;
         self.expect_keyword(Keyword::AS)?;
-        self.expect_token(&Token::LParen)?;
-        let window_spec = self.parse_window_spec()?;
-        Ok(NamedWindowDefinition(ident, window_spec))
+        let named_window_expr = if self.consume_token(&Token::LParen) {
+            let window_spec = self.parse_window_spec()?;
+            NamedWindowExpr::WindowSpec(window_spec)
+        } else {
+            let window_name = self.parse_identifier(false)?.unwrap();
+            NamedWindowExpr::NamedWindow(window_name)
+        };
+        Ok(NamedWindowDefinition(ident, named_window_expr))
     }
 
     pub fn parse_create_procedure(&mut self, or_alter: bool) -> Result<Statement, ParserError> {

@@ -1859,3 +1859,16 @@ fn parse_bigquery_unpivot_multi_column() {
         "SELECT * FROM tbl_1 UNPIVOT ((col_4, col_12, col_13, col_14) FOR col_15 IN ((col_9, col_30, col_31, col_32), (col_10, col_33, col_34, col_35), (col_11, col_36, col_37, col_38)))",
     );
 }
+
+#[test]
+fn test_bigquery_window_named_ref() {
+    // BigQuery supports WINDOW clause where a named window references another by name without parens
+    bigquery().verified_stmt(
+        "SELECT item, purchases, category, LAST_VALUE(item) OVER (c ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS most_popular FROM Produce WINDOW a AS (PARTITION BY category), b AS (a ORDER BY purchases), c AS b",
+    );
+
+    // Simple case: one window referencing another
+    bigquery().verified_stmt(
+        "SELECT SUM(x) OVER (b) FROM t WINDOW a AS (ORDER BY x), b AS a",
+    );
+}
