@@ -1682,3 +1682,56 @@ fn parse_wildcard_table() {
     bigquery()
         .verified_stmt("SELECT * FROM x.y* WHERE _TABLE_SUFFIX BETWEEN '20230101' AND '20231231'");
 }
+
+#[test]
+fn parse_bigquery_ml_predict() {
+    // MODEL keyword-prefixed table reference (backtick dotted names split into parts)
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.PREDICT(MODEL `my_project.my_dataset.my_model`, (SELECT * FROM input_data))",
+        "SELECT * FROM ML.PREDICT(MODEL `my_project`.`my_dataset`.`my_model`, (SELECT * FROM input_data))",
+    );
+    // MODEL with TABLE keyword
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.PREDICT(MODEL `mydataset.mymodel`, TABLE `mydataset.mytable`)",
+        "SELECT * FROM ML.PREDICT(MODEL `mydataset`.`mymodel`, TABLE `mydataset`.`mytable`)",
+    );
+    // MODEL with subquery and STRUCT
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.PREDICT(MODEL `mydataset.mymodel`, (SELECT custom_label, column1, column2 FROM `mydataset.mytable`), STRUCT(0.55 AS threshold))",
+        "SELECT * FROM ML.PREDICT(MODEL `mydataset`.`mymodel`, (SELECT custom_label, column1, column2 FROM `mydataset`.`mytable`), STRUCT(0.55 AS threshold))",
+    );
+    // ML.FORECAST with STRUCT
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.FORECAST(MODEL `mydataset.mymodel`, STRUCT(2 AS horizon))",
+        "SELECT * FROM ML.FORECAST(MODEL `mydataset`.`mymodel`, STRUCT(2 AS horizon))",
+    );
+    // MODEL with unquoted names
+    bigquery().verified_stmt(
+        "SELECT * FROM ML.PREDICT(MODEL mydataset.mymodel, (SELECT * FROM input_data))",
+    );
+    // ML.TRANSLATE with TABLE and STRUCT
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.TRANSLATE(MODEL `mydataset.mytranslatemodel`, TABLE `mydataset.mybqtable`, STRUCT('translate_text' AS translate_mode, 'zh-CN' AS target_language_code))",
+        "SELECT * FROM ML.TRANSLATE(MODEL `mydataset`.`mytranslatemodel`, TABLE `mydataset`.`mybqtable`, STRUCT('translate_text' AS translate_mode, 'zh-CN' AS target_language_code))",
+    );
+}
+
+#[test]
+fn parse_bigquery_vector_search() {
+    // VECTOR_SEARCH with TABLE keyword
+    bigquery().verified_stmt(
+        "SELECT * FROM VECTOR_SEARCH(TABLE mydataset.base_table, 'column_to_search', TABLE mydataset.query_table)",
+    );
+    // VECTOR_SEARCH with named arguments
+    bigquery().verified_stmt(
+        "SELECT * FROM VECTOR_SEARCH(TABLE mydataset.base_table, 'column_to_search', TABLE mydataset.query_table, 'query_column_to_search', top_k => 2, distance_type => 'cosine')",
+    );
+}
+
+#[test]
+fn parse_bigquery_gap_fill() {
+    // GAP_FILL with TABLE and named arguments
+    bigquery().verified_stmt(
+        "SELECT * FROM GAP_FILL(TABLE device_data, ts_column => 'time', bucket_width => INTERVAL '1' MINUTE)",
+    );
+}

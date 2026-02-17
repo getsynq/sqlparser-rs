@@ -4578,6 +4578,25 @@ impl fmt::Display for Assignment {
     }
 }
 
+/// Keyword prefix for table references in function arguments
+/// e.g. `MODEL` or `TABLE` in BigQuery ML functions
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum FunctionArgKeyword {
+    Model,
+    Table,
+}
+
+impl fmt::Display for FunctionArgKeyword {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FunctionArgKeyword::Model => f.write_str("MODEL"),
+            FunctionArgKeyword::Table => f.write_str("TABLE"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
@@ -4591,6 +4610,13 @@ pub enum FunctionArgExpr {
     WildcardWithOptions(WildcardAdditionalOptions),
     /// Qualified wildcard with options, e.g. `alias.* EXCLUDE (col1)`
     QualifiedWildcardWithOptions(ObjectName, WildcardAdditionalOptions),
+    /// A keyword-prefixed table reference in function arguments,
+    /// e.g. `MODEL mydataset.mymodel` or `TABLE mydataset.mytable`
+    /// Used by BigQuery ML functions like ML.PREDICT, VECTOR_SEARCH, GAP_FILL
+    TableRef {
+        keyword: FunctionArgKeyword,
+        table_name: ObjectName,
+    },
 }
 
 impl fmt::Display for FunctionArgExpr {
@@ -4604,6 +4630,12 @@ impl fmt::Display for FunctionArgExpr {
             }
             FunctionArgExpr::QualifiedWildcardWithOptions(prefix, options) => {
                 write!(f, "{prefix}.*{options}")
+            }
+            FunctionArgExpr::TableRef {
+                keyword,
+                table_name,
+            } => {
+                write!(f, "{keyword} {table_name}")
             }
         }
     }
