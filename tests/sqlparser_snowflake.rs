@@ -1834,6 +1834,21 @@ fn test_show_columns_in_table() {
 }
 
 #[test]
+fn test_use_secondary_roles() {
+    // USE SECONDARY ROLES with a single role
+    snowflake().verified_stmt("USE SECONDARY ROLES ALL");
+    snowflake().verified_stmt("USE SECONDARY ROLES NONE");
+    // USE SECONDARY ROLES with comma-separated roles
+    snowflake().verified_stmt("USE SECONDARY ROLES test_role_1, test_role_2");
+    snowflake().verified_stmt("USE SECONDARY ROLES a, b, c");
+    // Basic USE statements
+    snowflake().verified_stmt("USE ROLE my_role");
+    snowflake().verified_stmt("USE DATABASE my_db");
+    snowflake().verified_stmt("USE SCHEMA my_schema");
+    snowflake().verified_stmt("USE WAREHOUSE my_wh");
+}
+
+#[test]
 fn test_snowflake_create_table_using_template() {
     // Simple USING TEMPLATE with subquery
     snowflake().verified_stmt(

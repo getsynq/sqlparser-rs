@@ -2108,11 +2108,13 @@ pub enum Statement {
     /// Note: this is a MySQL-specific statement.
     ShowCollation { filter: Option<ShowStatementFilter> },
     /// ```sql
-    /// USE [DATABASE | SCHEMA | ROLE | WAREHOUSE | SECONDARY ROLES] name
+    /// USE [DATABASE | SCHEMA | ROLE | WAREHOUSE | SECONDARY ROLES] name [, name ...]
     /// ```
     Use {
         db_name: ObjectName,
         object_type: Option<String>,
+        /// Additional names for USE SECONDARY ROLES (comma-separated role list)
+        additional_names: Vec<ObjectName>,
     },
     /// ```sql
     /// START  [ TRANSACTION | WORK ] | START TRANSACTION } ...
@@ -3701,12 +3703,16 @@ impl fmt::Display for Statement {
             Statement::Use {
                 db_name,
                 object_type,
+                additional_names,
             } => {
                 write!(f, "USE")?;
                 if let Some(obj_type) = object_type {
                     write!(f, " {obj_type}")?;
                 }
                 write!(f, " {db_name}")?;
+                for name in additional_names {
+                    write!(f, ", {name}")?;
+                }
                 Ok(())
             }
             Statement::ShowCollation { filter } => {
