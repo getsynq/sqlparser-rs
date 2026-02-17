@@ -612,6 +612,55 @@ fn parse_alter_table_drop_partition_and_part() {
         }
         _ => unreachable!(),
     }
+
+    // DROP PARTITION with string literal (no parens)
+    match clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE mt DROP PARTITION '2020-11-21'")
+    {
+        Statement::AlterTable {
+            name, operations, ..
+        } => {
+            assert_eq!("mt", name.to_string());
+            assert_eq!(
+                operations[0],
+                AlterTableOperation::DropPartition {
+                    partition: Partition::Expr(Expr::Value(Value::SingleQuotedString(
+                        "2020-11-21".to_string()
+                    ))),
+                }
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // DROP PARTITION with numeric literal (no parens)
+    match clickhouse_and_generic().verified_stmt("ALTER TABLE visits DROP PARTITION 201901") {
+        Statement::AlterTable {
+            name, operations, ..
+        } => {
+            assert_eq!("visits", name.to_string());
+            assert_eq!(
+                operations[0],
+                AlterTableOperation::DropPartition {
+                    partition: Partition::Expr(Expr::Value(Value::Number(
+                        "201901".to_string(),
+                        false
+                    ))),
+                }
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // DROP PARTITION with tuple() function call
+    clickhouse_and_generic().verified_stmt(
+        "ALTER TABLE visits DROP PARTITION tuple(toYYYYMM(toDate('2019-01-25')))",
+    );
+
+    // Multiple statements: DROP PARTITION + DROP PART
+    clickhouse_and_generic().parse_sql_statements(
+        "ALTER TABLE mt DROP PARTITION '2020-11-21'; ALTER TABLE mt DROP PART 'all_4_4_0'",
+    ).unwrap();
 }
 
 #[test]
