@@ -984,6 +984,19 @@ impl<'a> Parser<'a> {
                     expr: Box::new(self.parse_subexpr(Self::MUL_DIV_MOD_OP_PREC)?),
                 })
             }
+            Token::Sharp if dialect_of!(self is DuckDbDialect) => {
+                // DuckDB positional reference: #1, #2, etc.
+                match self.peek_token().token {
+                    Token::Number(ref s, _) => {
+                        let s = format!("#{}", s);
+                        self.next_token();
+                        Ok(Expr::Value(Value::Placeholder(s)))
+                    }
+                    _ => {
+                        self.expected("a number after #", self.peek_token())?
+                    }
+                }
+            }
             Token::Tilde => {
                 Ok(Expr::UnaryOp {
                     op: UnaryOperator::PGBitwiseNot,
