@@ -52,13 +52,20 @@ impl Dialect for PostgreSqlDialect {
     }
 
     fn get_next_precedence(&self, parser: &Parser) -> Option<Result<u8, ParserError>> {
-        // Detect `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
         let tok0 = parser.peek_nth_token(0);
+        // Detect `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
         if tok0.token == Token::Minus {
             let tok1 = parser.peek_nth_token(1);
             let tok2 = parser.peek_nth_token(2);
             if tok1.token == Token::Pipe && tok2.token == Token::Minus {
                 return Some(Ok(50)); // Same precedence as other range operators (&&, @>, <@)
+            }
+        }
+        // Detect `<->` (distance operator) as two tokens: Lt, Arrow
+        if tok0.token == Token::Lt {
+            let tok1 = parser.peek_nth_token(1);
+            if tok1.token == Token::Arrow {
+                return Some(Ok(50));
             }
         }
         None
@@ -70,8 +77,8 @@ impl Dialect for PostgreSqlDialect {
         expr: &Expr,
         _precedence: u8,
     ) -> Option<Result<Expr, ParserError>> {
-        // Parse `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
         let tok0 = parser.peek_nth_token(0);
+        // Parse `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
         if tok0.token == Token::Minus {
             let tok1 = parser.peek_nth_token(1);
             let tok2 = parser.peek_nth_token(2);
@@ -85,6 +92,23 @@ impl Dialect for PostgreSqlDialect {
                         .map(|right| Expr::BinaryOp {
                             left: Box::new(expr.clone()),
                             op: BinaryOperator::PGAdjacentTo,
+                            right: Box::new(right),
+                        }),
+                );
+            }
+        }
+        // Parse `<->` (distance operator) as two tokens: Lt, Arrow
+        if tok0.token == Token::Lt {
+            let tok1 = parser.peek_nth_token(1);
+            if tok1.token == Token::Arrow {
+                parser.next_token(); // consume `<`
+                parser.next_token(); // consume `->`
+                return Some(
+                    parser
+                        .parse_subexpr(50)
+                        .map(|right| Expr::BinaryOp {
+                            left: Box::new(expr.clone()),
+                            op: BinaryOperator::PGDistance,
                             right: Box::new(right),
                         }),
                 );
