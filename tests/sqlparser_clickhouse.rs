@@ -1622,6 +1622,8 @@ fn test_clickhouse_trailing_commas() {
         "SELECT (number, toDate('2019-05-20')), dictGetOrNull('range_key_dictionary', 'value', number, toDate('2019-05-20')), FROM system.numbers LIMIT 5 FORMAT TabSeparated",
         "SELECT (number, toDate('2019-05-20')), dictGetOrNull('range_key_dictionary', 'value', number, toDate('2019-05-20')) FROM system.numbers LIMIT 5 FORMAT TabSeparated",
     );
+    // Reserved keywords used as column names should not trigger trailing comma detection
+    clickhouse().verified_stmt("SELECT database, table, format, sample, settings FROM t");
 }
 
 #[test]
