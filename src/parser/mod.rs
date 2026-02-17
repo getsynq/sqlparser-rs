@@ -6922,6 +6922,9 @@ impl<'a> Parser<'a> {
         let mut next_next_token = Some(self.next_token());
         while let Some(next_token) = next_next_token {
             match next_token.token {
+                Token::Word(ref w) if w.quote_style == Some('`') => {
+                    write!(buf, "`{}`", w.value).unwrap()
+                }
                 Token::Word(w) => buf.push_str(&w.value),
                 Token::Number(ref n, _) => {
                     if buf.is_empty() && n.starts_with(".") {
@@ -6935,6 +6938,7 @@ impl<'a> Parser<'a> {
                 Token::RBracket => buf.push(']'),
                 Token::Colon => buf.push(':'),
                 Token::DoubleQuotedString(ref s) => write!(buf, "\"{}\"", s).unwrap(),
+                Token::SingleQuotedString(ref s) => write!(buf, "'{}'", s).unwrap(),
                 Token::Whitespace(_) => {
                     break;
                 }

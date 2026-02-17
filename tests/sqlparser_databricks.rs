@@ -271,3 +271,30 @@ fn test_describe_history() {
     // DESC alias
     databricks().one_statement_parses_to("DESC HISTORY my_table", "DESCRIBE HISTORY my_table");
 }
+
+#[test]
+fn test_json_path_with_colon() {
+    // Backtick-quoted field names with spaces
+    databricks().one_statement_parses_to(
+        "SELECT raw:`zip code`, raw:`fb:testid` FROM t",
+        "SELECT raw:`zip code`, raw:`fb:testid` FROM t",
+    );
+
+    // Bracket notation with single-quoted strings
+    databricks().one_statement_parses_to(
+        "SELECT raw:store['bicycle'], raw:store[\"zip code\"] FROM t",
+        "SELECT raw:store['bicycle'], raw:store[\"zip code\"] FROM t",
+    );
+
+    // Combined: all syntax variants from the corpus test
+    databricks().one_statement_parses_to(
+        "SELECT raw:`zip code`, raw:`fb:testid`, raw:store['bicycle'], raw:store[\"zip code\"] FROM t",
+        "SELECT raw:`zip code`, raw:`fb:testid`, raw:store['bicycle'], raw:store[\"zip code\"] FROM t",
+    );
+
+    // Bracket notation directly after colon
+    databricks().one_statement_parses_to(
+        "SELECT c1:['price'] FROM VALUES ('{ \"price\": 5 }') AS T(c1)",
+        "SELECT c1:['price'] FROM (VALUES ('{ \"price\": 5 }')) AS T (c1)",
+    );
+}
