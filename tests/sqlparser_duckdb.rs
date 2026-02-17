@@ -317,6 +317,9 @@ fn test_numeric_literal_underscores() {
 fn test_at_sign_abs_operator() {
     // DuckDB supports @ as absolute value operator (same as PostgreSQL)
     duckdb().verified_stmt("SELECT (@-1) + 1");
+    // @ with parenthesized argument
+    duckdb().verified_stmt("SELECT @(-1) + 1");
+    duckdb().verified_stmt("SELECT @(-1)");
 }
 
 #[test]
