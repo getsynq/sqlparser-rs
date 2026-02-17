@@ -402,3 +402,12 @@ fn test_trim_with_characters() {
     // DuckDB supports TRIM(expr, characters) syntax
     duckdb().verified_stmt("SELECT TRIM('***apple***', '*') AS result");
 }
+
+#[test]
+fn test_positional_reference() {
+    // DuckDB supports #N positional references
+    // Note: GenericDialect tokenizes #2 as identifier (since # is identifier_start),
+    // DuckDB tokenizes as Sharp + Number, so we only test DuckDB dialect.
+    duckdb().verified_stmt("SELECT #2 AS a, #1 AS b FROM (VALUES (1, 'foo'))");
+    duckdb().verified_stmt("SELECT #2, #1 FROM (VALUES (1, 'foo'))");
+}
