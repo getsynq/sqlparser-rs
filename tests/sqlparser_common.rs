@@ -3819,6 +3819,8 @@ fn run_explain_analyze(
             verbose,
             statement,
             format,
+            options: _,
+            explain_type: _,
         } => {
             assert_eq!(verbose, expected_verbose);
             assert_eq!(analyze, expected_analyze);

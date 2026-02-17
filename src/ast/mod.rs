@@ -2250,6 +2250,10 @@ pub enum Statement {
         statement: Box<Statement>,
         /// Optional output format of explain
         format: Option<AnalyzeFormat>,
+        /// ClickHouse: EXPLAIN options (e.g., `distributed=1`)
+        options: Vec<SqlOption>,
+        /// ClickHouse: EXPLAIN type (e.g., SYNTAX, AST, PLAN, PIPELINE)
+        explain_type: Option<Ident>,
     },
     /// SAVEPOINT -- define a new savepoint within the current transaction
     Savepoint { name: Ident },
@@ -2391,6 +2395,8 @@ impl fmt::Display for Statement {
                 analyze,
                 statement,
                 format,
+                options,
+                explain_type,
             } => {
                 if *describe_alias {
                     write!(f, "DESCRIBE ")?;
@@ -2408,6 +2414,14 @@ impl fmt::Display for Statement {
 
                 if let Some(format) = format {
                     write!(f, "FORMAT {format} ")?;
+                }
+
+                if let Some(explain_type) = explain_type {
+                    write!(f, "{explain_type} ")?;
+                }
+
+                if !options.is_empty() {
+                    write!(f, "{} ", display_comma_separated(options))?;
                 }
 
                 write!(f, "{statement}")
