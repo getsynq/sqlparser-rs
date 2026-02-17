@@ -985,6 +985,37 @@ impl<'a> Tokenizer<'a> {
                     chars.next(); // advance past '%'
                     match chars.peek() {
                         Some(' ') => Ok(Some(Token::Mod)),
+                        // Python DB-API named placeholder: %(name)s
+                        Some('(') => {
+                            chars.next(); // consume '('
+                            let name =
+                                peeking_take_while(chars, |ch| ch != ')');
+                            if chars.peek() == Some(&')') {
+                                chars.next(); // consume ')'
+                                // consume the trailing format char (e.g. 's' in %(name)s)
+                                let fmt_char = if chars
+                                    .peek()
+                                    .map_or(false, |c| c.is_ascii_alphabetic())
+                                {
+                                    let c = *chars.peek().unwrap();
+                                    chars.next();
+                                    String::from(c)
+                                } else {
+                                    String::new()
+                                };
+                                Ok(Some(Token::Placeholder(format!(
+                                    "%({name}){fmt_char}"
+                                ))))
+                            } else {
+                                // Malformed, just return Mod and let parser deal with it
+                                Ok(Some(Token::Mod))
+                            }
+                        }
+                        // Python DB-API positional placeholder: %s, %d, etc.
+                        Some(&c) if c == 's' || c == 'd' || c == 'f' => {
+                            chars.next();
+                            Ok(Some(Token::Placeholder(format!("%{c}"))))
+                        }
                         Some(sch) if self.dialect.is_identifier_start('%') => {
                             self.tokenize_identifier_or_keyword([ch, *sch], chars)
                         }
