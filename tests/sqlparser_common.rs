@@ -5905,6 +5905,7 @@ fn parse_create_database() {
             managed_location,
             comment: _,
             from_integration: _,
+            collation: _,
         } => {
             assert_eq!("mydb", db_name.to_string());
             assert!(!if_not_exists);
@@ -5926,6 +5927,7 @@ fn parse_create_database_ine() {
             managed_location,
             comment: _,
             from_integration: _,
+            collation: _,
         } => {
             assert_eq!("mydb", db_name.to_string());
             assert!(if_not_exists);

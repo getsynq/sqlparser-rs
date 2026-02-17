@@ -2168,6 +2168,8 @@ pub enum Statement {
         comment: Option<String>,
         /// Redshift: FROM INTEGRATION 'integration_id'
         from_integration: Option<String>,
+        /// Redshift: COLLATE case_insensitive | case_sensitive
+        collation: Option<String>,
     },
     /// ```sql
     /// CREATE FUNCTION
@@ -2819,6 +2821,7 @@ impl fmt::Display for Statement {
                 managed_location,
                 comment,
                 from_integration,
+                collation,
             } => {
                 write!(f, "CREATE DATABASE")?;
                 if *if_not_exists {
@@ -2836,6 +2839,9 @@ impl fmt::Display for Statement {
                 }
                 if let Some(c) = comment {
                     write!(f, " COMMENT '{c}'")?;
+                }
+                if let Some(col) = collation {
+                    write!(f, " COLLATE {col}")?;
                 }
                 Ok(())
             }
