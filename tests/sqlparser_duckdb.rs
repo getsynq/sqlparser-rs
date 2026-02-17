@@ -396,3 +396,9 @@ fn test_filter_without_where() {
     // Standard FILTER (WHERE expr) syntax should still work
     duckdb().verified_stmt("SELECT SUM(x) FILTER (WHERE x = 1)");
 }
+
+#[test]
+fn test_trim_with_characters() {
+    // DuckDB supports TRIM(expr, characters) syntax
+    duckdb().verified_stmt("SELECT TRIM('***apple***', '*') AS result");
+}
