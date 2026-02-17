@@ -3804,6 +3804,13 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Redshift: COLLATE case_insensitive | case_sensitive
+        let collation = if self.parse_keyword(Keyword::COLLATE) {
+            Some(self.parse_identifier(false)?.unwrap().value)
+        } else {
+            None
+        };
+
         // Skip additional dialect-specific clauses (DEFAULT_DDL_COLLATION, etc.)
         while matches!(self.peek_token_kind().clone(), Token::Word(_))
             && self.peek_nth_token(1).token == Token::Eq
@@ -3831,6 +3838,7 @@ impl<'a> Parser<'a> {
             managed_location,
             comment,
             from_integration,
+            collation,
         })
     }
 

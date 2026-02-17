@@ -461,3 +461,24 @@ fn test_redshift_unpivot_super() {
         "WITH cte AS (SELECT col_1, col_2 FROM tbl_5) SELECT col_1, col_2 FROM tbl_2 AS tbl_2, UNPIVOT tbl_1.col_6 AS carrier_logic AT carrier_id",
     );
 }
+
+#[test]
+fn test_create_database_collate() {
+    let sql = "CREATE DATABASE sampledb COLLATE case_insensitive";
+    match redshift().verified_stmt(sql) {
+        Statement::CreateDatabase {
+            db_name,
+            if_not_exists,
+            collation,
+            ..
+        } => {
+            assert_eq!("sampledb", db_name.to_string());
+            assert!(!if_not_exists);
+            assert_eq!(Some("case_insensitive".to_string()), collation);
+        }
+        _ => unreachable!(),
+    }
+
+    // Also works with case_sensitive
+    redshift().verified_stmt("CREATE DATABASE mydb COLLATE case_sensitive");
+}
