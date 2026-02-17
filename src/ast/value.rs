@@ -86,6 +86,9 @@ pub enum Value {
     /// TUPLE as used by BigQuery
     /// ("org_unit", "development")
     Tuple(Vec<Value>),
+    /// MAP literal as used by DuckDB
+    /// MAP {'key': value, ...}
+    MapLiteral(Vec<ObjectConstantKeyValue>),
 }
 
 impl fmt::Display for Value {
@@ -134,6 +137,23 @@ impl fmt::Display for Value {
             }
             Value::Tuple(values) => {
                 write!(f, "({})", display_comma_separated(values))
+            }
+            Value::MapLiteral(fields) => {
+                if fields.is_empty() {
+                    write!(f, "MAP {}", "{}")
+                } else {
+                    let mut first = true;
+                    write!(f, "MAP {}", "{ ")?;
+                    for ObjectConstantKeyValue { key, value } in fields {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "'{}': {}", key, value)?;
+                    }
+                    write!(f, "{}", " }")
+                }
             }
         }
     }
