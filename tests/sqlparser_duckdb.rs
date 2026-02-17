@@ -395,3 +395,10 @@ fn test_from_first_with_where() {
         "SELECT * FROM tbl WHERE x > 1",
     );
 }
+
+#[test]
+fn test_map_literal() {
+    duckdb().verified_stmt("SELECT MAP { 'x': 1 }");
+    duckdb().verified_stmt("SELECT MAP { 'x': 1, 'y': 2 }");
+    duckdb().verified_stmt("SELECT MAP {}");
+}

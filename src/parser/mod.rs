@@ -885,6 +885,10 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::LParen)?;
                     self.parse_array_subquery()
                 }
+                // DuckDB MAP literal: MAP {'key': value, ...}
+                Keyword::MAP if self.peek_token_is(&Token::LBrace) => {
+                    self.parse_map_literal()
+                }
                 Keyword::NOT => self.parse_not(),
                 Keyword::MATCH if dialect_of!(self is MySqlDialect | GenericDialect) => {
                     self.parse_match_against()
@@ -1689,6 +1693,27 @@ impl<'a> Parser<'a> {
         let query = self.parse_boxed_query()?;
         self.expect_token(&Token::RParen)?;
         Ok(Expr::ArraySubquery(query))
+    }
+
+    /// Parses a DuckDB MAP literal: `MAP {'key': value, ...}`
+    /// Assumes the MAP keyword has already been consumed.
+    pub fn parse_map_literal(&mut self) -> Result<Expr, ParserError> {
+        self.expect_token(&Token::LBrace)?;
+        if self.consume_token(&Token::RBrace) {
+            return Ok(Expr::Value(Value::MapLiteral(vec![])));
+        }
+        let mut fields = vec![];
+        loop {
+            let key = self.parse_literal_string()?;
+            self.expect_token(&Token::Colon)?;
+            let value = Box::new(self.parse_expr()?);
+            fields.push(ObjectConstantKeyValue { key, value });
+            if !self.consume_token(&Token::Comma) {
+                break;
+            }
+        }
+        self.expect_token(&Token::RBrace)?;
+        Ok(Expr::Value(Value::MapLiteral(fields)))
     }
 
     // This function parses date/time fields for the EXTRACT function-like
