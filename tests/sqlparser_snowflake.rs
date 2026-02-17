@@ -157,7 +157,7 @@ fn test_single_table_in_parenthesis_with_alias() {
 
     let res = snowflake().parse_sql_statements("SELECT * FROM (a b) c");
     assert_eq!(
-        ParserError::ParserError("duplicate alias b".to_string()),
+        ParserError::ParserError("duplicate alias b".to_string().into()),
         res.unwrap_err()
     );
 }
@@ -1300,7 +1300,11 @@ fn test_snowflake_trim() {
     // missing comma separation
     let error_sql = "SELECT TRIM('xyz' 'a')";
     assert_eq!(
-        ParserError::ParserError("Expected ), found: 'a'\nNear `SELECT TRIM('xyz'`".to_owned()),
+        ParserError::ParserError(
+            "Expected ), found: 'a'\nNear `SELECT TRIM('xyz'`"
+                .to_owned()
+                .into()
+        ),
         snowflake().parse_sql_statements(error_sql).unwrap_err()
     );
 }

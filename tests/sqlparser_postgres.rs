@@ -722,7 +722,9 @@ fn parse_bad_if_not_exists() {
     let res = pg().parse_sql_statements("CREATE TABLE NOT EXISTS uk_cities ()");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: EXISTS\nNear `CREATE TABLE NOT`".to_string()
+            "Expected end of statement, found: EXISTS\nNear `CREATE TABLE NOT`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -730,7 +732,9 @@ fn parse_bad_if_not_exists() {
     let res = pg().parse_sql_statements("CREATE TABLE IF EXISTS uk_cities ()");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: EXISTS\nNear `CREATE TABLE IF`".to_string()
+            "Expected end of statement, found: EXISTS\nNear `CREATE TABLE IF`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -738,7 +742,9 @@ fn parse_bad_if_not_exists() {
     let res = pg().parse_sql_statements("CREATE TABLE IF uk_cities ()");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: uk_cities\nNear `CREATE TABLE IF`".to_string()
+            "Expected end of statement, found: uk_cities\nNear `CREATE TABLE IF`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -746,7 +752,9 @@ fn parse_bad_if_not_exists() {
     let res = pg().parse_sql_statements("CREATE TABLE IF NOT uk_cities ()");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: NOT\nNear `CREATE TABLE IF`".to_string()
+            "Expected end of statement, found: NOT\nNear `CREATE TABLE IF`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -989,7 +997,11 @@ fn parse_copy_from() {
 fn parse_copy_from_error() {
     let res = pg().parse_sql_statements("COPY (SELECT 42 AS a, 'hello' AS b) FROM 'query.csv'");
     assert_eq!(
-        ParserError::ParserError("COPY ... FROM does not support query as a source".to_string()),
+        ParserError::ParserError(
+            "COPY ... FROM does not support query as a source"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 }
@@ -1327,21 +1339,27 @@ fn parse_set() {
     assert_eq!(
         pg_and_generic().parse_sql_statements("SET"),
         Err(ParserError::ParserError(
-            "Expected identifier, found: EOF\nNear `SET`".to_string()
+            "Expected identifier, found: EOF\nNear `SET`"
+                .to_string()
+                .into()
         )),
     );
 
     assert_eq!(
         pg_and_generic().parse_sql_statements("SET a b"),
         Err(ParserError::ParserError(
-            "Expected equals sign or TO, found: b\nNear `SET a`".to_string()
+            "Expected equals sign or TO, found: b\nNear `SET a`"
+                .to_string()
+                .into()
         )),
     );
 
     assert_eq!(
         pg_and_generic().parse_sql_statements("SET a ="),
         Err(ParserError::ParserError(
-            "Expected variable value, found: EOF\nNear `SET a =`".to_string()
+            "Expected variable value, found: EOF\nNear `SET a =`"
+                .to_string()
+                .into()
         )),
     );
 }

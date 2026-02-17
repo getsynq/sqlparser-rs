@@ -394,7 +394,7 @@ fn parse_select_items_for_data_load(
         match next_token.token {
             Token::Placeholder(w) => {
                 file_col_num = w.to_string().split_off(1).parse::<i32>().map_err(|e| {
-                    ParserError::ParserError(format!("Could not parse '{w}' as i32: {e}"))
+                    ParserError::ParserError(format!("Could not parse '{w}' as i32: {e}").into())
                 })?;
                 Ok(())
             }
@@ -412,7 +412,9 @@ fn parse_select_items_for_data_load(
             match col_num_token.token {
                 Token::Placeholder(w) => {
                     file_col_num = w.to_string().split_off(1).parse::<i32>().map_err(|e| {
-                        ParserError::ParserError(format!("Could not parse '{w}' as i32: {e}"))
+                        ParserError::ParserError(
+                            format!("Could not parse '{w}' as i32: {e}").into(),
+                        )
                     })?;
                     Ok(())
                 }

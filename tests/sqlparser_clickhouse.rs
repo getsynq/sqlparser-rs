@@ -485,6 +485,7 @@ fn parse_optimize_table() {
         ParserError::ParserError(
             "Expected an expression:, found: EOF\nNear `OPTIMIZE TABLE t0 DEDUPLICATE BY`"
                 .to_string()
+                .into()
         )
     );
     assert_eq!(
@@ -492,7 +493,9 @@ fn parse_optimize_table() {
             .parse_sql_statements("OPTIMIZE TABLE t0 PARTITION")
             .unwrap_err(),
         ParserError::ParserError(
-            "Expected an expression:, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION`".to_string()
+            "Expected an expression:, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION`"
+                .to_string()
+                .into()
         )
     );
     assert_eq!(
@@ -500,7 +503,9 @@ fn parse_optimize_table() {
             .parse_sql_statements("OPTIMIZE TABLE t0 PARTITION ID")
             .unwrap_err(),
         ParserError::ParserError(
-            "Expected identifier, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION ID`".to_string()
+            "Expected identifier, found: EOF\nNear `OPTIMIZE TABLE t0 PARTITION ID`"
+                .to_string()
+                .into()
         )
     );
 }
@@ -577,7 +582,7 @@ fn parse_alter_table_attach_and_detach_partition() {
             clickhouse_and_generic()
                 .parse_sql_statements(format!("ALTER TABLE t0 {operation} PARTITION").as_str())
                 .unwrap_err(),
-            ParserError::ParserError(format!("Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PARTITION`").to_string())
+            ParserError::ParserError(format!("Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PARTITION`").to_string().into())
         );
         assert_eq!(
             clickhouse_and_generic()
@@ -588,6 +593,7 @@ fn parse_alter_table_attach_and_detach_partition() {
                     "Expected an expression:, found: EOF\nNear `ALTER TABLE t0 {operation} PART`"
                 )
                 .to_string()
+                .into()
             )
         );
     }

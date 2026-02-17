@@ -473,9 +473,9 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 using_template,
                 copy_grants,
             }),
-            _ => Err(ParserError::ParserError(format!(
-                "Expected create table statement, but received: {stmt}"
-            ))),
+            _ => Err(ParserError::ParserError(
+                format!("Expected create table statement, but received: {stmt}").into(),
+            )),
         }
     }
 }
@@ -502,7 +502,9 @@ mod tests {
         assert_eq!(
             CreateTableBuilder::try_from(stmt).unwrap_err(),
             ParserError::ParserError(
-                "Expected create table statement, but received: COMMIT".to_owned()
+                "Expected create table statement, but received: COMMIT"
+                    .to_owned()
+                    .into()
             )
         );
     }
