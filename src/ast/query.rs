@@ -769,8 +769,15 @@ pub struct TableWithJoins {
 impl fmt::Display for TableWithJoins {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.relation)?;
+        let mut prev_was_array = false;
         for join in &self.joins {
-            write!(f, "{join}")?;
+            if matches!(join.join_operator, JoinOperator::Array) && prev_was_array {
+                // Consecutive ARRAY JOIN items are comma-separated
+                write!(f, ", {}", join.relation)?;
+            } else {
+                write!(f, "{join}")?;
+            }
+            prev_was_array = matches!(join.join_operator, JoinOperator::Array);
         }
         Ok(())
     }
