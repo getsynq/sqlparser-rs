@@ -1325,6 +1325,38 @@ fn test_select_array_item_field_in_function() {
 }
 
 #[test]
+fn test_typed_array_constructor() {
+    // Simple typed array
+    bigquery().verified_expr("ARRAY<INT64>[1, 2, 3]");
+
+    // Empty typed array
+    bigquery().verified_expr("ARRAY<INT64>[]");
+
+    // Typed array with STRUCT type
+    bigquery().verified_expr(
+        "ARRAY<STRUCT<x INT64>>[STRUCT(1), STRUCT(2)]",
+    );
+
+    // Typed array with STRUCT containing multiple fields
+    bigquery().verified_expr(
+        "ARRAY<STRUCT<warehouse STRING, state STRING>>[('warehouse #1', 'WA'), ('warehouse #2', 'CA')]",
+    );
+
+    // Empty typed array with complex type
+    bigquery().verified_expr("ARRAY<STRUCT<x INT64>>[]");
+
+    // Typed array in SELECT context
+    bigquery().verified_only_select(
+        "SELECT ARRAY<INT64>[1, 2, 3] AS arr",
+    );
+
+    // Typed array in UNNEST
+    bigquery().verified_only_select(
+        "SELECT * FROM UNNEST(ARRAY<STRUCT<x INT64>>[])",
+    );
+}
+
+#[test]
 fn test_select_json_field() {
     let _select = bigquery().verified_only_select(
         "SELECT JSON_VALUE(PARSE_JSON(response_json).user.username) AS arr_id FROM `proj`.`dataset`.`table`",

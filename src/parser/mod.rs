@@ -888,6 +888,13 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::LParen)?;
                     self.parse_array_subquery()
                 }
+                // BigQuery typed array constructor: ARRAY<type>[...]
+                Keyword::ARRAY
+                    if self.peek_token_is(&Token::Lt)
+                        && dialect_of!(self is BigQueryDialect | GenericDialect) =>
+                {
+                    self.parse_typed_array_expr()
+                }
                 // DuckDB MAP literal: MAP {'key': value, ...}
                 Keyword::MAP if self.peek_token_is(&Token::LBrace) => self.parse_map_literal(),
                 Keyword::NOT => self.parse_not(),
@@ -1751,6 +1758,26 @@ impl<'a> Parser<'a> {
         let query = self.parse_boxed_query()?;
         self.expect_token(&Token::RParen)?;
         Ok(Expr::ArraySubquery(query))
+    }
+
+    /// Parses a BigQuery typed array constructor: `ARRAY<type>[expr, ...]`
+    /// Assumes the ARRAY keyword has already been consumed and `<` is the next token.
+    pub fn parse_typed_array_expr(&mut self) -> Result<Expr, ParserError> {
+        self.expect_token(&Token::Lt)?;
+        let (data_type, trailing_bracket) = self.parse_data_type_helper()?;
+        let _closing = self.expect_closing_angle_bracket(trailing_bracket)?;
+        self.expect_token(&Token::LBracket)?;
+        if self.peek_token_is(&Token::RBracket) {
+            self.next_token(); // consume ]
+            Ok(Expr::TypedArray {
+                data_type,
+                values: vec![],
+            })
+        } else {
+            let values = self.parse_comma_separated(Parser::parse_expr)?;
+            self.expect_token(&Token::RBracket)?;
+            Ok(Expr::TypedArray { data_type, values })
+        }
     }
 
     /// Parses a DuckDB MAP literal: `MAP {'key': value, ...}`
