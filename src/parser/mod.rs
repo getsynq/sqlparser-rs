@@ -2506,6 +2506,10 @@ impl<'a> Parser<'a> {
             }
         } else if Token::DoubleColon == tok {
             self.parse_pg_cast(expr)
+        } else if matches!(&tok.token, Token::Placeholder(s) if s == "?") {
+            // ?:: is a try cast operator (e.g., Databricks)
+            self.expect_token(&Token::DoubleColon)?;
+            self.parse_pg_try_cast(expr)
         } else if Token::ExclamationMark == tok {
             // PostgreSQL factorial operation
             Ok(Expr::UnaryOp {
@@ -2740,6 +2744,15 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Parse a try cast operator in the form of `expr?::datatype` (e.g., Databricks)
+    pub fn parse_pg_try_cast(&mut self, expr: Expr) -> Result<Expr, ParserError> {
+        Ok(Expr::TryCast {
+            expr: Box::new(expr),
+            data_type: self.parse_data_type()?,
+            format: None,
+        })
+    }
+
     // use https://www.postgresql.org/docs/7.0/operators.htm#AEN2026 as a reference
     const MUL_DIV_MOD_OP_PREC: u8 = 40;
     const PLUS_MINUS_PREC: u8 = 30;
@@ -2835,6 +2848,8 @@ impl<'a> Parser<'a> {
                 Ok(Self::MUL_DIV_MOD_OP_PREC)
             }
             Token::DoubleColon => Ok(50),
+            // ?:: is a try cast operator (e.g., Databricks)
+            Token::Placeholder(ref s) if s == "?" && self.peek_nth_token(1).token == Token::DoubleColon => Ok(50),
             Token::Colon => Ok(50),
             Token::ExclamationMark => Ok(50),
             Token::Number(s, _) if s.starts_with(".") => Ok(50),
