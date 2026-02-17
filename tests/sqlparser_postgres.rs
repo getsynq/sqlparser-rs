@@ -3837,3 +3837,11 @@ fn parse_overlaps() {
     let sql = "SELECT (CAST('2016-01-10' AS DATE), CAST('2016-02-01' AS DATE)) OVERLAPS (CAST('2016-01-20' AS DATE), CAST('2016-02-10' AS DATE))";
     pg_and_generic().verified_only_select(sql);
 }
+
+#[test]
+fn parse_table_inheritance_wildcard() {
+    // PostgreSQL table inheritance: `FROM t1*` includes all child tables
+    // https://www.postgresql.org/docs/current/ddl-inherit.html
+    pg_and_generic().verified_stmt("SELECT * FROM t1*");
+    pg_and_generic().verified_stmt("SELECT * FROM schema1.t1*");
+}
