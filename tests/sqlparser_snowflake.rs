@@ -589,6 +589,46 @@ fn test_alter_table_swap_with() {
 }
 
 #[test]
+fn test_alter_table_row_access_policy() {
+    // Single DROP ROW ACCESS POLICY
+    let sql = "ALTER TABLE t1 DROP ROW ACCESS POLICY rap_t1";
+    snowflake_and_generic().verified_stmt(sql);
+
+    // Single ADD ROW ACCESS POLICY
+    let sql = "ALTER TABLE t1 ADD ROW ACCESS POLICY rap_t1 ON (empl_id)";
+    snowflake_and_generic().verified_stmt(sql);
+
+    // Combined DROP + ADD (comma-separated operations)
+    let sql = "ALTER TABLE t1 DROP ROW ACCESS POLICY rap_t1_version_1, ADD ROW ACCESS POLICY rap_t1_version_2 ON (empl_id)";
+    match snowflake_and_generic().verified_stmt(sql) {
+        Statement::AlterTable {
+            name, operations, ..
+        } => {
+            assert_eq!("t1", name.to_string());
+            assert_eq!(2, operations.len());
+            match &operations[0] {
+                AlterTableOperation::DropRowAccessPolicy { policy } => {
+                    assert_eq!("rap_t1_version_1", policy.to_string());
+                }
+                _ => unreachable!(),
+            }
+            match &operations[1] {
+                AlterTableOperation::AddRowAccessPolicy { policy, on } => {
+                    assert_eq!("rap_t1_version_2", policy.to_string());
+                    assert_eq!(vec!["empl_id"], on.iter().map(|i| i.to_string()).collect::<Vec<_>>());
+                }
+                _ => unreachable!(),
+            }
+        }
+        _ => unreachable!(),
+    }
+
+    // Multiple columns in ON clause
+    let sql = "ALTER TABLE t1 ADD ROW ACCESS POLICY rap ON (col1, col2, col3)";
+    snowflake_and_generic().verified_stmt(sql);
+}
+
+#[test]
 fn test_drop_stage() {
     match snowflake_and_generic().verified_stmt("DROP STAGE s1") {
         Statement::Drop {

@@ -70,6 +70,7 @@ define_keywords!(
     ABORT,
     ABS,
     ABSOLUTE,
+    ACCESS,
     ACTION,
     ADD,
     ADMIN,
