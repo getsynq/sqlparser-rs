@@ -482,3 +482,46 @@ fn test_create_database_collate() {
     // Also works with case_sensitive
     redshift().verified_stmt("CREATE DATABASE mydb COLLATE case_sensitive");
 }
+
+#[test]
+fn test_grant_with_group_grantee() {
+    // GRANT ... TO GROUP name
+    redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users");
+
+    // GRANT ... TO multiple GROUP grantees (ON TABLE serializes as ON)
+    redshift().one_statement_parses_to(
+        "GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users, GROUP ro_users",
+        "GRANT ALL ON qa_tickit.sales TO GROUP qa_users, GROUP ro_users",
+    );
+
+    // GRANT with column-level privileges
+    redshift().verified_stmt(
+        "GRANT SELECT (cust_name, cust_phone), UPDATE (cust_contact_preference) ON cust_profile TO GROUP sales_group",
+    );
+
+    // Verify AST structure
+    match redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users") {
+        Statement::Grant {
+            grantees,
+            ..
+        } => {
+            assert_eq!(1, grantees.len());
+            assert_eq!(Some(GranteesType::Group), grantees[0].grantee_type);
+            assert_eq!("qa_users", grantees[0].name.value);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn test_revoke_with_group_grantee() {
+    // With explicit RESTRICT
+    redshift()
+        .verified_stmt("REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users RESTRICT");
+
+    // Without CASCADE/RESTRICT (defaults to RESTRICT in output)
+    redshift().one_statement_parses_to(
+        "REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users",
+        "REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users RESTRICT",
+    );
+}

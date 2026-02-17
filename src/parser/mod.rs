@@ -10190,9 +10190,7 @@ impl<'a> Parser<'a> {
         if self.parse_keyword(Keyword::ROLE) {
             let role_name = self.parse_identifier(false)?.unwrap();
             self.expect_keyword(Keyword::TO)?;
-            let _ = self.parse_one_of_keywords(&[Keyword::ROLE, Keyword::USER]);
-            let grantees =
-                self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
+            let grantees = self.parse_comma_separated(|p| p.parse_grantee())?;
             return Ok(Statement::Grant {
                 privileges: Privileges::Actions(vec![Action::Usage]),
                 objects: GrantObjects::Schemas(vec![ObjectName(vec![role_name])]),
@@ -10205,10 +10203,7 @@ impl<'a> Parser<'a> {
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::TO)?;
-        // Snowflake: TO ROLE name / TO USER name
-        let _ = self.parse_one_of_keywords(&[Keyword::ROLE, Keyword::USER, Keyword::SHARE]);
-        let grantees =
-            self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
+        let grantees = self.parse_comma_separated(|p| p.parse_grantee())?;
 
         let with_grant_option =
             self.parse_keywords(&[Keyword::WITH, Keyword::GRANT, Keyword::OPTION]);
@@ -10225,6 +10220,29 @@ impl<'a> Parser<'a> {
             grantees,
             with_grant_option,
             granted_by,
+        })
+    }
+
+    /// Parse a single grantee, optionally prefixed with ROLE/USER/GROUP/SHARE/APPLICATION.
+    pub fn parse_grantee(&mut self) -> Result<Grantee, ParserError> {
+        let grantee_type = match self.parse_one_of_keywords(&[
+            Keyword::ROLE,
+            Keyword::USER,
+            Keyword::SHARE,
+            Keyword::GROUP,
+            Keyword::APPLICATION,
+        ]) {
+            Some(Keyword::ROLE) => Some(GranteesType::Role),
+            Some(Keyword::USER) => Some(GranteesType::User),
+            Some(Keyword::SHARE) => Some(GranteesType::Share),
+            Some(Keyword::GROUP) => Some(GranteesType::Group),
+            Some(Keyword::APPLICATION) => Some(GranteesType::Application),
+            _ => None,
+        };
+        let name = self.parse_identifier(false).map(WithSpan::unwrap)?;
+        Ok(Grantee {
+            grantee_type,
+            name,
         })
     }
 
@@ -10403,10 +10421,7 @@ impl<'a> Parser<'a> {
         let (privileges, objects) = self.parse_grant_revoke_privileges_objects()?;
 
         self.expect_keyword(Keyword::FROM)?;
-        // Optional ROLE/SHARE keyword before grantees (Snowflake syntax)
-        let _ = self.parse_one_of_keywords(&[Keyword::ROLE, Keyword::SHARE]);
-        let grantees =
-            self.parse_comma_separated(|p| p.parse_identifier(false).map(WithSpan::unwrap))?;
+        let grantees = self.parse_comma_separated(|p| p.parse_grantee())?;
 
         let granted_by = self
             .parse_keywords(&[Keyword::GRANTED, Keyword::BY])

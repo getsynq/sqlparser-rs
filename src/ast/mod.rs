@@ -32,7 +32,9 @@ pub use self::data_type::{
     ArrayElemTypeDef, CharLengthUnits, CharacterLength, DataType, EnumTypeValue, ExactNumberInfo,
     TimezoneInfo,
 };
-pub use self::dcl::{AlterRoleOperation, ResetConfig, RoleOption, SetConfigValue};
+pub use self::dcl::{
+    AlterRoleOperation, Grantee, GranteesType, ResetConfig, RoleOption, SetConfigValue,
+};
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
@@ -2240,7 +2242,7 @@ pub enum Statement {
     Grant {
         privileges: Privileges,
         objects: GrantObjects,
-        grantees: Vec<Ident>,
+        grantees: Vec<Grantee>,
         with_grant_option: bool,
         granted_by: Option<Ident>,
     },
@@ -2250,7 +2252,7 @@ pub enum Statement {
     Revoke {
         privileges: Privileges,
         objects: GrantObjects,
-        grantees: Vec<Ident>,
+        grantees: Vec<Grantee>,
         granted_by: Option<Ident>,
         cascade: bool,
     },
@@ -3770,6 +3772,7 @@ impl fmt::Display for Statement {
                 }
                 Ok(())
             }
+
             Statement::Revoke {
                 privileges,
                 objects,

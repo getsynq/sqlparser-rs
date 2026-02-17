@@ -26,6 +26,58 @@ use sqlparser_derive::{Visit, VisitMut};
 use super::{Expr, Ident, Password};
 use crate::ast::{display_separated, ObjectName};
 
+/// The type prefix for a grantee in GRANT/REVOKE statements.
+///
+/// Examples:
+/// - `GRANT ... TO GROUP qa_users`
+/// - `GRANT ... TO ROLE admin`
+/// - `REVOKE ... FROM APPLICATION app`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum GranteesType {
+    Role,
+    User,
+    Share,
+    Group,
+    Application,
+}
+
+impl fmt::Display for GranteesType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GranteesType::Role => write!(f, "ROLE"),
+            GranteesType::User => write!(f, "USER"),
+            GranteesType::Share => write!(f, "SHARE"),
+            GranteesType::Group => write!(f, "GROUP"),
+            GranteesType::Application => write!(f, "APPLICATION"),
+        }
+    }
+}
+
+/// A grantee in a GRANT/REVOKE statement, optionally prefixed with a type keyword.
+///
+/// Examples:
+/// - `qa_users` (no type)
+/// - `GROUP qa_users`
+/// - `ROLE admin`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Grantee {
+    pub grantee_type: Option<GranteesType>,
+    pub name: Ident,
+}
+
+impl fmt::Display for Grantee {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref grantee_type) = self.grantee_type {
+            write!(f, "{} ", grantee_type)?;
+        }
+        write!(f, "{}", self.name)
+    }
+}
+
 /// An option in `ROLE` statement.
 ///
 /// <https://www.postgresql.org/docs/current/sql-createrole.html>
