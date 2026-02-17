@@ -3844,6 +3844,7 @@ fn parse_explain_table() {
             describe_alias,
             table_name,
             object_type: _,
+            function_params: _,
             format: _,
         } => {
             assert_eq!(describe_alias, expected_describe_alias);

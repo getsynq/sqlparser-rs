@@ -2320,6 +2320,8 @@ pub enum Statement {
         table_name: ObjectName,
         /// Optional object type keyword (TABLE, DATABASE, WAREHOUSE, SEQUENCE, STREAM, FUNCTION, VIEW, etc.)
         object_type: Option<Ident>,
+        /// Optional function parameter types for DESCRIBE FUNCTION name(type1, type2, ...)
+        function_params: Option<Vec<DescribeFunctionParam>>,
         /// Optional output format (ClickHouse)
         format: Option<Ident>,
     },
@@ -2465,6 +2467,7 @@ impl fmt::Display for Statement {
                 describe_alias,
                 table_name,
                 object_type,
+                function_params,
                 format,
             } => {
                 if *describe_alias {
@@ -2477,6 +2480,10 @@ impl fmt::Display for Statement {
                 }
 
                 write!(f, "{table_name}")?;
+
+                if let Some(params) = function_params {
+                    write!(f, "({})", display_comma_separated(params))?;
+                }
 
                 if let Some(format) = format {
                     write!(f, " FORMAT {format}")?;
@@ -4824,6 +4831,29 @@ impl fmt::Display for KillType {
             // Clickhouse supports Mutation
             KillType::Mutation => "MUTATION",
         })
+    }
+}
+
+/// A parameter type in DESCRIBE FUNCTION name(param1, param2, ...)
+/// Supports both simple data types and TABLE(type, type, ...) notation
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum DescribeFunctionParam {
+    /// A simple data type (e.g., VARCHAR, NUMBER)
+    DataType(DataType),
+    /// TABLE(type, type, ...) notation for table-valued parameters
+    Table(Vec<DataType>),
+}
+
+impl fmt::Display for DescribeFunctionParam {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DescribeFunctionParam::DataType(dt) => write!(f, "{dt}"),
+            DescribeFunctionParam::Table(types) => {
+                write!(f, "TABLE({})", display_comma_separated(types))
+            }
+        }
     }
 }
 

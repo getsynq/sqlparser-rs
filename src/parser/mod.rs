@@ -8348,19 +8348,40 @@ impl<'a> Parser<'a> {
                 }
 
                 // Parse optional object type: TABLE, DATABASE, WAREHOUSE, SEQUENCE, STREAM, FUNCTION, VIEW, SCHEMA
-                let object_type = self
-                    .parse_one_of_keywords(&[
-                        Keyword::TABLE,
-                        Keyword::DATABASE,
-                        Keyword::WAREHOUSE,
-                        Keyword::SEQUENCE,
-                        Keyword::STREAM,
-                        Keyword::FUNCTION,
-                        Keyword::VIEW,
-                        Keyword::SCHEMA,
-                    ])
-                    .map(|kw| Ident::new(format!("{kw:?}")));
+                let object_type_kw = self.parse_one_of_keywords(&[
+                    Keyword::TABLE,
+                    Keyword::DATABASE,
+                    Keyword::WAREHOUSE,
+                    Keyword::SEQUENCE,
+                    Keyword::STREAM,
+                    Keyword::FUNCTION,
+                    Keyword::VIEW,
+                    Keyword::SCHEMA,
+                ]);
+                let object_type = object_type_kw.map(|kw| Ident::new(format!("{kw:?}")));
                 let table_name = self.parse_object_name(false)?;
+
+                // DESCRIBE FUNCTION name(type1, type2, ...) - parse function signature
+                // Supports TABLE(type, ...) parameter types for DMFs
+                let function_params =
+                    if object_type_kw == Some(Keyword::FUNCTION) && self.peek_token().token == Token::LParen {
+                        self.expect_token(&Token::LParen)?;
+                        let params = self.parse_comma_separated(|p| {
+                            // Handle TABLE(type, type, ...) parameter type notation
+                            if p.parse_keyword(Keyword::TABLE) {
+                                p.expect_token(&Token::LParen)?;
+                                let inner_types = p.parse_comma_separated(|p2| p2.parse_data_type())?;
+                                p.expect_token(&Token::RParen)?;
+                                Ok(DescribeFunctionParam::Table(inner_types))
+                            } else {
+                                Ok(DescribeFunctionParam::DataType(p.parse_data_type()?))
+                            }
+                        })?;
+                        self.expect_token(&Token::RParen)?;
+                        Some(params)
+                    } else {
+                        None
+                    };
 
                 // ClickHouse: DESCRIBE TABLE tab FORMAT Vertical
                 let format = if self.parse_keyword(Keyword::FORMAT) {
@@ -8372,6 +8393,7 @@ impl<'a> Parser<'a> {
                 Ok(Statement::ExplainTable {
                     describe_alias,
                     object_type,
+                    function_params,
                     table_name,
                     format,
                 })
