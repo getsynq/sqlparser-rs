@@ -2035,6 +2035,32 @@ fn parse_create_index_concurrently() {
 }
 
 #[test]
+fn parse_drop_index_concurrently() {
+    pg().verified_stmt("DROP INDEX CONCURRENTLY ix_table_id");
+    pg().verified_stmt("DROP INDEX CONCURRENTLY IF EXISTS ix_table_id");
+    pg().verified_stmt("DROP INDEX CONCURRENTLY IF EXISTS ix_table_id CASCADE");
+
+    match pg().verified_stmt("DROP INDEX CONCURRENTLY ix_table_id") {
+        Statement::Drop {
+            object_type,
+            if_exists,
+            names,
+            concurrently,
+            ..
+        } => {
+            assert_eq!(ObjectType::Index, object_type);
+            assert!(!if_exists);
+            assert!(concurrently);
+            assert_eq!(
+                vec!["ix_table_id"],
+                names.iter().map(ToString::to_string).collect::<Vec<_>>()
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_create_index_with_predicate() {
     let sql = "CREATE INDEX IF NOT EXISTS my_index ON my_table(col1,col2) WHERE col3 IS NULL";
     match pg().verified_stmt(sql) {
