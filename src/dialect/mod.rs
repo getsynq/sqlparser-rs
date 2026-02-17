@@ -138,6 +138,12 @@ pub trait Dialect: Debug + Any {
     fn supports_prefix_alias_colon(&self) -> bool {
         false
     }
+    /// Returns true if the dialect supports FROM-first queries without SELECT.
+    /// e.g. DuckDB: `FROM tbl` is equivalent to `SELECT * FROM tbl`
+    /// and `(FROM range(10))` as a subquery.
+    fn supports_from_first_select(&self) -> bool {
+        false
+    }
     /// Dialect-specific prefix parser override
     fn parse_prefix(&self, _parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
         // return None to fall back to the default behavior
@@ -323,6 +329,10 @@ mod tests {
 
             fn supports_prefix_alias_colon(&self) -> bool {
                 self.0.supports_prefix_alias_colon()
+            }
+
+            fn supports_from_first_select(&self) -> bool {
+                self.0.supports_from_first_select()
             }
 
             fn parse_prefix(

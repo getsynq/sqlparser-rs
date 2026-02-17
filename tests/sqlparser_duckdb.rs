@@ -367,3 +367,31 @@ fn test_prefix_alias_colon_from_multiple() {
         "SELECT * FROM range(10) AS r, (VALUES (42)) AS v",
     );
 }
+
+#[test]
+fn test_from_first_select() {
+    // DuckDB FROM-first syntax: `FROM tbl` is equivalent to `SELECT * FROM tbl`
+    duckdb().one_statement_parses_to("FROM tbl", "SELECT * FROM tbl");
+}
+
+#[test]
+fn test_from_first_select_function() {
+    duckdb().one_statement_parses_to("FROM range(10)", "SELECT * FROM range(10)");
+}
+
+#[test]
+fn test_from_first_subquery() {
+    // FROM-first query used as a subquery
+    duckdb().one_statement_parses_to(
+        "SELECT * FROM r: range(10), v: (VALUES (42)), s: (FROM range(10))",
+        "SELECT * FROM range(10) AS r, (VALUES (42)) AS v, (SELECT * FROM range(10)) AS s",
+    );
+}
+
+#[test]
+fn test_from_first_with_where() {
+    duckdb().one_statement_parses_to(
+        "FROM tbl WHERE x > 1",
+        "SELECT * FROM tbl WHERE x > 1",
+    );
+}

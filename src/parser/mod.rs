@@ -477,6 +477,11 @@ impl<'a> Parser<'a> {
                     self.prev_token();
                     Ok(Statement::Query(self.parse_boxed_query()?))
                 }
+                // DuckDB FROM-first syntax: `FROM tbl` is equivalent to `SELECT * FROM tbl`
+                Keyword::FROM if self.dialect.supports_from_first_select() => {
+                    self.prev_token();
+                    Ok(Statement::Query(self.parse_boxed_query()?))
+                }
                 Keyword::TRUNCATE => Ok(self.parse_truncate()?),
                 Keyword::MSCK => Ok(self.parse_msck()?),
                 Keyword::CREATE => Ok(self.parse_create()?),
@@ -8587,6 +8592,11 @@ impl<'a> Parser<'a> {
             SetExpr::Values(self.parse_values(is_mysql)?)
         } else if self.parse_keyword(Keyword::TABLE) {
             SetExpr::Table(Box::new(self.parse_as_table()?))
+        } else if self.dialect.supports_from_first_select()
+            && self.parse_keyword(Keyword::FROM)
+        {
+            // DuckDB FROM-first syntax: `FROM tbl` is equivalent to `SELECT * FROM tbl`
+            SetExpr::Select(Box::new(self.parse_select_from_first()?))
         } else {
             return self.expected(
                 "SELECT, VALUES, or a subquery in the query body",
@@ -8830,6 +8840,68 @@ impl<'a> Parser<'a> {
             named_window: named_windows,
             qualify,
             value_table_mode,
+        })
+    }
+
+    /// Parse DuckDB FROM-first query: `FROM tbl` is equivalent to `SELECT * FROM tbl`
+    /// Called after the FROM keyword has already been consumed.
+    pub fn parse_select_from_first(&mut self) -> Result<Select, ParserError> {
+        let from = self.parse_from_clause_body()?;
+
+        let selection = if self.parse_keyword(Keyword::WHERE) {
+            let start_idx = self.index;
+            let expr = self.parse_expr()?;
+            Some(expr.spanning(self.span_from_index(start_idx)))
+        } else {
+            None
+        };
+
+        let group_by = if self.parse_keywords(&[Keyword::GROUP, Keyword::BY]) {
+            if self.parse_keyword(Keyword::ALL) {
+                GroupByExpr::All
+            } else {
+                GroupByExpr::Expressions(self.parse_comma_separated(Parser::parse_group_by_expr)?)
+            }
+        } else {
+            GroupByExpr::Expressions(vec![])
+        };
+
+        let having = if self.parse_keyword(Keyword::HAVING) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        let named_windows = if self.parse_keyword(Keyword::WINDOW) {
+            self.parse_comma_separated(Parser::parse_named_window)?
+        } else {
+            vec![]
+        };
+
+        let qualify = if self.parse_keyword(Keyword::QUALIFY) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        Ok(Select {
+            distinct: None,
+            top: None,
+            projection: vec![SelectItem::Wildcard(WildcardAdditionalOptions::default())
+                .empty_span()],
+            into: None,
+            from,
+            lateral_views: vec![],
+            sample: None,
+            selection,
+            group_by,
+            cluster_by: vec![],
+            distribute_by: vec![],
+            sort_by: vec![],
+            having,
+            named_window: named_windows,
+            qualify,
+            value_table_mode: None,
         })
     }
 

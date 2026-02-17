@@ -40,4 +40,8 @@ impl Dialect for DuckDbDialect {
     fn supports_prefix_alias_colon(&self) -> bool {
         true
     }
+
+    fn supports_from_first_select(&self) -> bool {
+        true
+    }
 }
