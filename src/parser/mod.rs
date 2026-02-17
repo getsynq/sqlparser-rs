@@ -10746,7 +10746,10 @@ impl<'a> Parser<'a> {
                     && self.parse_keyword(Keyword::FILTER)
                 {
                     let i = self.index - 1;
-                    if self.consume_token(&Token::LParen) && self.parse_keyword(Keyword::WHERE) {
+                    if self.consume_token(&Token::LParen) {
+                        // Standard SQL: FILTER (WHERE expr)
+                        // DuckDB also supports: FILTER (expr) without WHERE
+                        self.parse_keyword(Keyword::WHERE);
                         let filter = self.parse_expr()?;
                         self.expect_token(&Token::RParen)?;
                         Expr::AggregateExpressionWithFilter {
@@ -10807,7 +10810,10 @@ impl<'a> Parser<'a> {
             && self.parse_keyword(Keyword::FILTER)
         {
             let i = self.index - 1;
-            if self.consume_token(&Token::LParen) && self.parse_keyword(Keyword::WHERE) {
+            if self.consume_token(&Token::LParen) {
+                // Standard SQL: FILTER (WHERE expr)
+                // DuckDB also supports: FILTER (expr) without WHERE
+                self.parse_keyword(Keyword::WHERE);
                 let filter = self.parse_expr()?;
                 self.expect_token(&Token::RParen)?;
                 Expr::AggregateExpressionWithFilter {
