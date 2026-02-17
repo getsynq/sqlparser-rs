@@ -9278,7 +9278,12 @@ impl<'a> Parser<'a> {
         extended: bool,
         full: bool,
     ) -> Result<Statement, ParserError> {
-        self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])?;
+        let show_in =
+            self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])? == Keyword::IN;
+        // Optionally consume TABLE or VIEW keyword (Snowflake: SHOW COLUMNS IN TABLE <name>)
+        let show_object_kind =
+            self.parse_one_of_keywords(&[Keyword::TABLE, Keyword::VIEW])
+                .map(|kw| Ident::new(format!("{kw:?}")));
         let object_name = self.parse_object_name(false)?;
         let table_name = match self.parse_one_of_keywords(&[Keyword::FROM, Keyword::IN]) {
             Some(_) => {
@@ -9293,6 +9298,8 @@ impl<'a> Parser<'a> {
         Ok(Statement::ShowColumns {
             extended,
             full,
+            show_in,
+            show_object_kind,
             table_name,
             filter,
         })

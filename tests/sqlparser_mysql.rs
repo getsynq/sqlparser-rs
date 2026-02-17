@@ -54,6 +54,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: false,
             full: false,
+            show_in: false,
+            show_object_kind: None,
             table_name: table_name.clone(),
             filter: None,
         }
@@ -63,6 +65,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: false,
             full: false,
+            show_in: false,
+            show_object_kind: None,
             table_name: ObjectName(vec![Ident::new("mydb"), Ident::new("mytable")]),
             filter: None,
         }
@@ -72,6 +76,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: true,
             full: false,
+            show_in: false,
+            show_object_kind: None,
             table_name: table_name.clone(),
             filter: None,
         }
@@ -81,6 +87,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: false,
             full: true,
+            show_in: false,
+            show_object_kind: None,
             table_name: table_name.clone(),
             filter: None,
         }
@@ -90,6 +98,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: false,
             full: false,
+            show_in: false,
+            show_object_kind: None,
             table_name: table_name.clone(),
             filter: Some(ShowStatementFilter::Like("pattern".into())),
         }
@@ -99,6 +109,8 @@ fn parse_show_columns() {
         Statement::ShowColumns {
             extended: false,
             full: false,
+            show_in: false,
+            show_object_kind: None,
             table_name,
             filter: Some(ShowStatementFilter::Where(
                 mysql_and_generic().verified_expr("1 = 2")
@@ -108,9 +120,9 @@ fn parse_show_columns() {
     mysql_and_generic()
         .one_statement_parses_to("SHOW FIELDS FROM mytable", "SHOW COLUMNS FROM mytable");
     mysql_and_generic()
-        .one_statement_parses_to("SHOW COLUMNS IN mytable", "SHOW COLUMNS FROM mytable");
+        .one_statement_parses_to("SHOW COLUMNS IN mytable", "SHOW COLUMNS IN mytable");
     mysql_and_generic()
-        .one_statement_parses_to("SHOW FIELDS IN mytable", "SHOW COLUMNS FROM mytable");
+        .one_statement_parses_to("SHOW FIELDS IN mytable", "SHOW COLUMNS IN mytable");
     mysql_and_generic().one_statement_parses_to(
         "SHOW COLUMNS FROM mytable FROM mydb",
         "SHOW COLUMNS FROM mydb.mytable",

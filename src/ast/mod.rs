@@ -2081,6 +2081,10 @@ pub enum Statement {
     ShowColumns {
         extended: bool,
         full: bool,
+        /// Whether `IN` was used instead of `FROM` (Snowflake uses `IN`)
+        show_in: bool,
+        /// Optional object kind keyword after IN/FROM (e.g., TABLE, VIEW)
+        show_object_kind: Option<Ident>,
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         table_name: ObjectName,
         filter: Option<ShowStatementFilter>,
@@ -3631,14 +3635,21 @@ impl fmt::Display for Statement {
             Statement::ShowColumns {
                 extended,
                 full,
+                show_in,
+                show_object_kind,
                 table_name,
                 filter,
             } => {
                 write!(
                     f,
-                    "SHOW {extended}{full}COLUMNS FROM {table_name}",
+                    "SHOW {extended}{full}COLUMNS {in_or_from}{object_kind}{table_name}",
                     extended = if *extended { "EXTENDED " } else { "" },
                     full = if *full { "FULL " } else { "" },
+                    in_or_from = if *show_in { "IN " } else { "FROM " },
+                    object_kind = match show_object_kind {
+                        Some(kw) => format!("{kw} "),
+                        None => String::new(),
+                    },
                     table_name = table_name,
                 )?;
                 if let Some(filter) = filter {
