@@ -86,15 +86,11 @@ impl Dialect for PostgreSqlDialect {
                 parser.next_token(); // consume `-`
                 parser.next_token(); // consume `|`
                 parser.next_token(); // consume `-`
-                return Some(
-                    parser
-                        .parse_subexpr(50)
-                        .map(|right| Expr::BinaryOp {
-                            left: Box::new(expr.clone()),
-                            op: BinaryOperator::PGAdjacentTo,
-                            right: Box::new(right),
-                        }),
-                );
+                return Some(parser.parse_subexpr(50).map(|right| Expr::BinaryOp {
+                    left: Box::new(expr.clone()),
+                    op: BinaryOperator::PGAdjacentTo,
+                    right: Box::new(right),
+                }));
             }
         }
         // Parse `<->` (distance operator) as two tokens: Lt, Arrow
@@ -103,15 +99,11 @@ impl Dialect for PostgreSqlDialect {
             if tok1.token == Token::Arrow {
                 parser.next_token(); // consume `<`
                 parser.next_token(); // consume `->`
-                return Some(
-                    parser
-                        .parse_subexpr(50)
-                        .map(|right| Expr::BinaryOp {
-                            left: Box::new(expr.clone()),
-                            op: BinaryOperator::PGDistance,
-                            right: Box::new(right),
-                        }),
-                );
+                return Some(parser.parse_subexpr(50).map(|right| Expr::BinaryOp {
+                    left: Box::new(expr.clone()),
+                    op: BinaryOperator::PGDistance,
+                    right: Box::new(right),
+                }));
             }
         }
         None

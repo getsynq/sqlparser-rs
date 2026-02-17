@@ -265,16 +265,17 @@ fn parse_update_set_from() {
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
-                    with_ordinality: false,
+                                    with_ordinality: false,
                                 },
                                 joins: vec![],
                             }],
                             lateral_views: vec![],
                             sample: None,
                             selection: None,
-                            group_by: GroupByExpr::Expressions(vec![Expr::Identifier(
-                                Ident::new("id").empty_span()
-                            )], vec![]),
+                            group_by: GroupByExpr::Expressions(
+                                vec![Expr::Identifier(Ident::new("id").empty_span())],
+                                vec![]
+                            ),
                             cluster_by: vec![],
                             distribute_by: vec![],
                             sort_by: vec![],
@@ -336,7 +337,7 @@ fn parse_update_with_table_alias() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
-                    with_ordinality: false,
+                        with_ordinality: false,
                     },
                     joins: vec![],
                 },
@@ -407,7 +408,7 @@ fn parse_select_with_table_alias() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![],
         }]
@@ -635,7 +636,7 @@ fn parse_where_delete_with_alias_statement() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
-                    with_ordinality: false,
+                        with_ordinality: false,
                     },
                     joins: vec![],
                 }]),
@@ -2006,10 +2007,13 @@ fn parse_select_group_by() {
     let sql = "SELECT id, fname, lname FROM customer GROUP BY lname, fname";
     let select = verified_only_select(sql);
     assert_eq!(
-        GroupByExpr::Expressions(vec![
-            Expr::Identifier(Ident::new("lname").empty_span()),
-            Expr::Identifier(Ident::new("fname").empty_span()),
-        ], vec![]),
+        GroupByExpr::Expressions(
+            vec![
+                Expr::Identifier(Ident::new("lname").empty_span()),
+                Expr::Identifier(Ident::new("fname").empty_span()),
+            ],
+            vec![]
+        ),
         select.group_by
     );
 
@@ -4124,7 +4128,7 @@ fn test_parse_named_window() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -5205,7 +5209,7 @@ fn parse_implicit_join() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
-                    with_ordinality: false,
+                        with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -5228,7 +5232,7 @@ fn parse_implicit_join() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
-                    with_ordinality: false,
+                        with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -5251,7 +5255,7 @@ fn parse_cross_join() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             join_operator: JoinOperator::CrossJoin(JoinConstraint::None),
         },
@@ -5274,7 +5278,7 @@ fn parse_joins_on() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             join_operator: f(JoinConstraint::On(Expr::BinaryOp {
                 left: Box::new(Expr::Identifier(Ident::new("c1").empty_span())),
@@ -5346,7 +5350,7 @@ fn parse_joins_using() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             join_operator: f(JoinConstraint::Using(vec![Ident::new("c1").empty_span()])),
         }
@@ -5410,7 +5414,7 @@ fn parse_natural_join() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             },
             join_operator: f(JoinConstraint::Natural),
         }
@@ -5687,7 +5691,7 @@ fn parse_derived_tables() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
-                    with_ordinality: false,
+                        with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -7100,7 +7104,12 @@ fn parse_grant() {
             granted_by,
             ..
         } => match (privileges, objects) {
-            (Privileges::Actions(actions), GrantObjects::Tables { tables: objects, .. }) => {
+            (
+                Privileges::Actions(actions),
+                GrantObjects::Tables {
+                    tables: objects, ..
+                },
+            ) => {
                 assert_eq!(
                     vec![
                         Action::Select { columns: None },
@@ -7315,7 +7324,7 @@ fn parse_merge() {
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
-                    with_ordinality: false,
+                                    with_ordinality: false,
                                 },
                                 joins: vec![],
                             }],
@@ -8288,7 +8297,7 @@ fn parse_pivot_table() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             }),
             aggregates: vec![AggregateItem::UnnamedExpr(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new("SUM")]),
@@ -8376,7 +8385,7 @@ fn parse_pivot_table_aliases() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             }),
             aggregates: vec![
                 AggregateItem::ExprWithAlias {
@@ -8522,14 +8531,17 @@ fn parse_unpivot_table() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
-                    with_ordinality: false,
+                with_ordinality: false,
             }),
             value: vec![Ident::new("quantity").empty_span()],
 
             name: Ident::new("quarter").empty_span(),
             columns: ["Q1", "Q2", "Q3", "Q4"]
                 .into_iter()
-                .map(|f| UnpivotInValue { columns: vec![Ident::new(f).empty_span()], alias: None })
+                .map(|f| UnpivotInValue {
+                    columns: vec![Ident::new(f).empty_span()],
+                    alias: None
+                })
                 .collect(),
             null_handling: None,
             alias: Some(TableAlias {
@@ -8612,7 +8624,10 @@ fn parse_pivot_unpivot_table() {
                 name: Ident::new("year").empty_span(),
                 columns: ["population_2000", "population_2010"]
                     .into_iter()
-                    .map(|f| UnpivotInValue { columns: vec![Ident::new(f).empty_span()], alias: None })
+                    .map(|f| UnpivotInValue {
+                        columns: vec![Ident::new(f).empty_span()],
+                        alias: None
+                    })
                     .collect(),
                 null_handling: None,
                 alias: Some(TableAlias {
@@ -8844,7 +8859,7 @@ fn parse_unload() {
                             with_hints: vec![],
                             version: None,
                             partitions: vec![],
-                    with_ordinality: false,
+                            with_ordinality: false,
                         },
                         joins: vec![],
                     }],

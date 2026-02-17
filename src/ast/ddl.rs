@@ -137,17 +137,12 @@ pub enum AlterTableOperation {
     /// `ADD ROW ACCESS POLICY <policy_name> ON (<col_name>, ...)`
     ///
     /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
-    AddRowAccessPolicy {
-        policy: ObjectName,
-        on: Vec<Ident>,
-    },
+    AddRowAccessPolicy { policy: ObjectName, on: Vec<Ident> },
 
     /// `DROP ROW ACCESS POLICY <policy_name>`
     ///
     /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
-    DropRowAccessPolicy {
-        policy: ObjectName,
-    },
+    DropRowAccessPolicy { policy: ObjectName },
 
     /// `ADD PROJECTION [IF NOT EXISTS] <name> (<select> [ORDER BY ...]) [WITH SETTINGS (...)]`
     ///
@@ -162,10 +157,7 @@ pub enum AlterTableOperation {
     ///
     /// Note: this is a ClickHouse-specific operation
     /// <https://clickhouse.com/docs/sql-reference/statements/alter/projection>
-    DropProjection {
-        if_exists: bool,
-        name: Ident,
-    },
+    DropProjection { if_exists: bool, name: Ident },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]

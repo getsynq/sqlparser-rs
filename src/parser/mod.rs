@@ -995,17 +995,13 @@ impl<'a> Parser<'a> {
                         self.next_token();
                         Ok(Expr::Value(Value::Placeholder(s)))
                     }
-                    _ => {
-                        self.expected("a number after #", self.peek_token())?
-                    }
+                    _ => self.expected("a number after #", self.peek_token())?,
                 }
             }
-            Token::Tilde => {
-                Ok(Expr::UnaryOp {
-                    op: UnaryOperator::PGBitwiseNot,
-                    expr: Box::new(self.parse_subexpr(Self::PLUS_MINUS_PREC)?),
-                })
-            }
+            Token::Tilde => Ok(Expr::UnaryOp {
+                op: UnaryOperator::PGBitwiseNot,
+                expr: Box::new(self.parse_subexpr(Self::PLUS_MINUS_PREC)?),
+            }),
             tok @ Token::DoubleExclamationMark
             | tok @ Token::PGSquareRoot
             | tok @ Token::PGCubeRoot
@@ -1314,9 +1310,7 @@ impl<'a> Parser<'a> {
 
     /// Parse optional WITH modifiers after GROUP BY expressions:
     /// WITH CUBE, WITH ROLLUP, WITH TOTALS
-    fn parse_group_by_with_modifiers(
-        &mut self,
-    ) -> Result<Vec<GroupByWithModifier>, ParserError> {
+    fn parse_group_by_with_modifiers(&mut self) -> Result<Vec<GroupByWithModifier>, ParserError> {
         let mut modifiers = vec![];
         loop {
             if self.parse_keywords(&[Keyword::WITH, Keyword::CUBE]) {
@@ -2198,9 +2192,7 @@ impl<'a> Parser<'a> {
         let values = if self.peek_token_kind() == &Token::RParen {
             vec![]
         } else {
-            self.parse_comma_separated(|parser| {
-                parser.parse_struct_field_expr(!fields.is_empty())
-            })?
+            self.parse_comma_separated(|parser| parser.parse_struct_field_expr(!fields.is_empty()))?
         };
         self.expect_token(&Token::RParen)?;
 
@@ -3034,8 +3026,12 @@ impl<'a> Parser<'a> {
             Token::Word(w) if w.keyword == Keyword::SIMILAR => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::REGEXP => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::GLOB => Ok(Self::LIKE_PREC),
-            Token::Word(w) if w.keyword == Keyword::OVERLAPS
-                && dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) => Ok(Self::BETWEEN_PREC),
+            Token::Word(w)
+                if w.keyword == Keyword::OVERLAPS
+                    && dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) =>
+            {
+                Ok(Self::BETWEEN_PREC)
+            }
             Token::Word(w) if w.keyword == Keyword::OPERATOR => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::DIV => Ok(Self::MUL_DIV_MOD_OP_PREC),
             Token::Eq
@@ -6100,8 +6096,7 @@ impl<'a> Parser<'a> {
                 let seed = Some(self.parse_expr()?);
                 self.expect_keyword(Keyword::INCREMENT)?;
                 let increment = Some(self.parse_expr()?);
-                let _ =
-                    self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
+                let _ = self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
                 Ok(Some(ColumnOption::Identity { seed, increment }))
             } else {
                 let (seed, increment) = if self.consume_token(&Token::LParen) {
@@ -6114,8 +6109,8 @@ impl<'a> Parser<'a> {
                     (None, None)
                 };
                 if dialect_of!(self is SnowflakeDialect | GenericDialect) {
-                    let _ = self.parse_keyword(Keyword::ORDER)
-                        || self.parse_keyword(Keyword::NOORDER);
+                    let _ =
+                        self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
                 }
                 Ok(Some(ColumnOption::Identity { seed, increment }))
             }
@@ -6522,8 +6517,8 @@ impl<'a> Parser<'a> {
                 let policy = self.parse_object_name(false)?;
                 self.expect_keyword(Keyword::ON)?;
                 self.expect_token(&Token::LParen)?;
-                let columns =
-                    self.parse_comma_separated(|p| p.parse_identifier(false).map(|id| id.unwrap()))?;
+                let columns = self
+                    .parse_comma_separated(|p| p.parse_identifier(false).map(|id| id.unwrap()))?;
                 self.expect_token(&Token::RParen)?;
                 AlterTableOperation::AddRowAccessPolicy {
                     policy,
@@ -8302,9 +8297,7 @@ impl<'a> Parser<'a> {
     pub fn parse_identifier_or_number(&mut self) -> Result<WithSpan<Ident>, ParserError> {
         let next_token = self.next_token();
         match next_token.token {
-            Token::Number(ref n, _) => {
-                Ok(Ident::new(n.clone()).spanning(next_token.span))
-            }
+            Token::Number(ref n, _) => Ok(Ident::new(n.clone()).spanning(next_token.span)),
             _ => {
                 self.prev_token();
                 self.parse_identifier(false)
@@ -8718,12 +8711,11 @@ impl<'a> Parser<'a> {
 
         // ClickHouse: EXPLAIN [type] [setting = value, ...] statement
         // Only for EXPLAIN, not DESCRIBE/DESC (describe_alias=true means DESC/DESCRIBE)
-        let (explain_type, options) =
-            if !describe_alias && dialect_of!(self is ClickHouseDialect) {
-                self.parse_explain_options()?
-            } else {
-                (None, vec![])
-            };
+        let (explain_type, options) = if !describe_alias && dialect_of!(self is ClickHouseDialect) {
+            self.parse_explain_options()?
+        } else {
+            (None, vec![])
+        };
 
         match self.maybe_parse(|parser| parser.parse_statement()) {
             Some(Statement::Explain { .. }) | Some(Statement::ExplainTable { .. }) => Err(
@@ -8771,25 +8763,26 @@ impl<'a> Parser<'a> {
 
                 // DESCRIBE FUNCTION name(type1, type2, ...) - parse function signature
                 // Supports TABLE(type, ...) parameter types for DMFs
-                let function_params =
-                    if object_type_kw == Some(Keyword::FUNCTION) && self.peek_token().token == Token::LParen {
-                        self.expect_token(&Token::LParen)?;
-                        let params = self.parse_comma_separated(|p| {
-                            // Handle TABLE(type, type, ...) parameter type notation
-                            if p.parse_keyword(Keyword::TABLE) {
-                                p.expect_token(&Token::LParen)?;
-                                let inner_types = p.parse_comma_separated(|p2| p2.parse_data_type())?;
-                                p.expect_token(&Token::RParen)?;
-                                Ok(DescribeFunctionParam::Table(inner_types))
-                            } else {
-                                Ok(DescribeFunctionParam::DataType(p.parse_data_type()?))
-                            }
-                        })?;
-                        self.expect_token(&Token::RParen)?;
-                        Some(params)
-                    } else {
-                        None
-                    };
+                let function_params = if object_type_kw == Some(Keyword::FUNCTION)
+                    && self.peek_token().token == Token::LParen
+                {
+                    self.expect_token(&Token::LParen)?;
+                    let params = self.parse_comma_separated(|p| {
+                        // Handle TABLE(type, type, ...) parameter type notation
+                        if p.parse_keyword(Keyword::TABLE) {
+                            p.expect_token(&Token::LParen)?;
+                            let inner_types = p.parse_comma_separated(|p2| p2.parse_data_type())?;
+                            p.expect_token(&Token::RParen)?;
+                            Ok(DescribeFunctionParam::Table(inner_types))
+                        } else {
+                            Ok(DescribeFunctionParam::DataType(p.parse_data_type()?))
+                        }
+                    })?;
+                    self.expect_token(&Token::RParen)?;
+                    Some(params)
+                } else {
+                    None
+                };
 
                 // Snowflake: DESCRIBE TABLE tab type=stage
                 // Parse key=value options (identifier followed by = and value)
@@ -9772,16 +9765,15 @@ impl<'a> Parser<'a> {
         extended: bool,
         full: bool,
     ) -> Result<Statement, ParserError> {
-        let show_in =
-            self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])? == Keyword::IN;
+        let show_in = self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])? == Keyword::IN;
         // Optionally consume TABLE or VIEW keyword (Snowflake: SHOW COLUMNS IN TABLE <name>)
         // Only if followed by an identifier (the table name), otherwise it IS the table name
         let show_object_kind =
             if let Some(kw) = self.parse_one_of_keywords(&[Keyword::TABLE, Keyword::VIEW]) {
                 match self.peek_token_ref().token {
-                    Token::Word(_) | Token::SingleQuotedString(_) | Token::DoubleQuotedString(_) => {
-                        Some(Ident::new(format!("{kw:?}")))
-                    }
+                    Token::Word(_)
+                    | Token::SingleQuotedString(_)
+                    | Token::DoubleQuotedString(_) => Some(Ident::new(format!("{kw:?}"))),
                     _ => {
                         self.prev_token();
                         None
@@ -10154,8 +10146,7 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-                let with_ordinality =
-                    self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
+                let with_ordinality = self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
                 let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
                 Ok(TableFactor::Function {
                     lateral: true,
@@ -10361,8 +10352,7 @@ impl<'a> Parser<'a> {
             let array_exprs = self.parse_comma_separated(Parser::parse_expr)?;
             self.expect_token(&Token::RParen)?;
 
-            let with_ordinality =
-                self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
+            let with_ordinality = self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
 
             let alias = match self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS) {
                 Ok(Some(alias)) => Some(alias),
@@ -10453,8 +10443,8 @@ impl<'a> Parser<'a> {
             };
 
             // PostgreSQL: WITH ORDINALITY for table-valued functions
-            let with_ordinality = args.is_some()
-                && self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
+            let with_ordinality =
+                args.is_some() && self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
 
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
 
@@ -10712,10 +10702,16 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
-                Ok(UnpivotInValue { columns: cols, alias })
+                Ok(UnpivotInValue {
+                    columns: cols,
+                    alias,
+                })
             } else {
                 let col = p.parse_identifier(false)?;
-                Ok(UnpivotInValue { columns: vec![col], alias: None })
+                Ok(UnpivotInValue {
+                    columns: vec![col],
+                    alias: None,
+                })
             }
         })?;
         self.expect_token(&Token::RParen)?;
@@ -10855,16 +10851,16 @@ impl<'a> Parser<'a> {
                 // Check if the next token is an identifier. If not (e.g. EOF, comma),
                 // then the keyword itself is the grantee name, not a type prefix.
                 match self.peek_token_ref().token {
-                    Token::Word(_) | Token::SingleQuotedString(_) | Token::DoubleQuotedString(_) => {
-                        match kw {
-                            Keyword::ROLE => Some(GranteesType::Role),
-                            Keyword::USER => Some(GranteesType::User),
-                            Keyword::SHARE => Some(GranteesType::Share),
-                            Keyword::GROUP => Some(GranteesType::Group),
-                            Keyword::APPLICATION => Some(GranteesType::Application),
-                            _ => None,
-                        }
-                    }
+                    Token::Word(_)
+                    | Token::SingleQuotedString(_)
+                    | Token::DoubleQuotedString(_) => match kw {
+                        Keyword::ROLE => Some(GranteesType::Role),
+                        Keyword::USER => Some(GranteesType::User),
+                        Keyword::SHARE => Some(GranteesType::Share),
+                        Keyword::GROUP => Some(GranteesType::Group),
+                        Keyword::APPLICATION => Some(GranteesType::Application),
+                        _ => None,
+                    },
                     _ => {
                         // The keyword IS the grantee name; backtrack
                         self.prev_token();
@@ -11545,7 +11541,7 @@ impl<'a> Parser<'a> {
                     if self.consume_token(&Token::LParen) {
                         // Standard SQL: FILTER (WHERE expr)
                         // DuckDB also supports: FILTER (expr) without WHERE
-                        self.parse_keyword(Keyword::WHERE);
+                        let _ = self.parse_keyword(Keyword::WHERE);
                         let filter = self.parse_expr()?;
                         self.expect_token(&Token::RParen)?;
                         // SQL standard: FILTER comes before OVER, e.g.
@@ -11615,7 +11611,7 @@ impl<'a> Parser<'a> {
             if self.consume_token(&Token::LParen) {
                 // Standard SQL: FILTER (WHERE expr)
                 // DuckDB also supports: FILTER (expr) without WHERE
-                self.parse_keyword(Keyword::WHERE);
+                let _ = self.parse_keyword(Keyword::WHERE);
                 let filter = self.parse_expr()?;
                 self.expect_token(&Token::RParen)?;
                 Expr::AggregateExpressionWithFilter {

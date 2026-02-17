@@ -614,9 +614,7 @@ fn parse_alter_table_drop_partition_and_part() {
     }
 
     // DROP PARTITION with string literal (no parens)
-    match clickhouse_and_generic()
-        .verified_stmt("ALTER TABLE mt DROP PARTITION '2020-11-21'")
-    {
+    match clickhouse_and_generic().verified_stmt("ALTER TABLE mt DROP PARTITION '2020-11-21'") {
         Statement::AlterTable {
             name, operations, ..
         } => {
@@ -642,10 +640,7 @@ fn parse_alter_table_drop_partition_and_part() {
             assert_eq!(
                 operations[0],
                 AlterTableOperation::DropPartition {
-                    partition: Partition::Expr(Expr::Value(Value::Number(
-                        "201901".to_string(),
-                        false
-                    ))),
+                    partition: Partition::Expr(Expr::Value(number("201901"))),
                 }
             );
         }
@@ -653,14 +648,15 @@ fn parse_alter_table_drop_partition_and_part() {
     }
 
     // DROP PARTITION with tuple() function call
-    clickhouse_and_generic().verified_stmt(
-        "ALTER TABLE visits DROP PARTITION tuple(toYYYYMM(toDate('2019-01-25')))",
-    );
+    clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE visits DROP PARTITION tuple(toYYYYMM(toDate('2019-01-25')))");
 
     // Multiple statements: DROP PARTITION + DROP PART
-    clickhouse_and_generic().parse_sql_statements(
-        "ALTER TABLE mt DROP PARTITION '2020-11-21'; ALTER TABLE mt DROP PART 'all_4_4_0'",
-    ).unwrap();
+    clickhouse_and_generic()
+        .parse_sql_statements(
+            "ALTER TABLE mt DROP PARTITION '2020-11-21'; ALTER TABLE mt DROP PART 'all_4_4_0'",
+        )
+        .unwrap();
 }
 
 #[test]
@@ -1680,9 +1676,7 @@ fn test_query_parameters() {
 
 #[test]
 fn parse_alter_table_add_projection() {
-    clickhouse_and_generic().verified_stmt(
-        "ALTER TABLE t ADD PROJECTION p (SELECT x ORDER BY x)",
-    );
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t ADD PROJECTION p (SELECT x ORDER BY x)");
 }
 
 #[test]
@@ -1695,9 +1689,7 @@ fn parse_alter_table_add_projection_with_settings() {
 
 #[test]
 fn parse_alter_table_drop_projection() {
-    clickhouse_and_generic().verified_stmt(
-        "ALTER TABLE t DROP PROJECTION p",
-    );
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }
 
 #[test]
