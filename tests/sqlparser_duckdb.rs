@@ -316,3 +316,54 @@ fn test_numeric_literal_underscores() {
         "SELECT 1000.500",
     );
 }
+
+#[test]
+fn test_prefix_alias_colon_select() {
+    // DuckDB prefix alias: `alias: expr` is equivalent to `expr AS alias`
+    duckdb().one_statement_parses_to(
+        "SELECT e: 1 + 2, f: len('asdf'), s: (SELECT 42)",
+        "SELECT 1 + 2 AS e, len('asdf') AS f, (SELECT 42) AS s",
+    );
+}
+
+#[test]
+fn test_prefix_alias_colon_select_aggregation() {
+    // DuckDB prefix alias with aggregation functions
+    duckdb().one_statement_parses_to(
+        "SELECT sum_qty: sum(l_quantity), avg_price: avg(l_extendedprice), count_order: count(*)",
+        "SELECT sum(l_quantity) AS sum_qty, avg(l_extendedprice) AS avg_price, count(*) AS count_order",
+    );
+}
+
+#[test]
+fn test_prefix_alias_colon_from() {
+    // DuckDB prefix alias in FROM clause: `alias: table` is equivalent to `table AS alias`
+    duckdb().one_statement_parses_to(
+        "SELECT * FROM foo: c.db.tbl",
+        "SELECT * FROM c.db.tbl AS foo",
+    );
+}
+
+#[test]
+fn test_prefix_alias_colon_from_simple() {
+    duckdb().one_statement_parses_to(
+        "SELECT * FROM foo: bar",
+        "SELECT * FROM bar AS foo",
+    );
+}
+
+#[test]
+fn test_prefix_alias_colon_from_function() {
+    duckdb().one_statement_parses_to(
+        "SELECT * FROM r: range(10)",
+        "SELECT * FROM range(10) AS r",
+    );
+}
+
+#[test]
+fn test_prefix_alias_colon_from_multiple() {
+    duckdb().one_statement_parses_to(
+        "SELECT * FROM r: range(10), v: (VALUES (42))",
+        "SELECT * FROM range(10) AS r, (VALUES (42)) AS v",
+    );
+}
