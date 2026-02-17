@@ -1036,6 +1036,19 @@ pub enum TableFactor {
         to_return: SelectionCount,
         seed: Option<TableSampleSeed>,
     },
+    /// Redshift's UNPIVOT syntax for iterating over SUPER type objects.
+    ///
+    /// Syntax:
+    /// ```sql
+    /// UNPIVOT expression AS value_alias [ AT attribute_alias ]
+    /// ```
+    ///
+    /// See <https://docs.aws.amazon.com/redshift/latest/dg/query-super.html>.
+    RedshiftUnpivot {
+        expr: Expr,
+        value_alias: Option<WithSpan<Ident>>,
+        attribute_alias: Option<WithSpan<Ident>>,
+    },
 }
 
 impl fmt::Display for TableFactor {
@@ -1225,6 +1238,20 @@ impl fmt::Display for TableFactor {
                 write!(f, " ({})", to_return)?;
                 if let Some(seed) = seed {
                     write!(f, " {}", seed)?;
+                }
+                Ok(())
+            }
+            TableFactor::RedshiftUnpivot {
+                expr,
+                value_alias,
+                attribute_alias,
+            } => {
+                write!(f, "UNPIVOT {expr}")?;
+                if let Some(val) = value_alias {
+                    write!(f, " AS {val}")?;
+                }
+                if let Some(attr) = attribute_alias {
+                    write!(f, " AT {attr}")?;
                 }
                 Ok(())
             }
