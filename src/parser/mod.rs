@@ -11085,6 +11085,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_execute(&mut self) -> Result<Statement, ParserError> {
+        // ClickHouse: EXECUTE AS <user> (user impersonation)
+        if self.parse_keyword(Keyword::AS) {
+            let user = self.parse_identifier(false)?;
+            return Ok(Statement::ExecuteAs { user });
+        }
+
         let name = self.parse_identifier(false)?;
 
         let mut parameters = vec![];

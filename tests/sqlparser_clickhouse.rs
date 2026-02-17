@@ -1555,6 +1555,12 @@ fn test_clickhouse_trailing_commas() {
     );
 }
 
+#[test]
+fn parse_execute_as() {
+    // ClickHouse EXECUTE AS <user> (user impersonation)
+    clickhouse().verified_stmt("EXECUTE AS u1");
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],

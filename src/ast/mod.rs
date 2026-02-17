@@ -2203,6 +2203,15 @@ pub enum Statement {
         parameters: Vec<Expr>,
     },
     /// ```sql
+    /// EXECUTE AS <user>
+    /// ```
+    ///
+    /// ClickHouse-specific statement for user impersonation.
+    /// See: <https://clickhouse.com/docs/sql-reference/functions/other-functions>
+    ExecuteAs {
+        user: WithSpan<Ident>,
+    },
+    /// ```sql
     /// PREPARE name [ ( data_type [, ...] ) ] AS statement
     /// ```
     ///
@@ -3695,6 +3704,9 @@ impl fmt::Display for Statement {
                     write!(f, "({})", display_comma_separated(parameters))?;
                 }
                 Ok(())
+            }
+            Statement::ExecuteAs { user } => {
+                write!(f, "EXECUTE AS {user}")
             }
             Statement::Prepare {
                 name,
