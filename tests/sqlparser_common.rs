@@ -6829,6 +6829,7 @@ fn parse_set_variable() {
         Statement::SetVariable {
             local,
             hivevar,
+            tuple: _,
             variable,
             value,
             additional_assignments: _,
@@ -6853,6 +6854,7 @@ fn parse_set_time_zone() {
         Statement::SetVariable {
             local,
             hivevar,
+            tuple: _,
             variable,
             value,
             additional_assignments: _,

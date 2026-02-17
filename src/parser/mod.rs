@@ -543,6 +543,7 @@ impl<'a> Parser<'a> {
                     Ok(Statement::SetVariable {
                         local: false,
                         hivevar: false,
+                        tuple: false,
                         variable: ObjectName(vec!["SYSTEM".into()]),
                         value: vec![],
                         additional_assignments: vec![],
@@ -555,6 +556,7 @@ impl<'a> Parser<'a> {
                     Ok(Statement::SetVariable {
                         local: false,
                         hivevar: false,
+                        tuple: false,
                         variable: ObjectName(vec![]),
                         value: vec![expr],
                         additional_assignments: vec![],
@@ -5017,6 +5019,7 @@ impl<'a> Parser<'a> {
                 return Ok(Statement::SetVariable {
                     local: false,
                     hivevar: false,
+                    tuple: false,
                     variable: ObjectName(vec![name]),
                     value: vec![],
                     additional_assignments: vec![],
@@ -9542,10 +9545,10 @@ impl<'a> Parser<'a> {
             });
         }
 
-        // BigQuery: SET (a, b, c) = (expr1, expr2, expr3)
+        // BigQuery/Snowflake: SET (a, b, c) = (expr1, expr2, expr3)
         // Handle tuple assignment by parsing as SetVariable with first var name
         if self.peek_token_is(&Token::LParen)
-            && dialect_of!(self is BigQueryDialect | GenericDialect)
+            && dialect_of!(self is BigQueryDialect | SnowflakeDialect | GenericDialect)
         {
             self.expect_token(&Token::LParen)?;
             let vars =
@@ -9557,6 +9560,7 @@ impl<'a> Parser<'a> {
             return Ok(Statement::SetVariable {
                 local: modifier == Some(Keyword::LOCAL),
                 hivevar: Some(Keyword::HIVEVAR) == modifier,
+                tuple: true,
                 variable,
                 value: vec![value],
                 additional_assignments: vec![],
@@ -9621,6 +9625,7 @@ impl<'a> Parser<'a> {
                 return Ok(Statement::SetVariable {
                     local: modifier == Some(Keyword::LOCAL),
                     hivevar: false,
+                    tuple: false,
                     variable,
                     value: vec![value],
                     additional_assignments,
@@ -9641,6 +9646,7 @@ impl<'a> Parser<'a> {
             return Ok(Statement::SetVariable {
                 local: modifier == Some(Keyword::LOCAL),
                 hivevar: Some(Keyword::HIVEVAR) == modifier,
+                tuple: false,
                 variable,
                 value: values,
                 additional_assignments: vec![],

@@ -216,6 +216,7 @@ fn set_statement_with_minus() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![
                 Ident::new("hive"),
                 Ident::new("tez"),

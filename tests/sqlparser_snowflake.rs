@@ -2013,3 +2013,21 @@ fn test_positional_column_parameters() {
     snowflake().verified_stmt("SELECT :1, :2");
     snowflake().verified_stmt("SELECT :1 + :2");
 }
+
+#[test]
+fn test_set_tuple_assignment() {
+    // Snowflake SET with tuple assignment: SET (var1, var2) = (expr1, expr2)
+    snowflake().one_statement_parses_to(
+        "SET (V1, V2) = (10, 'example')",
+        "SET (V1, V2) = (10, 'example')",
+    );
+    snowflake().one_statement_parses_to(
+        "SET (min, max) = (40, 70)",
+        "SET (min, max) = (40, 70)",
+    );
+    // With session variable references
+    snowflake().one_statement_parses_to(
+        "SET (min, max) = (50, 2 * $min)",
+        "SET (min, max) = (50, 2 * $min)",
+    );
+}
