@@ -111,6 +111,8 @@ pub enum BinaryOperator {
     DuckIntegerDivide,
     /// MySQL [`DIV`](https://dev.mysql.com/doc/refman/8.0/en/arithmetic-functions.html) integer division
     MyIntegerDivide,
+    /// Assignment operator `:=`, e.g. `@var := expr` (MySQL-specific)
+    Assignment,
     /// Support for custom operators (built by parsers outside this crate)
     Custom(String),
     /// Bitwise XOR, e.g. `a # b` (PostgreSQL-specific)
@@ -162,6 +164,7 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::BitwiseXor => f.write_str("^"),
             BinaryOperator::DuckIntegerDivide => f.write_str("//"),
             BinaryOperator::MyIntegerDivide => f.write_str("DIV"),
+            BinaryOperator::Assignment => f.write_str(":="),
             BinaryOperator::Custom(s) => f.write_str(s),
             BinaryOperator::PGBitwiseXor => f.write_str("#"),
             BinaryOperator::PGBitwiseShiftLeft => f.write_str("<<"),

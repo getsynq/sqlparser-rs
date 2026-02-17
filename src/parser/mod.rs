@@ -2329,6 +2329,9 @@ impl<'a> Parser<'a> {
             }
             Token::Ampersand => Some(BinaryOperator::BitwiseAnd),
             Token::Div => Some(BinaryOperator::Divide),
+            Token::DuckAssignment if dialect_of!(self is MySqlDialect | GenericDialect) => {
+                Some(BinaryOperator::Assignment)
+            }
             Token::DuckIntDiv if dialect_of!(self is DuckDbDialect | GenericDialect) => {
                 Some(BinaryOperator::DuckIntegerDivide)
             }
@@ -2894,6 +2897,8 @@ impl<'a> Parser<'a> {
             | Token::HashMinus
             | Token::AtQuestion
             | Token::AtAt => Ok(50),
+            // MySQL assignment operator := has the lowest precedence
+            Token::DuckAssignment if dialect_of!(self is MySqlDialect | GenericDialect) => Ok(5),
             _ => Ok(0),
         }
     }
