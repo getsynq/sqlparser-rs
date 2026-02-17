@@ -297,6 +297,24 @@ fn test_json_path_with_colon() {
         "SELECT c1:['price'] FROM VALUES ('{ \"price\": 5 }') AS T(c1)",
         "SELECT c1:['price'] FROM (VALUES ('{ \"price\": 5 }')) AS T (c1)",
     );
+
+    // Wildcard array subscript [*] in JSON path
+    databricks().one_statement_parses_to(
+        "SELECT c1:item[*].price FROM VALUES ('{ \"item\": [ { \"model\" : \"basic\", \"price\" : 6.12 } ] }') AS T(c1)",
+        "SELECT c1:item[*].price FROM (VALUES ('{ \"item\": [ { \"model\" : \"basic\", \"price\" : 6.12 } ] }')) AS T (c1)",
+    );
+
+    // Wildcard array subscript used inside function arguments
+    databricks().one_statement_parses_to(
+        "SELECT INLINE(FROM_JSON(c1:item[*], 'ARRAY<STRUCT<model STRING, price DOUBLE>>')) FROM VALUES ('{}') AS T(c1)",
+        "SELECT INLINE(FROM_JSON(c1:item[*], 'ARRAY<STRUCT<model STRING, price DOUBLE>>')) FROM (VALUES ('{}')) AS T (c1)",
+    );
+
+    // Wildcard array subscript followed by further subscript access
+    databricks().one_statement_parses_to(
+        "SELECT FROM_JSON(c1:item[*].price, 'ARRAY<DOUBLE>')[0] FROM VALUES ('{}') AS T(c1)",
+        "SELECT FROM_JSON(c1:item[*].price, 'ARRAY<DOUBLE>')[0] FROM (VALUES ('{}')) AS T (c1)",
+    );
 }
 
 #[test]
