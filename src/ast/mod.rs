@@ -4473,8 +4473,12 @@ pub enum GrantObjects {
     Schemas(Vec<ObjectName>),
     /// Grant privileges on specific sequences
     Sequences(Vec<ObjectName>),
-    /// Grant privileges on specific tables
-    Tables(Vec<ObjectName>),
+    /// Grant privileges on specific tables (or other object types like VIEW, DATABASE, FUNCTION, ROLE)
+    Tables {
+        tables: Vec<ObjectName>,
+        /// Optional object type keyword (e.g. "TABLE", "VIEW", "DATABASE", "FUNCTION", "ROLE")
+        object_type: Option<String>,
+    },
 }
 
 impl fmt::Display for GrantObjects {
@@ -4486,8 +4490,15 @@ impl fmt::Display for GrantObjects {
             GrantObjects::Schemas(schemas) => {
                 write!(f, "SCHEMA {}", display_comma_separated(schemas))
             }
-            GrantObjects::Tables(tables) => {
-                write!(f, "{}", display_comma_separated(tables))
+            GrantObjects::Tables {
+                tables,
+                object_type,
+            } => {
+                if let Some(kw) = object_type {
+                    write!(f, "{kw} {}", display_comma_separated(tables))
+                } else {
+                    write!(f, "{}", display_comma_separated(tables))
+                }
             }
             GrantObjects::AllSequencesInSchema { schemas } => {
                 write!(

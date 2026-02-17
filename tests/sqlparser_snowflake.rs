@@ -1861,3 +1861,16 @@ fn test_snowflake_create_table_using_template() {
         _ => unreachable!(),
     }
 }
+
+#[test]
+fn test_revoke_from_application() {
+    // REVOKE with APPLICATION grantee type and VIEW object type
+    snowflake().verified_stmt(
+        "REVOKE SELECT ON VIEW data.views.credit_usage FROM APPLICATION app_snowflake_credits RESTRICT",
+    );
+    // Without RESTRICT (defaults to RESTRICT in output)
+    snowflake().one_statement_parses_to(
+        "REVOKE SELECT ON VIEW data.views.credit_usage FROM APPLICATION app_snowflake_credits",
+        "REVOKE SELECT ON VIEW data.views.credit_usage FROM APPLICATION app_snowflake_credits RESTRICT",
+    );
+}

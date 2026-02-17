@@ -489,10 +489,9 @@ fn test_grant_with_group_grantee() {
     // GRANT ... TO GROUP name
     redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users");
 
-    // GRANT ... TO multiple GROUP grantees (ON TABLE serializes as ON)
-    redshift().one_statement_parses_to(
+    // GRANT ... TO multiple GROUP grantees with TABLE keyword
+    redshift().verified_stmt(
         "GRANT ALL ON TABLE qa_tickit.sales TO GROUP qa_users, GROUP ro_users",
-        "GRANT ALL ON qa_tickit.sales TO GROUP qa_users, GROUP ro_users",
     );
 
     // GRANT with column-level privileges
