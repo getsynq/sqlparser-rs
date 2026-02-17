@@ -7597,6 +7597,39 @@ fn test_placeholder() {
 }
 
 #[test]
+fn test_python_dbapi_placeholders() {
+    // %s positional placeholder
+    let sql = "SELECT * FROM foo WHERE id = %s";
+    let ast = verified_only_select(sql);
+    assert_eq!(
+        ast.selection,
+        Some(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::Value(Value::Placeholder("%s".into()))),
+            }
+            .empty_span()
+        )
+    );
+
+    // %(name)s named placeholder
+    let sql = "SELECT * FROM foo WHERE id = %(id_param)s";
+    let ast = verified_only_select(sql);
+    assert_eq!(
+        ast.selection,
+        Some(
+            Expr::BinaryOp {
+                left: Box::new(Expr::Identifier(Ident::new("id").empty_span())),
+                op: BinaryOperator::Eq,
+                right: Box::new(Expr::Value(Value::Placeholder("%(id_param)s".into()))),
+            }
+            .empty_span()
+        )
+    );
+}
+
+#[test]
 fn all_keywords_sorted() {
     // assert!(ALL_KEYWORDS.is_sorted())
     let mut copy = Vec::from(ALL_KEYWORDS);
