@@ -274,6 +274,7 @@ fn parse_set_variables() {
         Statement::SetVariable {
             local: true,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec!["autocommit".into()]),
             value: vec![Expr::Value(number("1"))],
             additional_assignments: vec![],
@@ -288,6 +289,7 @@ fn parse_set_variables() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec!["@x".into()]),
             value: vec![Expr::Value(number("1"))],
             additional_assignments: vec![SetVariableAssignment {

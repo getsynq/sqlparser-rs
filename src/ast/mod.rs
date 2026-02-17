@@ -2057,6 +2057,8 @@ pub enum Statement {
     SetVariable {
         local: bool,
         hivevar: bool,
+        /// Whether this is a tuple assignment: SET (a, b) = (1, 2)
+        tuple: bool,
         variable: ObjectName,
         value: Vec<Expr>,
         /// Additional comma-separated assignments in the same SET statement (MySQL).
@@ -3627,6 +3629,7 @@ impl fmt::Display for Statement {
                 local,
                 variable,
                 hivevar,
+                tuple,
                 value,
                 additional_assignments,
             } => {
@@ -3634,13 +3637,22 @@ impl fmt::Display for Statement {
                 if *local {
                     f.write_str("LOCAL ")?;
                 }
-                write!(
-                    f,
-                    "{hivevar}{name} = {value}",
-                    hivevar = if *hivevar { "HIVEVAR:" } else { "" },
-                    name = variable,
-                    value = display_comma_separated(value)
-                )?;
+                if *tuple {
+                    write!(
+                        f,
+                        "({name}) = {value}",
+                        name = display_comma_separated(&variable.0),
+                        value = display_comma_separated(value)
+                    )?;
+                } else {
+                    write!(
+                        f,
+                        "{hivevar}{name} = {value}",
+                        hivevar = if *hivevar { "HIVEVAR:" } else { "" },
+                        name = variable,
+                        value = display_comma_separated(value)
+                    )?;
+                }
                 for assignment in additional_assignments {
                     write!(f, ", {assignment}")?;
                 }

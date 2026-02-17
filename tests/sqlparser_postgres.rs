@@ -1211,6 +1211,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Identifier(
                 Ident {
@@ -1229,6 +1230,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Value(Value::SingleQuotedString("b".into()))],
             additional_assignments: vec![],
@@ -1241,6 +1243,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Value(number("0"))],
             additional_assignments: vec![],
@@ -1253,6 +1256,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Identifier(
                 Ident {
@@ -1271,6 +1275,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: true,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Identifier(Ident::new("b").empty_span())],
             additional_assignments: vec![],
@@ -1283,6 +1288,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![Ident::new("a"), Ident::new("b"), Ident::new("c")]),
             value: vec![Expr::Identifier(
                 Ident {
@@ -1304,6 +1310,7 @@ fn parse_set() {
         Statement::SetVariable {
             local: false,
             hivevar: false,
+            tuple: false,
             variable: ObjectName(vec![
                 Ident::new("hive"),
                 Ident::new("tez"),
