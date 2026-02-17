@@ -1773,6 +1773,7 @@ fn parse_pg_binary_ops() {
         ("<<", BinaryOperator::PGBitwiseShiftLeft, pg_and_generic()),
         ("&&", BinaryOperator::PGOverlap, pg()),
         ("-|-", BinaryOperator::PGAdjacentTo, pg()),
+        ("<->", BinaryOperator::PGDistance, pg()),
     ];
 
     for (str_op, op, dialects) in binary_ops {
@@ -1795,6 +1796,15 @@ fn parse_pg_binary_ops() {
 #[test]
 fn parse_pg_range_adjacent_operator() {
     pg().verified_stmt("SELECT NUMRANGE(1.1, 2.2) -|- NUMRANGE(2.2, 3.3)");
+}
+
+#[test]
+fn parse_pg_distance_operator() {
+    pg().verified_stmt("SELECT a <-> b FROM t");
+    pg().one_statement_parses_to(
+        "SELECT p1.id, p2.id, v1, v2 FROM polygons AS p1, polygons AS p2, LATERAL VERTICES(p1.poly) v1, LATERAL VERTICES(p2.poly) v2 WHERE (v1 <-> v2) < 10 AND p1.id <> p2.id",
+        "SELECT p1.id, p2.id, v1, v2 FROM polygons AS p1, polygons AS p2, LATERAL VERTICES(p1.poly) AS v1, LATERAL VERTICES(p2.poly) AS v2 WHERE (v1 <-> v2) < 10 AND p1.id <> p2.id",
+    );
 }
 
 #[test]
