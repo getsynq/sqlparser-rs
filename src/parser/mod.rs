@@ -6339,7 +6339,18 @@ impl<'a> Parser<'a> {
 
     pub fn parse_alter_table_operation(&mut self) -> Result<AlterTableOperation, ParserError> {
         let operation = if self.parse_keyword(Keyword::ADD) {
-            if let Some(constraint) = self.parse_optional_table_constraint()? {
+            if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+                let policy = self.parse_object_name(false)?;
+                self.expect_keyword(Keyword::ON)?;
+                self.expect_token(&Token::LParen)?;
+                let columns =
+                    self.parse_comma_separated(|p| p.parse_identifier(false).map(|id| id.unwrap()))?;
+                self.expect_token(&Token::RParen)?;
+                AlterTableOperation::AddRowAccessPolicy {
+                    policy,
+                    on: columns,
+                }
+            } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 AlterTableOperation::AddConstraint(constraint)
             } else {
                 let if_not_exists =
@@ -6391,7 +6402,10 @@ impl<'a> Parser<'a> {
                 }
             }
         } else if self.parse_keyword(Keyword::DROP) {
-            if self.parse_keywords(&[Keyword::IF, Keyword::EXISTS, Keyword::PARTITION]) {
+            if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+                let policy = self.parse_object_name(false)?;
+                AlterTableOperation::DropRowAccessPolicy { policy }
+            } else if self.parse_keywords(&[Keyword::IF, Keyword::EXISTS, Keyword::PARTITION]) {
                 self.expect_token(&Token::LParen)?;
                 let partitions = self.parse_comma_separated(Parser::parse_expr)?;
                 self.expect_token(&Token::RParen)?;

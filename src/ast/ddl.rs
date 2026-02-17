@@ -128,6 +128,21 @@ pub enum AlterTableOperation {
     ///
     /// Note: this is BigQuery specific <https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#alter_table_set_options_statement>
     SetOptions { options: Vec<SqlOption> },
+
+    /// `ADD ROW ACCESS POLICY <policy_name> ON (<col_name>, ...)`
+    ///
+    /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
+    AddRowAccessPolicy {
+        policy: ObjectName,
+        on: Vec<Ident>,
+    },
+
+    /// `DROP ROW ACCESS POLICY <policy_name>`
+    ///
+    /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
+    DropRowAccessPolicy {
+        policy: ObjectName,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -249,6 +264,16 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::SetOptions { options } => {
                 write!(f, "SET OPTIONS({})", display_comma_separated(options))
+            }
+            AlterTableOperation::AddRowAccessPolicy { policy, on } => {
+                write!(
+                    f,
+                    "ADD ROW ACCESS POLICY {policy} ON ({})",
+                    display_comma_separated(on)
+                )
+            }
+            AlterTableOperation::DropRowAccessPolicy { policy } => {
+                write!(f, "DROP ROW ACCESS POLICY {policy}")
             }
         }
     }
