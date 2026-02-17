@@ -2778,13 +2778,10 @@ impl<'a> Parser<'a> {
             debug!("Tok: {}", tok);
             key_parts.push(key);
         }
-        match expr {
-            e @ Expr::Identifier(_) | e @ Expr::CompoundIdentifier(_) => Ok(Expr::MapAccess {
-                column: Box::new(e),
-                keys: key_parts,
-            }),
-            _ => Ok(expr),
-        }
+        Ok(Expr::MapAccess {
+            column: Box::new(expr),
+            keys: key_parts,
+        })
     }
 
     /// Parses the parens following the `[ NOT ] IN` operator
@@ -7221,7 +7218,15 @@ impl<'a> Parser<'a> {
                     }
                 }
                 Token::Period => buf.push('.'),
-                Token::LBracket => buf.push('['),
+                Token::LBracket => {
+                    if dialect_of!(self is BigQueryDialect) {
+                        // For BigQuery, stop before '[' so the expression loop can handle
+                        // function-style subscripts like [OFFSET(0)], [SAFE_OFFSET(0)]
+                        self.prev_token();
+                        break;
+                    }
+                    buf.push('[')
+                }
                 Token::RBracket => buf.push(']'),
                 Token::Colon => buf.push(':'),
                 Token::DoubleQuotedString(ref s) => write!(buf, "\"{}\"", s).unwrap(),
