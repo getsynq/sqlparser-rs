@@ -1735,3 +1735,27 @@ fn parse_bigquery_gap_fill() {
         "SELECT * FROM GAP_FILL(TABLE device_data, ts_column => 'time', bucket_width => INTERVAL '1' MINUTE)",
     );
 }
+
+#[test]
+fn parse_bigquery_chained_subscript_access() {
+    // col[OFFSET(0)].field
+    bigquery().verified_stmt(
+        "SELECT col[OFFSET(0)].source_type AS x FROM t1",
+    );
+    // col[SAFE_OFFSET(0)].field[SAFE_OFFSET(0)]
+    bigquery().verified_stmt(
+        "SELECT col[SAFE_OFFSET(0)].source_ids[SAFE_OFFSET(0)] AS x FROM t1",
+    );
+    // col[OFFSET(0)].field[OFFSET(0)] chained
+    bigquery().verified_stmt(
+        "SELECT col[OFFSET(0)].ids[OFFSET(0)] AS x FROM t1",
+    );
+    // Simple subscript still works
+    bigquery().verified_stmt(
+        "SELECT col[OFFSET(0)] AS x FROM t1",
+    );
+    // Subscript with field access
+    bigquery().verified_stmt(
+        "SELECT col[0].field AS x FROM t1",
+    );
+}
