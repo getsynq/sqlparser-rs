@@ -59,6 +59,7 @@ fn parse_table_time_travel() {
                     Value::SingleQuotedString(version)
                 ))),
                 partitions: vec![],
+                    with_ordinality: false,
             },
             joins: vec![]
         },]
@@ -111,7 +112,7 @@ fn parse_create_procedure() {
                     lateral_views: vec![],
                     sample: None,
                     selection: None,
-                    group_by: GroupByExpr::Expressions(vec![]),
+                    group_by: GroupByExpr::Expressions(vec![], vec![]),
                     cluster_by: vec![],
                     distribute_by: vec![],
                     sort_by: vec![],
@@ -319,6 +320,7 @@ fn parse_delimited_identifiers() {
             with_hints,
             version,
             partitions: _,
+            with_ordinality: _,
         } => {
             assert_eq!(vec![Ident::with_quote('"', "a table")], name.0);
             assert_eq!(
@@ -558,13 +560,14 @@ fn parse_substring_in_select() {
                                 with_hints: vec![],
                                 version: None,
                                 partitions: vec![],
+                    with_ordinality: false,
                             },
                             joins: vec![]
                         }],
                         lateral_views: vec![],
                         sample: None,
                         selection: None,
-                        group_by: GroupByExpr::Expressions(vec![]),
+                        group_by: GroupByExpr::Expressions(vec![], vec![]),
                         cluster_by: vec![],
                         distribute_by: vec![],
                         sort_by: vec![],

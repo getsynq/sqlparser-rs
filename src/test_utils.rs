@@ -292,6 +292,7 @@ pub fn table(name: impl Into<String>) -> TableFactor {
         with_hints: vec![],
         version: None,
         partitions: vec![],
+        with_ordinality: false,
     }
 }
 

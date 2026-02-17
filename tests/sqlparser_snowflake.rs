@@ -260,6 +260,7 @@ fn parse_delimited_identifiers() {
             with_hints,
             version,
             partitions: _,
+            with_ordinality: _,
         } => {
             assert_eq!(vec![Ident::with_quote('"', "a table")], name.0);
             assert_eq!(
@@ -1559,6 +1560,7 @@ fn parse_tablesample() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 }),
                 sample: true,
                 sampling_method: Some(SamplingMethod::Block),
@@ -1570,7 +1572,7 @@ fn parse_tablesample() {
         lateral_views: vec![],
         sample: None,
         selection: None,
-        group_by: GroupByExpr::Expressions(vec![]),
+        group_by: GroupByExpr::Expressions(vec![], vec![]),
         cluster_by: vec![],
         distribute_by: vec![],
         sort_by: vec![],
@@ -1984,5 +1986,14 @@ fn test_create_function_dollar_quoted() {
     snowflake().one_statement_parses_to(
         "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
         "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
+    );
+}
+
+#[test]
+fn parse_create_sequence_with() {
+    // Snowflake WITH syntax: key=value, comma-separated
+    snowflake().one_statement_parses_to(
+        "CREATE SEQUENCE seq1 WITH START=1, INCREMENT=1 ORDER",
+        "CREATE SEQUENCE seq1 START 1 INCREMENT 1 ORDER",
     );
 }

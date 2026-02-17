@@ -307,10 +307,18 @@ impl fmt::Display for Select {
             write!(f, " WHERE {selection}")?;
         }
         match &self.group_by {
-            GroupByExpr::All => write!(f, " GROUP BY ALL")?,
-            GroupByExpr::Expressions(exprs) => {
+            GroupByExpr::All(modifiers) => {
+                write!(f, " GROUP BY ALL")?;
+                for modifier in modifiers {
+                    write!(f, " {modifier}")?;
+                }
+            }
+            GroupByExpr::Expressions(exprs, modifiers) => {
                 if !exprs.is_empty() {
                     write!(f, " GROUP BY {}", display_comma_separated(exprs))?;
+                    for modifier in modifiers {
+                        write!(f, " {modifier}")?;
+                    }
                 }
             }
         }
@@ -929,6 +937,8 @@ pub enum TableFactor {
         version: Option<TableVersion>,
         /// [Partition selection](https://dev.mysql.com/doc/refman/8.0/en/partitioning-selection.html), supported by MySQL.
         partitions: Vec<Ident>,
+        /// PostgreSQL: `WITH ORDINALITY` on table-valued functions
+        with_ordinality: bool,
     },
     FieldAccessor {
         expr: Expr,
@@ -944,7 +954,7 @@ pub enum TableFactor {
         expr: Expr,
         alias: Option<TableAlias>,
     },
-    /// `e.g. LATERAL FLATTEN(<args>)[ OVER (PARTITION BY ...) ][ AS <alias> ]`
+    /// `e.g. LATERAL FLATTEN(<args>)[ OVER (PARTITION BY ...) ][ WITH ORDINALITY ][ AS <alias> ]`
     Function {
         lateral: bool,
         name: ObjectName,
@@ -952,6 +962,8 @@ pub enum TableFactor {
         alias: Option<TableAlias>,
         /// Optional OVER clause for Snowflake table functions
         over: Option<WindowSpec>,
+        /// PostgreSQL: `WITH ORDINALITY`
+        with_ordinality: bool,
     },
     /// ```sql
     /// SELECT * FROM UNNEST ([10,20,30]) as numbers WITH OFFSET;
@@ -968,6 +980,8 @@ pub enum TableFactor {
         array_exprs: Vec<Expr>,
         with_offset: bool,
         with_offset_alias: Option<WithSpan<Ident>>,
+        /// PostgreSQL: `WITH ORDINALITY`
+        with_ordinality: bool,
     },
     /// ```sql
     /// EXTERNAL_QUERY('connection_id', '''external_database_query'''[, 'options'])
@@ -1061,6 +1075,7 @@ impl fmt::Display for TableFactor {
                 with_hints,
                 version,
                 partitions,
+                with_ordinality,
             } => {
                 write!(f, "{name}")?;
                 if !partitions.is_empty() {
@@ -1068,6 +1083,9 @@ impl fmt::Display for TableFactor {
                 }
                 if let Some(args) = args {
                     write!(f, "({})", display_comma_separated(args))?;
+                }
+                if *with_ordinality {
+                    write!(f, " WITH ORDINALITY")?;
                 }
                 if let Some(alias) = alias {
                     write!(f, " AS {alias}")?;
@@ -1100,6 +1118,7 @@ impl fmt::Display for TableFactor {
                 args,
                 alias,
                 over,
+                with_ordinality,
             } => {
                 if *lateral {
                     write!(f, "LATERAL ")?;
@@ -1108,6 +1127,9 @@ impl fmt::Display for TableFactor {
                 write!(f, "({})", display_comma_separated(args))?;
                 if let Some(over) = over {
                     write!(f, " OVER ({over})")?;
+                }
+                if *with_ordinality {
+                    write!(f, " WITH ORDINALITY")?;
                 }
                 if let Some(alias) = alias {
                     write!(f, " AS {alias}")?;
@@ -1126,9 +1148,13 @@ impl fmt::Display for TableFactor {
                 array_exprs,
                 with_offset,
                 with_offset_alias,
+                with_ordinality,
             } => {
                 write!(f, "UNNEST({})", display_comma_separated(array_exprs))?;
 
+                if *with_ordinality {
+                    write!(f, " WITH ORDINALITY")?;
+                }
                 if let Some(alias) = alias {
                     write!(f, " AS {alias}")?;
                 }
@@ -1754,6 +1780,29 @@ impl fmt::Display for SelectInto {
     }
 }
 
+/// Modifier for GROUP BY clause: WITH CUBE, WITH ROLLUP, WITH TOTALS
+///
+/// These are placed after the GROUP BY expressions in some dialects:
+/// `GROUP BY x, y WITH CUBE`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum GroupByWithModifier {
+    Rollup,
+    Cube,
+    Totals,
+}
+
+impl fmt::Display for GroupByWithModifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GroupByWithModifier::Rollup => write!(f, "WITH ROLLUP"),
+            GroupByWithModifier::Cube => write!(f, "WITH CUBE"),
+            GroupByWithModifier::Totals => write!(f, "WITH TOTALS"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
@@ -1762,19 +1811,29 @@ pub enum GroupByExpr {
     ///
     /// [Snowflake]: <https://docs.snowflake.com/en/sql-reference/constructs/group-by#label-group-by-all-columns>
     /// [DuckDB]:  <https://duckdb.org/docs/sql/query_syntax/groupby.html>
-    All,
+    All(Vec<GroupByWithModifier>),
 
-    /// Expressions
-    Expressions(Vec<Expr>),
+    /// Expressions with optional WITH modifiers (e.g., WITH CUBE, WITH ROLLUP, WITH TOTALS)
+    Expressions(Vec<Expr>, Vec<GroupByWithModifier>),
 }
 
 impl fmt::Display for GroupByExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            GroupByExpr::All => write!(f, "GROUP BY ALL"),
-            GroupByExpr::Expressions(col_names) => {
+            GroupByExpr::All(modifiers) => {
+                write!(f, "GROUP BY ALL")?;
+                for modifier in modifiers {
+                    write!(f, " {modifier}")?;
+                }
+                Ok(())
+            }
+            GroupByExpr::Expressions(col_names, modifiers) => {
                 let col_names = display_comma_separated(col_names);
-                write!(f, "GROUP BY ({col_names})")
+                write!(f, "GROUP BY ({col_names})")?;
+                for modifier in modifiers {
+                    write!(f, " {modifier}")?;
+                }
+                Ok(())
             }
         }
     }
