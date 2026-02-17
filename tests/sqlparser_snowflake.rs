@@ -1825,3 +1825,32 @@ fn test_show_columns_in_table() {
     // SHOW COLUMNS IN VIEW
     snowflake().verified_stmt("SHOW COLUMNS IN VIEW my_view");
 }
+
+#[test]
+fn test_snowflake_create_table_using_template() {
+    // Simple USING TEMPLATE with subquery
+    snowflake().verified_stmt(
+        "CREATE TABLE mytable USING TEMPLATE (SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*)) FROM TABLE(INFER_SCHEMA(LOCATION => '@mystage', FILE_FORMAT => 'my_parquet_format')))",
+    );
+
+    // Corpus example with WITHIN GROUP and OR REPLACE
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE mytable USING TEMPLATE (SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*)) WITHIN GROUP (ORDER BY order_id) FROM TABLE(INFER_SCHEMA(LOCATION=>'@mystage', FILE_FORMAT=>'my_parquet_format')))",
+        "CREATE TABLE mytable USING TEMPLATE (SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*)) WITHIN GROUP (ORDER BY order_id) FROM TABLE(INFER_SCHEMA(LOCATION => '@mystage', FILE_FORMAT => 'my_parquet_format')))",
+    );
+
+    // Verify the AST fields
+    match snowflake().verified_stmt(
+        "CREATE TABLE mytable USING TEMPLATE (SELECT ARRAY_AGG(OBJECT_CONSTRUCT(*)) FROM TABLE(INFER_SCHEMA(LOCATION => '@mystage', FILE_FORMAT => 'my_parquet_format')))",
+    ) {
+        Statement::CreateTable {
+            name,
+            using_template,
+            ..
+        } => {
+            assert_eq!("mytable", name.to_string());
+            assert!(using_template.is_some());
+        }
+        _ => unreachable!(),
+    }
+}

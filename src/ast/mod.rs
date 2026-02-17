@@ -1819,6 +1819,8 @@ pub enum Statement {
         clickhouse_settings: Option<Vec<SqlOption>>,
         /// Databricks USING DELTA
         using: Option<ObjectName>,
+        /// Snowflake USING TEMPLATE (query)
+        using_template: Option<Box<Expr>>,
         // Snowflake COPY GRANTS
         copy_grants: bool,
     },
@@ -3066,6 +3068,7 @@ impl fmt::Display for Statement {
                 table_ttl,
                 clickhouse_settings,
                 using,
+                using_template,
                 copy_grants,
             } => {
                 // We want to allow the following options
@@ -3112,7 +3115,7 @@ impl fmt::Display for Statement {
                     }
                     write!(f, "{}", display_comma_separated(projections))?;
                     write!(f, ")")?;
-                } else if query.is_none() && like.is_none() && clone.is_none() {
+                } else if query.is_none() && like.is_none() && clone.is_none() && using_template.is_none() {
                     // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
                     write!(f, " ()")?;
                 }
@@ -3135,6 +3138,10 @@ impl fmt::Display for Statement {
 
                 if let Some(using) = using {
                     write!(f, " USING {using}")?;
+                }
+
+                if let Some(using_template) = using_template {
+                    write!(f, " USING TEMPLATE {using_template}")?;
                 }
 
                 // Only for SQLite
