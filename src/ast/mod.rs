@@ -2326,6 +2326,8 @@ pub enum Statement {
         function_params: Option<Vec<DescribeFunctionParam>>,
         /// Optional output format (ClickHouse)
         format: Option<Ident>,
+        /// Optional key=value options (e.g., Snowflake `type=stage`)
+        options: Vec<SqlOption>,
     },
     /// EXPLAIN / DESCRIBE for select_statement
     Explain {
@@ -2471,6 +2473,7 @@ impl fmt::Display for Statement {
                 object_type,
                 function_params,
                 format,
+                options,
             } => {
                 if *describe_alias {
                     write!(f, "DESCRIBE ")?;
@@ -2485,6 +2488,10 @@ impl fmt::Display for Statement {
 
                 if let Some(params) = function_params {
                     write!(f, "({})", display_comma_separated(params))?;
+                }
+
+                if !options.is_empty() {
+                    write!(f, " {}", display_comma_separated(options))?;
                 }
 
                 if let Some(format) = format {
