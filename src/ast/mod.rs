@@ -1920,6 +1920,8 @@ pub enum Statement {
         purge: bool,
         /// MySQL-specific "TEMPORARY" keyword
         temporary: bool,
+        /// PostgreSQL-specific "CONCURRENTLY" keyword for DROP INDEX
+        concurrently: bool,
     },
     /// ```sql
     /// DROP FUNCTION
@@ -3496,11 +3498,13 @@ impl fmt::Display for Statement {
                 restrict,
                 purge,
                 temporary,
+                concurrently,
             } => write!(
                 f,
-                "DROP {}{}{} {}{}{}{}",
+                "DROP {}{}{}{} {}{}{}{}",
                 if *temporary { "TEMPORARY " } else { "" },
                 object_type,
+                if *concurrently { " CONCURRENTLY" } else { "" },
                 if *if_exists { " IF EXISTS" } else { "" },
                 display_comma_separated(names),
                 if *cascade { " CASCADE" } else { "" },

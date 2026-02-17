@@ -4718,6 +4718,10 @@ impl<'a> Parser<'a> {
                 self.peek_token(),
             );
         };
+        // PostgreSQL supports CONCURRENTLY for DROP INDEX
+        let concurrently = object_type == ObjectType::Index
+            && self.parse_keyword(Keyword::CONCURRENTLY);
+
         // Many dialects support the non standard `IF EXISTS` clause and allow
         // specifying multiple objects to delete in a single statement
         let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
@@ -4744,6 +4748,7 @@ impl<'a> Parser<'a> {
             restrict,
             purge,
             temporary,
+            concurrently,
         })
     }
 
