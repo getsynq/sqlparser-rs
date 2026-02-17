@@ -1191,6 +1191,19 @@ impl<'a> Tokenizer<'a> {
                     tag: None,
                 }))
             };
+        } else if let Some('{') = chars.peek() {
+            // Handle ${identifier} variable substitution (e.g., Databricks widgets)
+            chars.next(); // consume '{'
+            let ident = peeking_take_while(chars, |ch| ch != '}');
+            if let Some('}') = chars.peek() {
+                chars.next(); // consume '}'
+                return Ok(Token::Placeholder(format!("${{{ident}}}")));
+            } else {
+                return self.tokenizer_error(
+                    chars.location(),
+                    "Unterminated variable substitution, expected }",
+                );
+            }
         } else {
             value.push_str(&peeking_take_while(chars, |ch| {
                 ch.is_alphanumeric() || ch == '_'
