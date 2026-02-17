@@ -402,3 +402,14 @@ fn test_map_literal() {
     duckdb().verified_stmt("SELECT MAP { 'x': 1, 'y': 2 }");
     duckdb().verified_stmt("SELECT MAP {}");
 }
+
+#[test]
+fn test_filter_without_where() {
+    // DuckDB supports FILTER (expr) without WHERE keyword
+    duckdb().one_statement_parses_to(
+        "SELECT SUM(x) FILTER (x = 1)",
+        "SELECT SUM(x) FILTER (WHERE x = 1)",
+    );
+    // Standard FILTER (WHERE expr) syntax should still work
+    duckdb().verified_stmt("SELECT SUM(x) FILTER (WHERE x = 1)");
+}
