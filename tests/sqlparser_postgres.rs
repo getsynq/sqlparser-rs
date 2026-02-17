@@ -3831,3 +3831,9 @@ fn parse_create_table_with_options() {
         _ => unreachable!(),
     }
 }
+
+#[test]
+fn parse_overlaps() {
+    let sql = "SELECT (CAST('2016-01-10' AS DATE), CAST('2016-02-01' AS DATE)) OVERLAPS (CAST('2016-01-20' AS DATE), CAST('2016-02-10' AS DATE))";
+    pg_and_generic().verified_only_select(sql);
+}

@@ -2481,6 +2481,13 @@ impl<'a> Parser<'a> {
                         self.expected("Expected Token::Word after AT", tok)
                     }
                 }
+                Keyword::OVERLAPS => {
+                    Ok(Expr::BinaryOp {
+                        left: Box::new(expr),
+                        op: BinaryOperator::Overlaps,
+                        right: Box::new(self.parse_subexpr(Self::BETWEEN_PREC)?),
+                    })
+                }
                 Keyword::NOT
                 | Keyword::IN
                 | Keyword::BETWEEN
@@ -2856,6 +2863,7 @@ impl<'a> Parser<'a> {
             Token::Word(w) if w.keyword == Keyword::RLIKE => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::SIMILAR => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::REGEXP => Ok(Self::LIKE_PREC),
+            Token::Word(w) if w.keyword == Keyword::OVERLAPS => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::OPERATOR => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::DIV => Ok(Self::MUL_DIV_MOD_OP_PREC),
             Token::Eq
