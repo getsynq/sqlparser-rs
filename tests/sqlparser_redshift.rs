@@ -551,3 +551,12 @@ fn test_approximate_count() {
         _ => panic!("Expected Function"),
     }
 }
+
+#[test]
+fn test_redshift_bitwise_shift_operators() {
+    // Redshift supports >> (right shift) and << (left shift) like PostgreSQL
+    redshift().verified_stmt("SELECT a >> 16");
+    redshift().verified_stmt("SELECT a << 4");
+    redshift().verified_stmt("SELECT (col - 4) >> 16");
+    redshift().verified_stmt("SELECT (col - 4) & 65535");
+}
