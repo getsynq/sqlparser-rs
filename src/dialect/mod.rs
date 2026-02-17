@@ -132,6 +132,12 @@ pub trait Dialect: Debug + Any {
     fn supports_numeric_literal_underscores(&self) -> bool {
         false
     }
+    /// Returns true if the dialect supports prefix alias syntax with colon.
+    /// e.g. DuckDB: `SELECT x: 42` instead of `SELECT 42 AS x`
+    /// and `FROM alias: table_name` instead of `FROM table_name AS alias`
+    fn supports_prefix_alias_colon(&self) -> bool {
+        false
+    }
     /// Dialect-specific prefix parser override
     fn parse_prefix(&self, _parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
         // return None to fall back to the default behavior
@@ -313,6 +319,10 @@ mod tests {
 
             fn supports_numeric_literal_underscores(&self) -> bool {
                 self.0.supports_numeric_literal_underscores()
+            }
+
+            fn supports_prefix_alias_colon(&self) -> bool {
+                self.0.supports_prefix_alias_colon()
             }
 
             fn parse_prefix(

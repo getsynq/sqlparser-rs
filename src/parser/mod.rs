@@ -9614,6 +9614,38 @@ impl<'a> Parser<'a> {
         } else {
             let name = self.parse_object_name(true)?;
 
+            // DuckDB prefix alias syntax: `alias: table_name`
+            // e.g. `FROM foo: c.db.tbl` means table `c.db.tbl` with alias `foo`
+            if self.dialect.supports_prefix_alias_colon()
+                && name.0.len() == 1
+                && self.consume_token(&Token::Colon)
+            {
+                let prefix_alias = TableAlias {
+                    name: name.0.into_iter().next().unwrap().empty_span(),
+                    columns: vec![],
+                };
+                let mut table = self.parse_table_factor()?;
+                // Set the alias on the parsed table factor
+                match &mut table {
+                    TableFactor::Table { alias, .. }
+                    | TableFactor::Derived { alias, .. }
+                    | TableFactor::Function { alias, .. }
+                    | TableFactor::UNNEST { alias, .. }
+                    | TableFactor::TableFunction { alias, .. }
+                    | TableFactor::FieldAccessor { alias, .. }
+                    | TableFactor::NestedJoin { alias, .. } => {
+                        *alias = Some(prefix_alias);
+                    }
+                    TableFactor::Pivot { alias, .. }
+                    | TableFactor::Unpivot { alias, .. } => {
+                        *alias = Some(prefix_alias);
+                    }
+                    TableFactor::TableSample { .. }
+                    | TableFactor::ExternalQuery { .. } => {}
+                }
+                return Ok(table);
+            }
+
             let partitions: Vec<Ident> = if dialect_of!(self is MySqlDialect | GenericDialect)
                 && self.parse_keyword(Keyword::PARTITION)
             {
@@ -10590,6 +10622,27 @@ impl<'a> Parser<'a> {
     /// Parse a comma-delimited list of projections after SELECT
     pub fn parse_select_item(&mut self) -> Result<WithSpan<SelectItem>, ParserError> {
         let start_span = self.index;
+
+        // DuckDB prefix alias syntax: `alias: expr`
+        // e.g. `SELECT sum_qty: sum(l_quantity)` means `sum(l_quantity) AS sum_qty`
+        // Must be checked before parse_wildcard_expr because the colon would otherwise
+        // be consumed as a JSON access operator.
+        if self.dialect.supports_prefix_alias_colon() {
+            if let Some(item) = self.maybe_parse(|parser| {
+                let alias = parser.parse_identifier(false)?;
+                parser.expect_token(&Token::Colon)?;
+                let expr = parser.parse_expr()?;
+                let expr_with_location = expr.spanning(parser.span_from_index(start_span));
+                Ok(SelectItem::ExprWithAlias {
+                    expr: expr_with_location,
+                    alias,
+                }
+                .spanning(parser.span_from_index(start_span)))
+            }) {
+                return Ok(item);
+            }
+        }
+
         match self.parse_wildcard_expr()? {
             WildcardExpr::Expr(expr) => {
                 let expr: Expr = if self.dialect.supports_filter_during_aggregation()

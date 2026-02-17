@@ -36,4 +36,8 @@ impl Dialect for DuckDbDialect {
     fn supports_numeric_literal_underscores(&self) -> bool {
         true
     }
+
+    fn supports_prefix_alias_colon(&self) -> bool {
+        true
+    }
 }
