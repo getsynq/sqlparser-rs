@@ -1716,6 +1716,29 @@ fn test_snowflake_autoincrement_start_increment() {
 }
 
 #[test]
+fn test_snowflake_identity() {
+    // IDENTITY with parenthesized seed/increment (Snowflake synonym for AUTOINCREMENT)
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (id INT IDENTITY(1, 1))")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // IDENTITY without parameters
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (id INT IDENTITY)")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // IDENTITY with START/INCREMENT
+    let stmts = snowflake()
+        .parse_sql_statements("CREATE TABLE t (id INT IDENTITY START 1 INCREMENT 1 ORDER)")
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    // ALTER TABLE ADD COLUMN with IDENTITY
+    snowflake()
+        .parse_sql_statements("ALTER TABLE foo ADD COLUMN id INT IDENTITY(1, 1)")
+        .unwrap();
+}
+
+#[test]
 fn test_snowflake_tag_clause() {
     // Table-level TAG (skipped in AST, not round-tripped)
     let stmts = snowflake()

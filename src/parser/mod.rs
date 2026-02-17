@@ -5947,19 +5947,34 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr()?;
             Ok(Some(ColumnOption::OnUpdate(expr)))
         } else if self.parse_keyword(Keyword::IDENTITY)
-            && dialect_of!(self is RedshiftSqlDialect | MsSqlDialect | GenericDialect)
+            && dialect_of!(self is RedshiftSqlDialect | MsSqlDialect | SnowflakeDialect | GenericDialect)
         {
-            // IDENTITY [ ( seed, increment ) ]
-            let (seed, increment) = if self.consume_token(&Token::LParen) {
+            // IDENTITY [ ( seed, increment ) | START n INCREMENT n ] [ORDER|NOORDER]
+            if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                && self.parse_keyword(Keyword::START)
+            {
                 let seed = Some(self.parse_expr()?);
-                self.expect_token(&Token::Comma)?;
+                self.expect_keyword(Keyword::INCREMENT)?;
                 let increment = Some(self.parse_expr()?);
-                self.expect_token(&Token::RParen)?;
-                (seed, increment)
+                let _ =
+                    self.parse_keyword(Keyword::ORDER) || self.parse_keyword(Keyword::NOORDER);
+                Ok(Some(ColumnOption::Identity { seed, increment }))
             } else {
-                (None, None)
-            };
-            Ok(Some(ColumnOption::Identity { seed, increment }))
+                let (seed, increment) = if self.consume_token(&Token::LParen) {
+                    let seed = Some(self.parse_expr()?);
+                    self.expect_token(&Token::Comma)?;
+                    let increment = Some(self.parse_expr()?);
+                    self.expect_token(&Token::RParen)?;
+                    (seed, increment)
+                } else {
+                    (None, None)
+                };
+                if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+                    let _ = self.parse_keyword(Keyword::ORDER)
+                        || self.parse_keyword(Keyword::NOORDER);
+                }
+                Ok(Some(ColumnOption::Identity { seed, increment }))
+            }
         } else if self.parse_keyword(Keyword::GENERATED) {
             self.parse_optional_column_option_generated()
         } else {
