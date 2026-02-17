@@ -1754,3 +1754,15 @@ fn test_not_aggregate_over_window() {
         "SELECT NOT BOOLOR_AGG(col_22) OVER (PARTITION BY col_1) AS IS_MAGIC_RIDE FROM t",
     );
 }
+
+#[test]
+fn test_show_columns_in_table() {
+    // Basic SHOW COLUMNS IN TABLE
+    snowflake().verified_stmt("SHOW COLUMNS IN TABLE test_show_columns");
+    // Quoted schema with unquoted table
+    snowflake().verified_stmt(r#"SHOW COLUMNS IN TABLE "sch_1".tbl_1"#);
+    // Fully qualified name
+    snowflake().verified_stmt(r#"SHOW COLUMNS IN TABLE "db"."schema".my_table"#);
+    // SHOW COLUMNS IN VIEW
+    snowflake().verified_stmt("SHOW COLUMNS IN VIEW my_view");
+}
