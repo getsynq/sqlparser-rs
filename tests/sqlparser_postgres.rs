@@ -3845,3 +3845,13 @@ fn parse_table_inheritance_wildcard() {
     pg_and_generic().verified_stmt("SELECT * FROM t1*");
     pg_and_generic().verified_stmt("SELECT * FROM schema1.t1*");
 }
+
+#[test]
+fn parse_filter_with_over() {
+    // SQL standard: aggregate FILTER clause followed by OVER (window specification)
+    pg().verified_stmt("SELECT CORR(a, b) FILTER (WHERE c > 0) OVER (PARTITION BY d)");
+    // FILTER + named window
+    pg().verified_stmt("SELECT SUM(x) FILTER (WHERE x > 0) OVER w");
+    // FILTER without OVER should still work
+    pg().verified_stmt("SELECT COUNT(*) FILTER (WHERE x > 0)");
+}

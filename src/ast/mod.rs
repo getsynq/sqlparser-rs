@@ -721,7 +721,12 @@ pub enum Expr {
     /// Scalar function call e.g. `LEFT(foo, 5)`
     Function(Function),
     /// Aggregate function with filter
-    AggregateExpressionWithFilter { expr: Box<Expr>, filter: Box<Expr> },
+    AggregateExpressionWithFilter {
+        expr: Box<Expr>,
+        filter: Box<Expr>,
+        /// Optional OVER clause (window function) that follows the FILTER clause
+        over: Option<WindowType>,
+    },
     /// `CASE [<operand>] WHEN <condition> THEN <result> ... [ELSE <result>] END`
     ///
     /// Note we only recognize a complete single expression as `<condition>`,
@@ -1055,8 +1060,12 @@ impl fmt::Display for Expr {
                 write!(f, " '{}'", &value::escape_single_quote_string(value))
             }
             Expr::Function(fun) => write!(f, "{fun}"),
-            Expr::AggregateExpressionWithFilter { expr, filter } => {
-                write!(f, "{expr} FILTER (WHERE {filter})")
+            Expr::AggregateExpressionWithFilter { expr, filter, over } => {
+                write!(f, "{expr} FILTER (WHERE {filter})")?;
+                if let Some(o) = over {
+                    write!(f, " OVER {o}")?;
+                }
+                Ok(())
             }
             Expr::Case {
                 operand,

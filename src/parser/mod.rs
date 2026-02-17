@@ -10828,9 +10828,13 @@ impl<'a> Parser<'a> {
                         self.parse_keyword(Keyword::WHERE);
                         let filter = self.parse_expr()?;
                         self.expect_token(&Token::RParen)?;
+                        // SQL standard: FILTER comes before OVER, e.g.
+                        // CORR(a, b) FILTER (WHERE c > 0) OVER (PARTITION BY d)
+                        let over = self.parse_over()?;
                         Expr::AggregateExpressionWithFilter {
                             expr: Box::new(expr),
                             filter: Box::new(filter),
+                            over,
                         }
                     } else {
                         self.index = i;
@@ -10895,6 +10899,7 @@ impl<'a> Parser<'a> {
                 Expr::AggregateExpressionWithFilter {
                     expr: Box::new(expr),
                     filter: Box::new(filter),
+                    over: None,
                 }
             } else {
                 self.index = i;
