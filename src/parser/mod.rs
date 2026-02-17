@@ -8161,6 +8161,13 @@ impl<'a> Parser<'a> {
             format = Some(self.parse_analyze_format()?);
         }
 
+        // ClickHouse: EXPLAIN [type] [setting = value, ...] statement
+        let (explain_type, options) = if dialect_of!(self is ClickHouseDialect) {
+            self.parse_explain_options()?
+        } else {
+            (None, vec![])
+        };
+
         match self.maybe_parse(|parser| parser.parse_statement()) {
             Some(Statement::Explain { .. }) | Some(Statement::ExplainTable { .. }) => Err(
                 ParserError::ParserError("Explain must be root of the plan".to_string()),
@@ -8171,6 +8178,8 @@ impl<'a> Parser<'a> {
                 verbose,
                 statement: Box::new(statement),
                 format,
+                options,
+                explain_type,
             }),
             _ => {
                 let has_table_word = self.parse_keyword(Keyword::TABLE);
@@ -8191,6 +8200,57 @@ impl<'a> Parser<'a> {
                 })
             }
         }
+    }
+
+    /// Parse ClickHouse EXPLAIN options: `[type] [setting = value, ...]`
+    ///
+    /// ClickHouse EXPLAIN supports an optional type keyword (SYNTAX, AST, PLAN, PIPELINE, etc.)
+    /// followed by optional key=value settings before the explained statement.
+    fn parse_explain_options(
+        &mut self,
+    ) -> Result<(Option<Ident>, Vec<SqlOption>), ParserError> {
+        // First, check for an optional EXPLAIN type identifier (e.g., SYNTAX, AST, PLAN).
+        // These are non-keyword identifiers NOT followed by `=`.
+        let explain_type = if let Token::Word(w) = &self.peek_token_ref().token {
+            if w.keyword == Keyword::NoKeyword && self.peek_nth_token_ref(1).token != Token::Eq {
+                Some(self.parse_identifier(false)?.unwrap())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let options = self.parse_explain_key_value_options()?;
+        Ok((explain_type, options))
+    }
+
+    /// Parse key=value option pairs for EXPLAIN
+    fn parse_explain_key_value_options(&mut self) -> Result<Vec<SqlOption>, ParserError> {
+        let mut options = vec![];
+        loop {
+            // Check if next tokens look like `ident = value` (not a statement keyword)
+            if let Token::Word(w) = &self.peek_token_ref().token {
+                // If the word is a known statement keyword, stop parsing options
+                if w.keyword != Keyword::NoKeyword {
+                    break;
+                }
+                if self.peek_nth_token_ref(1).token == Token::Eq {
+                    let name = self.parse_object_name(false)?;
+                    self.expect_token(&Token::Eq)?;
+                    let value = self.parse_expr()?;
+                    options.push(SqlOption { name, value });
+                    if !self.consume_token(&Token::Comma) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        Ok(options)
     }
 
     /// Call's [`Self::parse_query`] returning a `Box`'ed  result.

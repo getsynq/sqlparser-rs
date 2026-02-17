@@ -1499,6 +1499,25 @@ fn parse_select_from_table_final() {
     clickhouse().one_statement_parses_to("SELECT * FROM t AS t1 FINAL", "SELECT * FROM t AS t1");
 }
 
+#[test]
+fn parse_explain_with_options() {
+    // ClickHouse supports EXPLAIN with key=value options before the statement
+    clickhouse().verified_stmt(
+        "EXPLAIN distributed = 1 SELECT sum(number) FROM test_table GROUP BY number % 4",
+    );
+
+    clickhouse().one_statement_parses_to(
+        "EXPLAIN distributed=1 SELECT * FROM remote('127.0.0.{1,2}', numbers(2)) WHERE number = 1",
+        "EXPLAIN distributed = 1 SELECT * FROM remote('127.0.0.{1,2}', numbers(2)) WHERE number = 1",
+    );
+
+    // EXPLAIN SYNTAX with options
+    clickhouse().one_statement_parses_to(
+        "EXPLAIN SYNTAX run_query_tree_passes = 1 SELECT * FROM system.numbers AS a, system.numbers AS b, system.numbers AS c WHERE a.number = b.number AND b.number = c.number",
+        "EXPLAIN SYNTAX run_query_tree_passes = 1 SELECT * FROM system.numbers AS a, system.numbers AS b, system.numbers AS c WHERE a.number = b.number AND b.number = c.number",
+    );
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],
