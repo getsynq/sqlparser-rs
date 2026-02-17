@@ -911,7 +911,8 @@ impl<'a> Parser<'a> {
                 // Redshift: APPROXIMATE COUNT(DISTINCT x)
                 Keyword::APPROXIMATE
                     if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
-                        && matches!(self.peek_token_kind(), Token::Word(_)) =>
+                        && matches!(self.peek_token_kind(), Token::Word(_))
+                        && self.peek_nth_token_ref(1).token == Token::LParen =>
                 {
                     // Parse the following function call and set approximate = true
                     let expr = self.parse_prefix()?;
@@ -3033,7 +3034,8 @@ impl<'a> Parser<'a> {
             Token::Word(w) if w.keyword == Keyword::SIMILAR => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::REGEXP => Ok(Self::LIKE_PREC),
             Token::Word(w) if w.keyword == Keyword::GLOB => Ok(Self::LIKE_PREC),
-            Token::Word(w) if w.keyword == Keyword::OVERLAPS => Ok(Self::BETWEEN_PREC),
+            Token::Word(w) if w.keyword == Keyword::OVERLAPS
+                && dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::OPERATOR => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::DIV => Ok(Self::MUL_DIV_MOD_OP_PREC),
             Token::Eq
@@ -7393,7 +7395,9 @@ impl<'a> Parser<'a> {
                     buf.push('[')
                 }
                 Token::RBracket => buf.push(']'),
-                Token::Mul => buf.push('*'),
+                // Only consume * inside brackets [*] for array wildcard traversal.
+                // Bare * after . is a qualified wildcard (.* EXCEPT) not a JSON path.
+                Token::Mul if buf.ends_with('[') => buf.push('*'),
                 Token::Colon => buf.push(':'),
                 Token::DoubleQuotedString(ref s) => write!(buf, "\"{}\"", s).unwrap(),
                 Token::SingleQuotedString(ref s) => write!(buf, "'{}'", s).unwrap(),
@@ -8713,11 +8717,13 @@ impl<'a> Parser<'a> {
         }
 
         // ClickHouse: EXPLAIN [type] [setting = value, ...] statement
-        let (explain_type, options) = if dialect_of!(self is ClickHouseDialect) {
-            self.parse_explain_options()?
-        } else {
-            (None, vec![])
-        };
+        // Only for EXPLAIN, not DESCRIBE/DESC (describe_alias=true means DESC/DESCRIBE)
+        let (explain_type, options) =
+            if !describe_alias && dialect_of!(self is ClickHouseDialect) {
+                self.parse_explain_options()?
+            } else {
+                (None, vec![])
+            };
 
         match self.maybe_parse(|parser| parser.parse_statement()) {
             Some(Statement::Explain { .. }) | Some(Statement::ExplainTable { .. }) => Err(
@@ -8734,9 +8740,19 @@ impl<'a> Parser<'a> {
             }),
             _ => {
                 // Databricks: DESCRIBE HISTORY table_name
-                if describe_alias && self.parse_keyword(Keyword::HISTORY) {
-                    let table_name = self.parse_object_name(false)?;
-                    return Ok(Statement::DescribeHistory { table_name });
+                // Only match if HISTORY is followed by an identifier (not `.`)
+                // to avoid consuming `history.tbl` as DESCRIBE HISTORY
+                if describe_alias
+                    && dialect_of!(self is DatabricksDialect | GenericDialect)
+                    && self.parse_keyword(Keyword::HISTORY)
+                {
+                    if matches!(self.peek_token_ref().token, Token::Period) {
+                        // `DESCRIBE history.tbl` - HISTORY is the schema name
+                        self.prev_token();
+                    } else {
+                        let table_name = self.parse_object_name(false)?;
+                        return Ok(Statement::DescribeHistory { table_name });
+                    }
                 }
 
                 // Parse optional object type: TABLE, DATABASE, WAREHOUSE, SEQUENCE, STREAM, FUNCTION, VIEW, SCHEMA
@@ -9759,9 +9775,21 @@ impl<'a> Parser<'a> {
         let show_in =
             self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])? == Keyword::IN;
         // Optionally consume TABLE or VIEW keyword (Snowflake: SHOW COLUMNS IN TABLE <name>)
+        // Only if followed by an identifier (the table name), otherwise it IS the table name
         let show_object_kind =
-            self.parse_one_of_keywords(&[Keyword::TABLE, Keyword::VIEW])
-                .map(|kw| Ident::new(format!("{kw:?}")));
+            if let Some(kw) = self.parse_one_of_keywords(&[Keyword::TABLE, Keyword::VIEW]) {
+                match self.peek_token_ref().token {
+                    Token::Word(_) | Token::SingleQuotedString(_) | Token::DoubleQuotedString(_) => {
+                        Some(Ident::new(format!("{kw:?}")))
+                    }
+                    _ => {
+                        self.prev_token();
+                        None
+                    }
+                }
+            } else {
+                None
+            };
         let object_name = self.parse_object_name(false)?;
         let table_name = match self.parse_one_of_keywords(&[Keyword::FROM, Keyword::IN]) {
             Some(_) => {
@@ -10823,11 +10851,27 @@ impl<'a> Parser<'a> {
             Keyword::GROUP,
             Keyword::APPLICATION,
         ]) {
-            Some(Keyword::ROLE) => Some(GranteesType::Role),
-            Some(Keyword::USER) => Some(GranteesType::User),
-            Some(Keyword::SHARE) => Some(GranteesType::Share),
-            Some(Keyword::GROUP) => Some(GranteesType::Group),
-            Some(Keyword::APPLICATION) => Some(GranteesType::Application),
+            Some(kw) => {
+                // Check if the next token is an identifier. If not (e.g. EOF, comma),
+                // then the keyword itself is the grantee name, not a type prefix.
+                match self.peek_token_ref().token {
+                    Token::Word(_) | Token::SingleQuotedString(_) | Token::DoubleQuotedString(_) => {
+                        match kw {
+                            Keyword::ROLE => Some(GranteesType::Role),
+                            Keyword::USER => Some(GranteesType::User),
+                            Keyword::SHARE => Some(GranteesType::Share),
+                            Keyword::GROUP => Some(GranteesType::Group),
+                            Keyword::APPLICATION => Some(GranteesType::Application),
+                            _ => None,
+                        }
+                    }
+                    _ => {
+                        // The keyword IS the grantee name; backtrack
+                        self.prev_token();
+                        None
+                    }
+                }
+            }
             _ => None,
         };
         let name = self.parse_identifier(false).map(WithSpan::unwrap)?;
@@ -11289,21 +11333,29 @@ impl<'a> Parser<'a> {
     pub fn parse_function_args(&mut self) -> Result<FunctionArg, ParserError> {
         // BigQuery ML functions use MODEL/TABLE keyword-prefixed table references
         // e.g. ML.PREDICT(MODEL `mydataset.mymodel`, TABLE `mydataset.mytable`)
-        if let Some(kw) = self.parse_one_of_keywords(&[Keyword::MODEL, Keyword::TABLE]) {
-            // TABLE followed by `(` is the TABLE(subquery) syntax, not a table ref
-            if kw == Keyword::TABLE && self.peek_token_is(&Token::LParen) {
-                self.prev_token();
-            } else {
-                let keyword = match kw {
-                    Keyword::MODEL => FunctionArgKeyword::Model,
-                    Keyword::TABLE => FunctionArgKeyword::Table,
-                    _ => unreachable!(),
-                };
-                let table_name = self.parse_object_name(false)?;
-                return Ok(FunctionArg::Unnamed(FunctionArgExpr::TableRef {
-                    keyword,
-                    table_name,
-                }));
+        if dialect_of!(self is BigQueryDialect | GenericDialect) {
+            if let Some(kw) = self.parse_one_of_keywords(&[Keyword::MODEL, Keyword::TABLE]) {
+                // TABLE followed by `(` is the TABLE(subquery) syntax, not a table ref
+                // MODEL/TABLE followed by `,` or `)` means the keyword is used as an identifier
+                if (kw == Keyword::TABLE && self.peek_token_is(&Token::LParen))
+                    || matches!(
+                        self.peek_token_ref().token,
+                        Token::Comma | Token::RParen | Token::EOF
+                    )
+                {
+                    self.prev_token();
+                } else {
+                    let keyword = match kw {
+                        Keyword::MODEL => FunctionArgKeyword::Model,
+                        Keyword::TABLE => FunctionArgKeyword::Table,
+                        _ => unreachable!(),
+                    };
+                    let table_name = self.parse_object_name(false)?;
+                    return Ok(FunctionArg::Unnamed(FunctionArgExpr::TableRef {
+                        keyword,
+                        table_name,
+                    }));
+                }
             }
         }
         if self.peek_nth_token(1) == Token::RArrow {
@@ -11352,7 +11404,12 @@ impl<'a> Parser<'a> {
         if self.consume_token(&Token::RParen) {
             Ok(vec![])
         } else {
+            // Disable trailing commas inside function args - keywords like END
+            // should be parsed as identifiers, not as trailing comma terminators
+            let old_value = self.options.trailing_commas;
+            self.options.trailing_commas = false;
             let args = self.parse_comma_separated(Parser::parse_function_args)?;
+            self.options.trailing_commas = old_value;
             self.expect_token(&Token::RParen)?;
             Ok(args)
         }
@@ -11394,7 +11451,12 @@ impl<'a> Parser<'a> {
                 ));
             }
 
+            // Disable trailing commas inside function args - keywords like END
+            // should be parsed as identifiers, not as trailing comma terminators
+            let old_trailing = self.options.trailing_commas;
+            self.options.trailing_commas = false;
             let args = self.parse_comma_separated(Parser::parse_function_args)?;
+            self.options.trailing_commas = old_trailing;
             let on_overflow = if self.parse_keywords(&[Keyword::ON, Keyword::OVERFLOW]) {
                 if self.parse_keyword(Keyword::ERROR) {
                     Some(OnOverflow::Error)
