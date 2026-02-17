@@ -1835,3 +1835,27 @@ fn parse_bigquery_alter_table_drop_primary_key() {
         "ALTER TABLE myTable DROP PRIMARY KEY",
     );
 }
+
+#[test]
+fn parse_bigquery_unpivot_multi_column() {
+    // Multi-column UNPIVOT with tuple value and tuple IN entries with string aliases
+    bigquery().verified_stmt(
+        "SELECT * FROM Produce UNPIVOT ((first_half_sales, second_half_sales) FOR semesters IN ((Q1, Q2) AS 'semester_1', (Q3, Q4) AS 'semester_2'))",
+    );
+
+    // Multi-column UNPIVOT with tuple value and tuple IN entries with numeric aliases
+    bigquery().verified_stmt(
+        "SELECT * FROM Produce UNPIVOT ((first_half_sales, second_half_sales) FOR semesters IN ((Q1, Q2) AS 1, (Q3, Q4) AS 2))",
+    );
+
+    // Single-value in tuple syntax: (c) should roundtrip as plain c
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM (SELECT * FROM `t`) AS a UNPIVOT((c) FOR c_name IN (v1, v2))",
+        "SELECT * FROM (SELECT * FROM `t`) AS a UNPIVOT (c FOR c_name IN (v1, v2))",
+    );
+
+    // Multi-column UNPIVOT with tuple IN entries without aliases
+    bigquery().verified_stmt(
+        "SELECT * FROM tbl_1 UNPIVOT ((col_4, col_12, col_13, col_14) FOR col_15 IN ((col_9, col_30, col_31, col_32), (col_10, col_33, col_34, col_35), (col_11, col_36, col_37, col_38)))",
+    );
+}

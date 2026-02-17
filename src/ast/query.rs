@@ -919,6 +919,36 @@ impl fmt::Display for UnpivotNullHandling {
     }
 }
 
+/// A single entry in the UNPIVOT IN clause.
+///
+/// Can be a single column or a tuple of columns, optionally with an alias.
+///
+/// Examples:
+/// - `Q1` (single column, no alias)
+/// - `(Q1, Q2) AS 'semester_1'` (tuple with alias)
+/// - `(col_9, col_30, col_31)` (tuple without alias)
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct UnpivotInValue {
+    pub columns: Vec<WithSpan<Ident>>,
+    pub alias: Option<Value>,
+}
+
+impl fmt::Display for UnpivotInValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.columns.len() == 1 && self.alias.is_none() {
+            write!(f, "{}", self.columns[0])?;
+        } else {
+            write!(f, "({})", display_comma_separated(&self.columns))?;
+        }
+        if let Some(ref alias) = self.alias {
+            write!(f, " AS {alias}")?;
+        }
+        Ok(())
+    }
+}
+
 /// A table name or a parenthesized subquery with an optional alias
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -1025,15 +1055,19 @@ pub enum TableFactor {
     /// Syntax:
     /// ```sql
     /// table UNPIVOT [ { INCLUDE NULLS | EXCLUDE NULLS } ] (value FOR name IN (column1, [ column2, ... ])) [ alias ]
+    /// table UNPIVOT ((v1, v2) FOR name IN ((c1, c2) AS 'label1', (c3, c4) AS 'label2')) [ alias ]
     /// ```
     ///
     /// See <https://docs.snowflake.com/en/sql-reference/constructs/unpivot>.
+    /// See <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#unpivot_operator>.
     Unpivot {
         #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
         table: Box<TableFactor>,
-        value: WithSpan<Ident>,
+        /// The value columns (single or multiple for multi-column UNPIVOT)
+        value: Vec<WithSpan<Ident>>,
         name: WithSpan<Ident>,
-        columns: Vec<WithSpan<Ident>>,
+        /// The columns in the IN clause, each can be a tuple with an optional alias
+        columns: Vec<UnpivotInValue>,
         null_handling: Option<UnpivotNullHandling>,
         alias: Option<TableAlias>,
     },
@@ -1239,10 +1273,15 @@ impl fmt::Display for TableFactor {
                 if let Some(nh) = null_handling {
                     write!(f, " {nh}")?;
                 }
+                write!(f, " (")?;
+                if value.len() == 1 {
+                    write!(f, "{}", value[0])?;
+                } else {
+                    write!(f, "({})", display_comma_separated(value))?;
+                }
                 write!(
                     f,
-                    " ({} FOR {} IN ({}))",
-                    value,
+                    " FOR {} IN ({}))",
                     name,
                     display_comma_separated(columns)
                 )?;

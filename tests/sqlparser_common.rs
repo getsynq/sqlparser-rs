@@ -8522,12 +8522,12 @@ fn parse_unpivot_table() {
                 partitions: vec![],
                     with_ordinality: false,
             }),
-            value: Ident::new("quantity").empty_span(),
+            value: vec![Ident::new("quantity").empty_span()],
 
             name: Ident::new("quarter").empty_span(),
             columns: ["Q1", "Q2", "Q3", "Q4"]
                 .into_iter()
-                .map(|f| Ident::new(f).empty_span())
+                .map(|f| UnpivotInValue { columns: vec![Ident::new(f).empty_span()], alias: None })
                 .collect(),
             null_handling: None,
             alias: Some(TableAlias {
@@ -8606,11 +8606,11 @@ fn parse_pivot_unpivot_table() {
                     partitions: vec![],
                     with_ordinality: false,
                 }),
-                value: Ident::new("population").empty_span(),
+                value: vec![Ident::new("population").empty_span()],
                 name: Ident::new("year").empty_span(),
                 columns: ["population_2000", "population_2010"]
                     .into_iter()
-                    .map(|f| Ident::new(f).empty_span())
+                    .map(|f| UnpivotInValue { columns: vec![Ident::new(f).empty_span()], alias: None })
                     .collect(),
                 null_handling: None,
                 alias: Some(TableAlias {
