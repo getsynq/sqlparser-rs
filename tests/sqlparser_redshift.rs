@@ -531,3 +531,12 @@ fn test_revoke_with_group_grantee() {
         "REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users RESTRICT",
     );
 }
+
+#[test]
+fn test_minus_as_except() {
+    // MINUS is a Redshift/Oracle synonym for EXCEPT
+    redshift().one_statement_parses_to(
+        "SELECT foo, bar FROM table_1 MINUS SELECT foo, bar FROM table_2",
+        "SELECT foo, bar FROM table_1 EXCEPT SELECT foo, bar FROM table_2",
+    );
+}
