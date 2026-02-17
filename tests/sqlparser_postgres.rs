@@ -1207,6 +1207,7 @@ fn parse_set() {
                 }
                 .empty_span()
             )],
+            additional_assignments: vec![],
         }
     );
 
@@ -1218,6 +1219,7 @@ fn parse_set() {
             hivevar: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Value(Value::SingleQuotedString("b".into()))],
+            additional_assignments: vec![],
         }
     );
 
@@ -1229,6 +1231,7 @@ fn parse_set() {
             hivevar: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Value(number("0"))],
+            additional_assignments: vec![],
         }
     );
 
@@ -1246,6 +1249,7 @@ fn parse_set() {
                 }
                 .empty_span()
             )],
+            additional_assignments: vec![],
         }
     );
 
@@ -1257,6 +1261,7 @@ fn parse_set() {
             hivevar: false,
             variable: ObjectName(vec![Ident::new("a")]),
             value: vec![Expr::Identifier(Ident::new("b").empty_span())],
+            additional_assignments: vec![],
         }
     );
 
@@ -1274,6 +1279,7 @@ fn parse_set() {
                 }
                 .empty_span()
             )],
+            additional_assignments: vec![],
         }
     );
 
@@ -1294,6 +1300,7 @@ fn parse_set() {
                 Ident::new("parallelism")
             ]),
             value: vec![Expr::Value(Value::Boolean(false))],
+            additional_assignments: vec![],
         }
     );
 

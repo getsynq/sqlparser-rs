@@ -1487,6 +1487,52 @@ impl fmt::Display for UnloadSource {
 }
 
 /// A top-level statement (SELECT, INSERT, CREATE, etc.)
+/// A single variable assignment within a SET statement.
+/// Used for MySQL's comma-separated SET syntax:
+/// `SET @x = 1, SESSION sql_mode = ''`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SetVariableAssignment {
+    pub scope: Option<SetVariableScope>,
+    pub variable: ObjectName,
+    pub value: Vec<Expr>,
+}
+
+impl fmt::Display for SetVariableAssignment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(scope) = &self.scope {
+            write!(f, "{scope} ")?;
+        }
+        write!(
+            f,
+            "{name} = {value}",
+            name = self.variable,
+            value = display_comma_separated(&self.value)
+        )
+    }
+}
+
+/// Scope modifier for SET variable assignments
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SetVariableScope {
+    Session,
+    Local,
+    Global,
+}
+
+impl fmt::Display for SetVariableScope {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SetVariableScope::Session => write!(f, "SESSION"),
+            SetVariableScope::Local => write!(f, "LOCAL"),
+            SetVariableScope::Global => write!(f, "GLOBAL"),
+        }
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -1957,6 +2003,9 @@ pub enum Statement {
         hivevar: bool,
         variable: ObjectName,
         value: Vec<Expr>,
+        /// Additional comma-separated assignments in the same SET statement (MySQL).
+        /// e.g. `SET @x = 1, SESSION sql_mode = ''`
+        additional_assignments: Vec<SetVariableAssignment>,
     },
     /// ```sql
     /// SET TIME ZONE <value>
@@ -3490,6 +3539,7 @@ impl fmt::Display for Statement {
                 variable,
                 hivevar,
                 value,
+                additional_assignments,
             } => {
                 f.write_str("SET ")?;
                 if *local {
@@ -3501,7 +3551,11 @@ impl fmt::Display for Statement {
                     hivevar = if *hivevar { "HIVEVAR:" } else { "" },
                     name = variable,
                     value = display_comma_separated(value)
-                )
+                )?;
+                for assignment in additional_assignments {
+                    write!(f, ", {assignment}")?;
+                }
+                Ok(())
             }
             Statement::SetTimeZone { local, value } => {
                 f.write_str("SET ")?;
