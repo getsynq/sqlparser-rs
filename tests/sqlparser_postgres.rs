@@ -1772,6 +1772,7 @@ fn parse_pg_binary_ops() {
         (">>", BinaryOperator::PGBitwiseShiftRight, pg_and_generic()),
         ("<<", BinaryOperator::PGBitwiseShiftLeft, pg_and_generic()),
         ("&&", BinaryOperator::PGOverlap, pg()),
+        ("-|-", BinaryOperator::PGAdjacentTo, pg()),
     ];
 
     for (str_op, op, dialects) in binary_ops {
@@ -1789,6 +1790,11 @@ fn parse_pg_binary_ops() {
             select.projection[0]
         );
     }
+}
+
+#[test]
+fn parse_pg_range_adjacent_operator() {
+    pg().verified_stmt("SELECT NUMRANGE(1.1, 2.2) -|- NUMRANGE(2.2, 3.3)");
 }
 
 #[test]

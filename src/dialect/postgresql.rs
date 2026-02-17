@@ -10,7 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{CommentObject, Statement};
+use crate::ast::{BinaryOperator, CommentObject, Expr, Statement};
 use crate::dialect::Dialect;
 use crate::keywords::Keyword;
 use crate::parser::{Parser, ParserError};
@@ -49,6 +49,48 @@ impl Dialect for PostgreSqlDialect {
 
     fn supports_group_by_expr(&self) -> bool {
         true
+    }
+
+    fn get_next_precedence(&self, parser: &Parser) -> Option<Result<u8, ParserError>> {
+        // Detect `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
+        let tok0 = parser.peek_nth_token(0);
+        if tok0.token == Token::Minus {
+            let tok1 = parser.peek_nth_token(1);
+            let tok2 = parser.peek_nth_token(2);
+            if tok1.token == Token::Pipe && tok2.token == Token::Minus {
+                return Some(Ok(50)); // Same precedence as other range operators (&&, @>, <@)
+            }
+        }
+        None
+    }
+
+    fn parse_infix(
+        &self,
+        parser: &mut Parser,
+        expr: &Expr,
+        _precedence: u8,
+    ) -> Option<Result<Expr, ParserError>> {
+        // Parse `-|-` (range adjacency operator) as three tokens: Minus, Pipe, Minus
+        let tok0 = parser.peek_nth_token(0);
+        if tok0.token == Token::Minus {
+            let tok1 = parser.peek_nth_token(1);
+            let tok2 = parser.peek_nth_token(2);
+            if tok1.token == Token::Pipe && tok2.token == Token::Minus {
+                parser.next_token(); // consume `-`
+                parser.next_token(); // consume `|`
+                parser.next_token(); // consume `-`
+                return Some(
+                    parser
+                        .parse_subexpr(50)
+                        .map(|right| Expr::BinaryOp {
+                            left: Box::new(expr.clone()),
+                            op: BinaryOperator::PGAdjacentTo,
+                            right: Box::new(right),
+                        }),
+                );
+            }
+        }
+        None
     }
 }
 
