@@ -1541,6 +1541,20 @@ fn parse_explain_with_options() {
     );
 }
 
+#[test]
+fn test_clickhouse_trailing_commas() {
+    // ClickHouse supports trailing commas in SELECT
+    clickhouse().one_statement_parses_to(
+        "SELECT 1, 2, FROM t",
+        "SELECT 1, 2 FROM t",
+    );
+    // Trailing comma with FORMAT clause
+    clickhouse().one_statement_parses_to(
+        "SELECT (number, toDate('2019-05-20')), dictGetOrNull('range_key_dictionary', 'value', number, toDate('2019-05-20')), FROM system.numbers LIMIT 5 FORMAT TabSeparated",
+        "SELECT (number, toDate('2019-05-20')), dictGetOrNull('range_key_dictionary', 'value', number, toDate('2019-05-20')) FROM system.numbers LIMIT 5 FORMAT TabSeparated",
+    );
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],
