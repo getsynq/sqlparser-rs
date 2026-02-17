@@ -25,3 +25,5 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - name: Run tests
         run: cargo nextest run --all-features
+        env:
+          RUST_MIN_STACK: 8388608
