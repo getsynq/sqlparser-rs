@@ -6628,12 +6628,18 @@ impl<'a> Parser<'a> {
                     partition: Partition::Part(self.parse_expr()?),
                 }
             } else if self.parse_keyword(Keyword::PARTITION) {
-                self.expect_token(&Token::LParen)?;
-                let partitions = self.parse_comma_separated(Parser::parse_expr)?;
-                self.expect_token(&Token::RParen)?;
-                AlterTableOperation::DropPartitions {
-                    partitions,
-                    if_exists: false,
+                if self.peek_token().token == Token::LParen {
+                    self.expect_token(&Token::LParen)?;
+                    let partitions = self.parse_comma_separated(Parser::parse_expr)?;
+                    self.expect_token(&Token::RParen)?;
+                    AlterTableOperation::DropPartitions {
+                        partitions,
+                        if_exists: false,
+                    }
+                } else {
+                    AlterTableOperation::DropPartition {
+                        partition: Partition::Expr(self.parse_expr()?),
+                    }
                 }
             } else if self.parse_keyword(Keyword::CONSTRAINT) {
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
