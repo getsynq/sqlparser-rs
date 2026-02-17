@@ -455,4 +455,9 @@ fn test_redshift_unpivot_super() {
     redshift().verified_stmt(
         "SELECT col_1, col_2, SPLIT_PART(col_12, '_', 2) AS currency_code FROM tbl_1 AS tbl_1, UNPIVOT tbl_2.col_14 AS val AT attr",
     );
+
+    // UNPIVOT with CTE
+    redshift().verified_stmt(
+        "WITH cte AS (SELECT col_1, col_2 FROM tbl_5) SELECT col_1, col_2 FROM tbl_2 AS tbl_2, UNPIVOT tbl_1.col_6 AS carrier_logic AT carrier_id",
+    );
 }
