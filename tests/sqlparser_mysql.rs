@@ -1624,6 +1624,15 @@ fn parse_substring_in_select() {
 }
 
 #[test]
+fn parse_distinctrow() {
+    // DISTINCTROW is a MySQL synonym for DISTINCT
+    mysql_and_generic().one_statement_parses_to(
+        "SELECT DISTINCTROW tbl.col FROM tbl",
+        "SELECT DISTINCT tbl.col FROM tbl",
+    );
+}
+
+#[test]
 fn parse_show_variables() {
     mysql_and_generic().verified_stmt("SHOW VARIABLES");
     mysql_and_generic().verified_stmt("SHOW VARIABLES LIKE 'admin%'");

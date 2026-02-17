@@ -241,6 +241,7 @@ define_keywords!(
     DISCARD,
     DISCONNECT,
     DISTINCT,
+    DISTINCTROW,
     DISTKEY,
     DISTRIBUTE,
     DISTSTYLE,
