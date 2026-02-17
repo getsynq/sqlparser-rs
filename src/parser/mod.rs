@@ -6233,8 +6233,19 @@ impl<'a> Parser<'a> {
             Token::Word(w) if w.keyword == Keyword::PRIMARY || w.keyword == Keyword::UNIQUE => {
                 let is_primary = w.keyword == Keyword::PRIMARY;
 
-                // parse optional [KEY]
-                let _ = self.parse_keyword(Keyword::KEY);
+                // If PRIMARY is not preceded by CONSTRAINT and the next token is not KEY or (,
+                // then PRIMARY is being used as a column name, not a constraint keyword.
+                if is_primary && name.is_none() {
+                    let has_key = self.parse_keyword(Keyword::KEY);
+                    if !has_key && !matches!(self.peek_token().token, Token::LParen) {
+                        // Not a constraint — backtrack and let it be parsed as a column name
+                        self.prev_token(); // back to PRIMARY
+                        return Ok(None);
+                    }
+                } else {
+                    // parse optional [KEY]
+                    let _ = self.parse_keyword(Keyword::KEY);
+                }
 
                 // optional constraint name
                 let name = self

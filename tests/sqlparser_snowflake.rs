@@ -1997,3 +1997,11 @@ fn parse_create_sequence_with() {
         "CREATE SEQUENCE seq1 START 1 INCREMENT 1 ORDER",
     );
 }
+
+#[test]
+fn test_primary_as_column_name() {
+    // PRIMARY is a keyword but should be usable as a column name
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE t1 (id VARCHAR(16777216), PRIMARY VARCHAR(16777216))",
+    );
+}
