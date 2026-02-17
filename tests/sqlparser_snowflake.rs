@@ -1669,6 +1669,11 @@ fn test_describe_object_types() {
         "DESC FUNCTION governance.dmfs.count_positive_numbers(TABLE(NUMBER, NUMBER, NUMBER))",
         "DESCRIBE FUNCTION governance.dmfs.count_positive_numbers(TABLE(NUMBER, NUMBER, NUMBER))",
     );
+    // DESCRIBE TABLE with type=stage option
+    snowflake().one_statement_parses_to(
+        r#"DESCRIBE TABLE "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF100TCL"."WEB_SITE" type=stage"#,
+        r#"DESCRIBE TABLE "SNOWFLAKE_SAMPLE_DATA"."TPCDS_SF100TCL"."WEB_SITE" type = stage"#,
+    );
 }
 
 #[test]

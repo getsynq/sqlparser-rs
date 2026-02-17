@@ -3846,6 +3846,7 @@ fn parse_explain_table() {
             object_type: _,
             function_params: _,
             format: _,
+            options: _,
         } => {
             assert_eq!(describe_alias, expected_describe_alias);
             assert_eq!("test_identifier", table_name.to_string());

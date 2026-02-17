@@ -8398,6 +8398,26 @@ impl<'a> Parser<'a> {
                         None
                     };
 
+                // Snowflake: DESCRIBE TABLE tab type=stage
+                // Parse key=value options (identifier followed by = and value)
+                let mut options = vec![];
+                while let Token::Word(w) = &self.peek_token_ref().token {
+                    if w.keyword == Keyword::FORMAT {
+                        break; // FORMAT is handled separately below
+                    }
+                    if self.peek_nth_token_ref(1).token == Token::Eq {
+                        let name = self.parse_object_name(false)?;
+                        self.expect_token(&Token::Eq)?;
+                        let value = self.parse_expr()?;
+                        options.push(SqlOption { name, value });
+                        if !self.consume_token(&Token::Comma) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
                 // ClickHouse: DESCRIBE TABLE tab FORMAT Vertical
                 let format = if self.parse_keyword(Keyword::FORMAT) {
                     Some(self.parse_identifier(false)?.unwrap())
@@ -8411,6 +8431,7 @@ impl<'a> Parser<'a> {
                     function_params,
                     table_name,
                     format,
+                    options,
                 })
             }
         }
