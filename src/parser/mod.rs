@@ -10630,11 +10630,42 @@ impl<'a> Parser<'a> {
             None
         };
         self.expect_token(&Token::LParen)?;
-        let value = self.parse_identifier(false)?;
+
+        // Parse value column(s): either a single identifier or a parenthesized list
+        let value = if self.peek_token().token == Token::LParen {
+            self.expect_token(&Token::LParen)?;
+            let cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+            self.expect_token(&Token::RParen)?;
+            cols
+        } else {
+            vec![self.parse_identifier(false)?]
+        };
+
         self.expect_keyword(Keyword::FOR)?;
         let name = self.parse_identifier(false)?;
         self.expect_keyword(Keyword::IN)?;
-        let columns = self.parse_parenthesized_column_list(Mandatory, false)?;
+
+        // Parse IN clause: (entry1, entry2, ...)
+        // Each entry can be a single column or (col1, col2, ...) [AS alias]
+        self.expect_token(&Token::LParen)?;
+        let columns = self.parse_comma_separated(|p| {
+            if p.peek_token().token == Token::LParen {
+                p.expect_token(&Token::LParen)?;
+                let cols = p.parse_comma_separated(|pp| pp.parse_identifier(false))?;
+                p.expect_token(&Token::RParen)?;
+                let alias = if p.parse_keyword(Keyword::AS) {
+                    Some(p.parse_value()?)
+                } else {
+                    None
+                };
+                Ok(UnpivotInValue { columns: cols, alias })
+            } else {
+                let col = p.parse_identifier(false)?;
+                Ok(UnpivotInValue { columns: vec![col], alias: None })
+            }
+        })?;
+        self.expect_token(&Token::RParen)?;
+
         self.expect_token(&Token::RParen)?;
         let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
         Ok(TableFactor::Unpivot {
