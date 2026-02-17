@@ -499,6 +499,12 @@ fn test_grant_with_group_grantee() {
         "GRANT SELECT (cust_name, cust_phone), UPDATE (cust_contact_preference) ON cust_profile TO GROUP sales_group",
     );
 
+    // GRANT with column-level privileges (no space before parentheses)
+    redshift().one_statement_parses_to(
+        "GRANT SELECT(cust_name, cust_phone), UPDATE(cust_contact_preference) ON cust_profile TO GROUP sales_group",
+        "GRANT SELECT (cust_name, cust_phone), UPDATE (cust_contact_preference) ON cust_profile TO GROUP sales_group",
+    );
+
     // Verify AST structure
     match redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users") {
         Statement::Grant {
