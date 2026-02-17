@@ -1029,6 +1029,26 @@ impl<'a> Parser<'a> {
                         }
                     };
                 self.expect_token(&Token::RParen)?;
+                // If the nested expression is a function without an OVER clause,
+                // and the next token is OVER, unwrap the nesting and attach
+                // the OVER clause to the function. This handles patterns like:
+                // (BOOLOR_AGG(col)) OVER (PARTITION BY x)
+                let expr = match expr {
+                    Expr::Nested(inner) if matches!(inner.as_ref(), Expr::Function(f) if f.over.is_none()) => {
+                        if let Expr::Function(mut func) = *inner {
+                            let over = self.parse_over()?;
+                            if over.is_some() {
+                                func.over = over;
+                                Expr::Function(func)
+                            } else {
+                                Expr::Nested(Box::new(Expr::Function(func)))
+                            }
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    _ => expr,
+                };
                 if !self.consume_token(&Token::Period) {
                     Ok(expr)
                 } else {
