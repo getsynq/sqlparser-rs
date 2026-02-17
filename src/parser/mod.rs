@@ -9383,6 +9383,13 @@ impl<'a> Parser<'a> {
                         constraint,
                     },
                 }
+            } else if self.parse_keyword(Keyword::STRAIGHT_JOIN) {
+                let relation = self.parse_table_factor()?;
+                let join_constraint = self.parse_join_constraint(false)?;
+                Join {
+                    relation,
+                    join_operator: JoinOperator::StraightJoin(join_constraint),
+                }
             } else {
                 let natural = self.parse_keyword(Keyword::NATURAL);
                 let peek_keyword = if let Token::Word(w) = self.peek_token_kind().clone() {

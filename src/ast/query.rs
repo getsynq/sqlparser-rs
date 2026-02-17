@@ -1370,6 +1370,12 @@ impl fmt::Display for Join {
                 match_condition,
                 suffix(constraint)
             ),
+            JoinOperator::StraightJoin(constraint) => write!(
+                f,
+                " STRAIGHT_JOIN {}{}",
+                self.relation,
+                suffix(constraint)
+            ),
         }
     }
 }
@@ -1402,6 +1408,8 @@ pub enum JoinOperator {
         match_condition: Expr,
         constraint: JoinConstraint,
     },
+    /// STRAIGHT_JOIN (MySQL)
+    StraightJoin(JoinConstraint),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
