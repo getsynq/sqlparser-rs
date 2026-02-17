@@ -1251,6 +1251,35 @@ fn test_snowflake_stage_object_names() {
 }
 
 #[test]
+fn test_snowflake_stage_with_quoted_identifiers() {
+    // Stage paths with quoted identifiers should be collapsed into a single Ident
+    // just like unquoted stage paths (e.g., @namespace.stage/path).
+    let sql = r#"SELECT * FROM @"myschema"."mystage"/file.gz"#;
+    let select = snowflake().verified_only_select(sql);
+    match &select.from[0].relation {
+        TableFactor::Table { name, .. } => {
+            assert_eq!(
+                name.0,
+                vec![Ident::new(r#"@"myschema"."mystage"/file.gz"#)]
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    let sql2 = r#"SELECT * FROM @"my_DB"."schEMA1".mystage/file.gz"#;
+    let select2 = snowflake().verified_only_select(sql2);
+    match &select2.from[0].relation {
+        TableFactor::Table { name, .. } => {
+            assert_eq!(
+                name.0,
+                vec![Ident::new(r#"@"my_DB"."schEMA1".mystage/file.gz"#)]
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn test_snowflake_trim() {
     let real_sql = r#"SELECT customer_id, TRIM(sub_items.value:item_price_id, '"', "a") AS item_price_id FROM models_staging.subscriptions"#;
     assert_eq!(snowflake().verified_stmt(real_sql).to_string(), real_sql);
