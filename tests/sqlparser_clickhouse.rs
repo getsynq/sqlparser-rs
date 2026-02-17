@@ -1561,6 +1561,38 @@ fn parse_execute_as() {
     clickhouse().verified_stmt("EXECUTE AS u1");
 }
 
+#[test]
+fn parse_columns_with_apply_transformers() {
+    // ClickHouse COLUMNS('pattern') APPLY(func) syntax
+    // https://clickhouse.com/docs/en/sql-reference/statements/select#columns-expression
+    clickhouse().verified_stmt(
+        "SELECT COLUMNS('[jk]') APPLY(toString) APPLY(length) APPLY(max) FROM columns_transformers",
+    );
+
+    // Single APPLY
+    clickhouse().verified_stmt(
+        "SELECT COLUMNS('[jk]') APPLY(toString) FROM columns_transformers",
+    );
+
+    // Verify AST structure
+    let sql = "SELECT COLUMNS('[jk]') APPLY(toString) FROM columns_transformers";
+    let select = clickhouse().verified_only_select(sql);
+    match select.projection[0].clone().unwrap() {
+        SelectItem::ColumnsWithTransformers {
+            ref columns,
+            ref transformers,
+        } => {
+            assert!(matches!(columns, Expr::Function(_)));
+            assert_eq!(transformers.len(), 1);
+            assert_eq!(
+                transformers[0],
+                ColumnTransformer::Apply(Ident::new("toString"))
+            );
+        }
+        _ => panic!("Expected ColumnsWithTransformers"),
+    }
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],

@@ -10581,6 +10581,19 @@ impl<'a> Parser<'a> {
                 } else {
                     expr
                 };
+
+                // ClickHouse COLUMNS('pattern') APPLY(func) ... syntax
+                if dialect_of!(self is ClickHouseDialect | GenericDialect) && self.is_columns_function_call(&expr) {
+                    let transformers = self.parse_column_transformers()?;
+                    if !transformers.is_empty() {
+                        return Ok(SelectItem::ColumnsWithTransformers {
+                            columns: expr,
+                            transformers,
+                        }
+                        .spanning(self.span_from_index(start_span)));
+                    }
+                }
+
                 let expr_with_location = expr.spanning(self.span_from_index(start_span));
                 self.parse_optional_alias(keywords::RESERVED_FOR_COLUMN_ALIAS)
                     .map(|alias| match alias {
@@ -10677,6 +10690,47 @@ impl<'a> Parser<'a> {
             opt_rename,
             opt_replace,
         })
+    }
+
+    /// Check if an expression is a COLUMNS function call (for ClickHouse column transformers)
+    fn is_columns_function_call(&self, expr: &Expr) -> bool {
+        matches!(expr, Expr::Function(func) if func.name.to_string().eq_ignore_ascii_case("columns"))
+    }
+
+    /// Parse ClickHouse column transformers: `APPLY(func)`, `EXCEPT(col, ...)`, `REPLACE(expr AS col, ...)`
+    fn parse_column_transformers(&mut self) -> Result<Vec<ColumnTransformer>, ParserError> {
+        let mut transformers = Vec::new();
+        loop {
+            if self.parse_keyword(Keyword::APPLY) {
+                self.expect_token(&Token::LParen)?;
+                let func_name = self.parse_identifier(false)?.unwrap();
+                self.expect_token(&Token::RParen)?;
+                transformers.push(ColumnTransformer::Apply(func_name));
+            } else if self.parse_keyword(Keyword::EXCEPT) {
+                self.expect_token(&Token::LParen)?;
+                let cols =
+                    self.parse_comma_separated(|p| Ok(p.parse_identifier(false)?.unwrap()))?;
+                self.expect_token(&Token::RParen)?;
+                transformers.push(ColumnTransformer::Except(cols));
+            } else if self.parse_keyword(Keyword::REPLACE) {
+                self.expect_token(&Token::LParen)?;
+                let items = self.parse_comma_separated(|p| {
+                    let expr = p.parse_expr()?;
+                    p.expect_keyword(Keyword::AS)?;
+                    let alias = p.parse_identifier(false)?;
+                    let start_span = p.index;
+                    Ok(SelectItem::ExprWithAlias {
+                        expr: expr.spanning(p.span_from_index(start_span)),
+                        alias,
+                    })
+                })?;
+                self.expect_token(&Token::RParen)?;
+                transformers.push(ColumnTransformer::Replace(items));
+            } else {
+                break;
+            }
+        }
+        Ok(transformers)
     }
 
     /// Parse an [`Exclude`](ExcludeSelectItem) information for wildcard select items.
