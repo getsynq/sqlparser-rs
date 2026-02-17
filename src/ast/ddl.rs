@@ -77,9 +77,7 @@ pub enum AlterTableOperation {
     /// `DROP PART|PARTITION <partition_expr>`
     /// Note: this is a ClickHouse-specific operation, please refer to
     /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/alter/partition#drop-partitionpart)
-    DropPartition {
-        partition: Partition,
-    },
+    DropPartition { partition: Partition },
     /// `DROP PRIMARY KEY`
     ///
     /// Note: this is a MySQL-specific operation.

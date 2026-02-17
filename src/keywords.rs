@@ -88,6 +88,7 @@ define_keywords!(
     ANY,
     APPLICATION,
     APPLY,
+    APPROXIMATE,
     ARCHIVE,
     ARE,
     ARRAY,

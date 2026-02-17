@@ -845,11 +845,9 @@ impl<'a> Tokenizer<'a> {
                 }
                 // numbers and period
                 '0'..='9' | '.' => {
-                    let numeric_underscore =
-                        self.dialect.supports_numeric_literal_underscores();
-                    let digit_pred = |ch: char| {
-                        ch.is_ascii_digit() || (numeric_underscore && ch == '_')
-                    };
+                    let numeric_underscore = self.dialect.supports_numeric_literal_underscores();
+                    let digit_pred =
+                        |ch: char| ch.is_ascii_digit() || (numeric_underscore && ch == '_');
 
                     let mut s = peeking_take_while(chars, digit_pred);
 
@@ -896,8 +894,7 @@ impl<'a> Tokenizer<'a> {
                                 for _ in 0..exponent_part.len() {
                                     chars.next();
                                 }
-                                exponent_part +=
-                                    &peeking_take_while(chars, digit_pred);
+                                exponent_part += &peeking_take_while(chars, digit_pred);
                                 s += exponent_part.as_str();
                             }
                             // Not an exponent, discard the work done

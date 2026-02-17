@@ -291,6 +291,7 @@ fn parse_delimited_identifiers() {
             parameters: None,
             over: None,
             distinct: false,
+            approximate: false,
             special: false,
             order_by: vec![],
             limit: None,

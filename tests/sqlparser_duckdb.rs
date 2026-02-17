@@ -303,18 +303,10 @@ fn test_select_union_by_name() {
 #[test]
 fn test_numeric_literal_underscores() {
     // Underscores in numeric literals are stripped during tokenization
-    duckdb_and_generic().one_statement_parses_to(
-        "SELECT 1_000_000",
-        "SELECT 1000000",
-    );
-    duckdb_and_generic().one_statement_parses_to(
-        "SELECT 1_2E+1_0::FLOAT",
-        "SELECT CAST(12E+10 AS FLOAT)",
-    );
-    duckdb_and_generic().one_statement_parses_to(
-        "SELECT 1_000.50_0",
-        "SELECT 1000.500",
-    );
+    duckdb_and_generic().one_statement_parses_to("SELECT 1_000_000", "SELECT 1000000");
+    duckdb_and_generic()
+        .one_statement_parses_to("SELECT 1_2E+1_0::FLOAT", "SELECT CAST(12E+10 AS FLOAT)");
+    duckdb_and_generic().one_statement_parses_to("SELECT 1_000.50_0", "SELECT 1000.500");
 }
 
 #[test]
@@ -346,18 +338,12 @@ fn test_prefix_alias_colon_from() {
 
 #[test]
 fn test_prefix_alias_colon_from_simple() {
-    duckdb().one_statement_parses_to(
-        "SELECT * FROM foo: bar",
-        "SELECT * FROM bar AS foo",
-    );
+    duckdb().one_statement_parses_to("SELECT * FROM foo: bar", "SELECT * FROM bar AS foo");
 }
 
 #[test]
 fn test_prefix_alias_colon_from_function() {
-    duckdb().one_statement_parses_to(
-        "SELECT * FROM r: range(10)",
-        "SELECT * FROM range(10) AS r",
-    );
+    duckdb().one_statement_parses_to("SELECT * FROM r: range(10)", "SELECT * FROM range(10) AS r");
 }
 
 #[test]
@@ -390,10 +376,7 @@ fn test_from_first_subquery() {
 
 #[test]
 fn test_from_first_with_where() {
-    duckdb().one_statement_parses_to(
-        "FROM tbl WHERE x > 1",
-        "SELECT * FROM tbl WHERE x > 1",
-    );
+    duckdb().one_statement_parses_to("FROM tbl WHERE x > 1", "SELECT * FROM tbl WHERE x > 1");
 }
 
 #[test]

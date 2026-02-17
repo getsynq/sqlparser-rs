@@ -1231,6 +1231,7 @@ fn parse_map_access_offset() {
                     parameters: None,
                     over: None,
                     distinct: false,
+                    approximate: false,
                     special: false,
                     order_by: vec![],
                     limit: None,
@@ -1345,6 +1346,7 @@ fn test_select_json_field() {
                             parameters: None,
                             over: None,
                             distinct: false,
+                            approximate: false,
                             special: false,
                             order_by: vec![],
                             limit: None,
@@ -1361,6 +1363,7 @@ fn test_select_json_field() {
                 parameters: None,
                 over: None,
                 distinct: false,
+                approximate: false,
                 special: false,
                 order_by: vec![],
                 limit: None,
@@ -1644,7 +1647,6 @@ fn parse_wildcard_table() {
         "SELECT * FROM `project.dataset.table_prefix*`",
         "SELECT * FROM `project`.`dataset`.`table_prefix*`",
     );
-    bigquery().verified_stmt(
-        "SELECT * FROM x.y* WHERE _TABLE_SUFFIX BETWEEN '20230101' AND '20231231'",
-    );
+    bigquery()
+        .verified_stmt("SELECT * FROM x.y* WHERE _TABLE_SUFFIX BETWEEN '20230101' AND '20231231'");
 }

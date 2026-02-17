@@ -57,6 +57,7 @@ fn parse_array_access_expr() {
                         parameters: None,
                         over: None,
                         distinct: false,
+                        approximate: false,
                         special: false,
                         order_by: vec![],
                         limit: None,
@@ -106,6 +107,7 @@ fn parse_array_access_expr() {
                                 parameters: None,
                                 over: None,
                                 distinct: false,
+                                approximate: false,
                                 special: false,
                                 order_by: vec![],
                                 limit: None,
@@ -167,6 +169,7 @@ fn parse_array_fn() {
             parameters: None,
             over: None,
             distinct: false,
+            approximate: false,
             special: false,
             order_by: vec![],
             limit: None,
@@ -268,6 +271,7 @@ fn parse_delimited_identifiers() {
             parameters: None,
             over: None,
             distinct: false,
+            approximate: false,
             special: false,
             order_by: vec![],
             limit: None,
@@ -590,9 +594,7 @@ fn parse_alter_table_attach_and_detach_partition() {
 #[test]
 fn parse_alter_table_drop_partition_and_part() {
     // DROP PART 'part_name'
-    match clickhouse_and_generic()
-        .verified_stmt("ALTER TABLE mt DROP PART 'all_4_4_0'")
-    {
+    match clickhouse_and_generic().verified_stmt("ALTER TABLE mt DROP PART 'all_4_4_0'") {
         Statement::AlterTable {
             name, operations, ..
         } => {
@@ -654,6 +656,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
+                                approximate: false,
                                 special: false,
                                 order_by: vec![],
                                 limit: None,
@@ -680,6 +683,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
+                                approximate: false,
                                 special: false,
                                 order_by: vec![],
                                 limit: None,
@@ -722,6 +726,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 null_treatment: None,
                                 over: None,
                                 distinct: false,
+                                approximate: false,
                                 special: false,
                                 order_by: vec![],
                                 limit: None,
@@ -1544,10 +1549,7 @@ fn parse_explain_with_options() {
 #[test]
 fn test_clickhouse_trailing_commas() {
     // ClickHouse supports trailing commas in SELECT
-    clickhouse().one_statement_parses_to(
-        "SELECT 1, 2, FROM t",
-        "SELECT 1, 2 FROM t",
-    );
+    clickhouse().one_statement_parses_to("SELECT 1, 2, FROM t", "SELECT 1, 2 FROM t");
     // Trailing comma with FORMAT clause
     clickhouse().one_statement_parses_to(
         "SELECT (number, toDate('2019-05-20')), dictGetOrNull('range_key_dictionary', 'value', number, toDate('2019-05-20')), FROM system.numbers LIMIT 5 FORMAT TabSeparated",
@@ -1570,9 +1572,7 @@ fn parse_columns_with_apply_transformers() {
     );
 
     // Single APPLY
-    clickhouse().verified_stmt(
-        "SELECT COLUMNS('[jk]') APPLY(toString) FROM columns_transformers",
-    );
+    clickhouse().verified_stmt("SELECT COLUMNS('[jk]') APPLY(toString) FROM columns_transformers");
 
     // Verify AST structure
     let sql = "SELECT COLUMNS('[jk]') APPLY(toString) FROM columns_transformers";
