@@ -411,3 +411,21 @@ fn test_positional_reference() {
     duckdb().verified_stmt("SELECT #2 AS a, #1 AS b FROM (VALUES (1, 'foo'))");
     duckdb().verified_stmt("SELECT #2, #1 FROM (VALUES (1, 'foo'))");
 }
+
+#[test]
+fn test_escaped_string_literal() {
+    // DuckDB supports e'...' escape string syntax
+    let sql = r"SELECT E'Hello\nworld'";
+    let select = duckdb().verified_only_select(sql);
+    assert_eq!(
+        &Expr::Value(Value::EscapedStringLiteral("Hello\nworld".to_string())),
+        expr_from_projection(&select.projection[0])
+    );
+
+    duckdb().verified_only_select(r"SELECT E'\t'");
+    duckdb().verified_only_select(r"SELECT E'\n'");
+    duckdb().one_statement_parses_to(
+        r"SELECT e'\n'",
+        r"SELECT E'\n'",
+    );
+}
