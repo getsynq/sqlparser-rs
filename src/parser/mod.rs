@@ -7652,8 +7652,10 @@ impl<'a> Parser<'a> {
 
         // BigQuery supports wildcard tables: `FROM dataset.table_prefix*`
         // https://cloud.google.com/bigquery/docs/querying-wildcard-tables
+        // PostgreSQL supports table inheritance: `FROM parent_table*`
+        // https://www.postgresql.org/docs/current/ddl-inherit.html
         if in_table_clause
-            && dialect_of!(self is BigQueryDialect | GenericDialect)
+            && dialect_of!(self is BigQueryDialect | PostgreSqlDialect | GenericDialect)
             && self.consume_token(&Token::Mul)
         {
             if let Some(last) = idents.last_mut() {
