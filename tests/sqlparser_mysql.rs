@@ -1962,3 +1962,11 @@ fn parse_regexp() {
     mysql_and_generic().verified_stmt(r#"SELECT v FROM strings WHERE v REGEXP 'San* [fF].*'"#);
     mysql_and_generic().verified_stmt(r#"SELECT 'Michael!' REGEXP '.*'"#);
 }
+
+#[test]
+fn parse_variable_assignment_operator() {
+    // MySQL user-defined variable assignment with :=
+    mysql_and_generic().verified_stmt("SELECT @var1 := COUNT(*) FROM t1");
+    mysql_and_generic().verified_stmt("SELECT @var1, @var2 := @var1");
+    mysql_and_generic().verified_stmt("SELECT @var1 := 1, @var2");
+}
