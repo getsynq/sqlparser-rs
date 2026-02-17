@@ -2280,9 +2280,7 @@ pub enum Statement {
     ///
     /// ClickHouse-specific statement for user impersonation.
     /// See: <https://clickhouse.com/docs/sql-reference/functions/other-functions>
-    ExecuteAs {
-        user: WithSpan<Ident>,
-    },
+    ExecuteAs { user: WithSpan<Ident> },
     /// ```sql
     /// PREPARE name [ ( data_type [, ...] ) ] AS statement
     /// ```
@@ -4579,6 +4577,8 @@ pub struct Function {
     pub over: Option<WindowType>,
     // aggregate functions may specify eg `COUNT(DISTINCT x)`
     pub distinct: bool,
+    // Redshift's APPROXIMATE prefix, e.g. `APPROXIMATE COUNT(DISTINCT x)`
+    pub approximate: bool,
     // Some functions must be called without trailing parentheses, for example Postgres
     // do it for current_catalog, current_schema, etc. This flags is used for formatting.
     pub special: bool,
@@ -4622,6 +4622,8 @@ impl fmt::Display for Function {
         if self.special {
             write!(f, "{}", self.name)?;
         } else {
+            let approximate = if self.approximate { "APPROXIMATE " } else { "" };
+
             let order_by: String = if !self.order_by.is_empty() {
                 format!(" ORDER BY {}", display_comma_separated(&self.order_by))
             } else {
@@ -4652,7 +4654,7 @@ impl fmt::Display for Function {
             if let Some(ref parameters) = self.parameters {
                 write!(
                     f,
-                    "{}({})({}{}{}{}{})",
+                    "{approximate}{}({})({}{}{}{}{})",
                     self.name,
                     display_comma_separated(parameters),
                     if self.distinct { "DISTINCT " } else { "" },
@@ -4665,7 +4667,7 @@ impl fmt::Display for Function {
             } else {
                 write!(
                     f,
-                    "{}({}{}{order_by}{limit}{on_overflow}){null_treatment}",
+                    "{approximate}{}({}{}{order_by}{limit}{on_overflow}){null_treatment}",
                     self.name,
                     if self.distinct { "DISTINCT " } else { "" },
                     display_comma_separated(&self.args),

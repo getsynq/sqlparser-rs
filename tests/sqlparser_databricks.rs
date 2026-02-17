@@ -302,14 +302,9 @@ fn test_json_path_with_colon() {
 #[test]
 fn test_try_cast_operator() {
     // ?:: is a try cast operator in Databricks, equivalent to TRY_CAST
-    databricks().one_statement_parses_to(
-        "SELECT '20'?::INTEGER",
-        "SELECT TRY_CAST('20' AS INTEGER)",
-    );
+    databricks()
+        .one_statement_parses_to("SELECT '20'?::INTEGER", "SELECT TRY_CAST('20' AS INTEGER)");
 
     // Chaining with regular cast
-    databricks().one_statement_parses_to(
-        "SELECT col?::VARCHAR",
-        "SELECT TRY_CAST(col AS VARCHAR)",
-    );
+    databricks().one_statement_parses_to("SELECT col?::VARCHAR", "SELECT TRY_CAST(col AS VARCHAR)");
 }

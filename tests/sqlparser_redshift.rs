@@ -158,6 +158,7 @@ fn parse_delimited_identifiers() {
             parameters: None,
             over: None,
             distinct: false,
+            approximate: false,
             special: false,
             order_by: vec![],
             limit: None,
@@ -507,10 +508,7 @@ fn test_grant_with_group_grantee() {
 
     // Verify AST structure
     match redshift().verified_stmt("GRANT ALL ON SCHEMA qa_tickit TO GROUP qa_users") {
-        Statement::Grant {
-            grantees,
-            ..
-        } => {
+        Statement::Grant { grantees, .. } => {
             assert_eq!(1, grantees.len());
             assert_eq!(Some(GranteesType::Group), grantees[0].grantee_type);
             assert_eq!("qa_users", grantees[0].name.value);
@@ -522,8 +520,7 @@ fn test_grant_with_group_grantee() {
 #[test]
 fn test_revoke_with_group_grantee() {
     // With explicit RESTRICT
-    redshift()
-        .verified_stmt("REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users RESTRICT");
+    redshift().verified_stmt("REVOKE ALL ON SCHEMA qa_tickit FROM GROUP qa_users RESTRICT");
 
     // Without CASCADE/RESTRICT (defaults to RESTRICT in output)
     redshift().one_statement_parses_to(
@@ -539,4 +536,19 @@ fn test_minus_as_except() {
         "SELECT foo, bar FROM table_1 MINUS SELECT foo, bar FROM table_2",
         "SELECT foo, bar FROM table_1 EXCEPT SELECT foo, bar FROM table_2",
     );
+}
+
+#[test]
+fn test_approximate_count() {
+    // Redshift supports APPROXIMATE COUNT(DISTINCT x) for approximate count distinct
+    let sql = "SELECT APPROXIMATE COUNT(DISTINCT y)";
+    let select = redshift().verified_only_select(sql);
+    match expr_from_projection(&select.projection[0]) {
+        Expr::Function(func) => {
+            assert!(func.approximate);
+            assert!(func.distinct);
+            assert_eq!(func.name.to_string(), "COUNT");
+        }
+        _ => panic!("Expected Function"),
+    }
 }

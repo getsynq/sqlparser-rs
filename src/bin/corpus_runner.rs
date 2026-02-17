@@ -16,7 +16,9 @@ const REPORT_PATH: &str = "target/corpus-report.json";
 /// Uses the part after the last `_` as the dialect (e.g., `sqlglot_bigquery` -> `bigquery`,
 /// `customer_bigquery` -> `bigquery`). If no `_` exists, uses the whole name.
 fn normalize_dialect_name(name: &str) -> &str {
-    name.rsplit_once('_').map(|(_, suffix)| suffix).unwrap_or(name)
+    name.rsplit_once('_')
+        .map(|(_, suffix)| suffix)
+        .unwrap_or(name)
 }
 
 fn dialect_for_name(name: &str) -> Option<Box<dyn sqlparser::dialect::Dialect>> {
@@ -360,5 +362,4 @@ fn main() {
             (*passed as f64 / total_d as f64) * 100.0
         );
     }
-
 }

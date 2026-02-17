@@ -839,6 +839,7 @@ impl<'a> Parser<'a> {
                         parameters: None,
                         over: None,
                         distinct: false,
+                        approximate: false,
                         special: true,
                         order_by: vec![],
                         limit: None,
@@ -888,9 +889,7 @@ impl<'a> Parser<'a> {
                     self.parse_array_subquery()
                 }
                 // DuckDB MAP literal: MAP {'key': value, ...}
-                Keyword::MAP if self.peek_token_is(&Token::LBrace) => {
-                    self.parse_map_literal()
-                }
+                Keyword::MAP if self.peek_token_is(&Token::LBrace) => self.parse_map_literal(),
                 Keyword::NOT => self.parse_not(),
                 Keyword::MATCH if dialect_of!(self is MySqlDialect | GenericDialect) => {
                     self.parse_match_against()
@@ -899,6 +898,21 @@ impl<'a> Parser<'a> {
                 {
                     self.prev_token();
                     self.parse_bigquery_struct_literal()
+                }
+                // Redshift: APPROXIMATE COUNT(DISTINCT x)
+                Keyword::APPROXIMATE
+                    if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+                        && matches!(self.peek_token_kind(), Token::Word(_)) =>
+                {
+                    // Parse the following function call and set approximate = true
+                    let expr = self.parse_prefix()?;
+                    match expr {
+                        Expr::Function(mut func) => {
+                            func.approximate = true;
+                            Ok(Expr::Function(func))
+                        }
+                        _ => self.expected("a function call after APPROXIMATE", self.peek_token()),
+                    }
                 }
                 // Here `w` is a word, check if it's a part of a multi-part
                 // identifier, a function call, or a simple identifier:
@@ -1116,6 +1130,7 @@ impl<'a> Parser<'a> {
             parameters,
             over,
             distinct,
+            approximate: false,
             special: false,
             order_by,
             limit,
@@ -1141,6 +1156,7 @@ impl<'a> Parser<'a> {
             parameters: None,
             over: None,
             distinct: false,
+            approximate: false,
             special,
             order_by,
             limit,
@@ -1463,6 +1479,7 @@ impl<'a> Parser<'a> {
                 parameters: None,
                 over: None,
                 distinct: false,
+                approximate: false,
                 special: false,
                 order_by: vec![],
                 limit: None,
@@ -1589,6 +1606,7 @@ impl<'a> Parser<'a> {
                 parameters: None,
                 over: None,
                 distinct: false,
+                approximate: false,
                 special: false,
                 order_by: vec![],
                 limit: None,
@@ -2481,13 +2499,11 @@ impl<'a> Parser<'a> {
                         self.expected("Expected Token::Word after AT", tok)
                     }
                 }
-                Keyword::OVERLAPS => {
-                    Ok(Expr::BinaryOp {
-                        left: Box::new(expr),
-                        op: BinaryOperator::Overlaps,
-                        right: Box::new(self.parse_subexpr(Self::BETWEEN_PREC)?),
-                    })
-                }
+                Keyword::OVERLAPS => Ok(Expr::BinaryOp {
+                    left: Box::new(expr),
+                    op: BinaryOperator::Overlaps,
+                    right: Box::new(self.parse_subexpr(Self::BETWEEN_PREC)?),
+                }),
                 Keyword::NOT
                 | Keyword::IN
                 | Keyword::BETWEEN
@@ -2896,7 +2912,11 @@ impl<'a> Parser<'a> {
             }
             Token::DoubleColon => Ok(50),
             // ?:: is a try cast operator (e.g., Databricks)
-            Token::Placeholder(ref s) if s == "?" && self.peek_nth_token(1).token == Token::DoubleColon => Ok(50),
+            Token::Placeholder(ref s)
+                if s == "?" && self.peek_nth_token(1).token == Token::DoubleColon =>
+            {
+                Ok(50)
+            }
             Token::Colon => Ok(50),
             Token::ExclamationMark => Ok(50),
             Token::Number(s, _) if s.starts_with(".") => Ok(50),
@@ -3316,7 +3336,8 @@ impl<'a> Parser<'a> {
         // This pattern could be captured better with RAII type semantics, but it's quite a bit of
         // code to add for just one case, so we'll just do it manually here.
         let old_value = self.options.trailing_commas;
-        self.options.trailing_commas |= dialect_of!(self is BigQueryDialect | SnowflakeDialect | ClickHouseDialect);
+        self.options.trailing_commas |=
+            dialect_of!(self is BigQueryDialect | SnowflakeDialect | ClickHouseDialect);
 
         let ret = self.parse_comma_separated(|p| p.parse_select_item());
         self.options.trailing_commas = old_value;
@@ -4741,8 +4762,8 @@ impl<'a> Parser<'a> {
             );
         };
         // PostgreSQL supports CONCURRENTLY for DROP INDEX
-        let concurrently = object_type == ObjectType::Index
-            && self.parse_keyword(Keyword::CONCURRENTLY);
+        let concurrently =
+            object_type == ObjectType::Index && self.parse_keyword(Keyword::CONCURRENTLY);
 
         // Many dialects support the non standard `IF EXISTS` clause and allow
         // specifying multiple objects to delete in a single statement
@@ -6602,6 +6623,7 @@ impl<'a> Parser<'a> {
                 within_group: None,
                 over: None,
                 distinct: false,
+                approximate: false,
                 null_treatment: None,
                 special: true,
                 order_by: vec![],
@@ -8307,9 +8329,7 @@ impl<'a> Parser<'a> {
     ///
     /// ClickHouse EXPLAIN supports an optional type keyword (SYNTAX, AST, PLAN, PIPELINE, etc.)
     /// followed by optional key=value settings before the explained statement.
-    fn parse_explain_options(
-        &mut self,
-    ) -> Result<(Option<Ident>, Vec<SqlOption>), ParserError> {
+    fn parse_explain_options(&mut self) -> Result<(Option<Ident>, Vec<SqlOption>), ParserError> {
         // First, check for an optional EXPLAIN type identifier (e.g., SYNTAX, AST, PLAN).
         // These are non-keyword identifiers NOT followed by `=`.
         let explain_type = if let Token::Word(w) = &self.peek_token_ref().token {
@@ -8655,9 +8675,7 @@ impl<'a> Parser<'a> {
             SetExpr::Values(self.parse_values(is_mysql)?)
         } else if self.parse_keyword(Keyword::TABLE) {
             SetExpr::Table(Box::new(self.parse_as_table()?))
-        } else if self.dialect.supports_from_first_select()
-            && self.parse_keyword(Keyword::FROM)
-        {
+        } else if self.dialect.supports_from_first_select() && self.parse_keyword(Keyword::FROM) {
             // DuckDB FROM-first syntax: `FROM tbl` is equivalent to `SELECT * FROM tbl`
             SetExpr::Select(Box::new(self.parse_select_from_first()?))
         } else {
@@ -8951,8 +8969,9 @@ impl<'a> Parser<'a> {
         Ok(Select {
             distinct: None,
             top: None,
-            projection: vec![SelectItem::Wildcard(WildcardAdditionalOptions::default())
-                .empty_span()],
+            projection: vec![
+                SelectItem::Wildcard(WildcardAdditionalOptions::default()).empty_span()
+            ],
             into: None,
             from,
             lateral_views: vec![],
@@ -9841,8 +9860,7 @@ impl<'a> Parser<'a> {
                     | TableFactor::NestedJoin { alias, .. } => {
                         *alias = Some(prefix_alias);
                     }
-                    TableFactor::Pivot { alias, .. }
-                    | TableFactor::Unpivot { alias, .. } => {
+                    TableFactor::Pivot { alias, .. } | TableFactor::Unpivot { alias, .. } => {
                         *alias = Some(prefix_alias);
                     }
                     TableFactor::TableSample { .. }
@@ -10241,10 +10259,7 @@ impl<'a> Parser<'a> {
             _ => None,
         };
         let name = self.parse_identifier(false).map(WithSpan::unwrap)?;
-        Ok(Grantee {
-            grantee_type,
-            name,
-        })
+        Ok(Grantee { grantee_type, name })
     }
 
     pub fn parse_grant_revoke_privileges_objects(
@@ -10893,7 +10908,9 @@ impl<'a> Parser<'a> {
                 };
 
                 // ClickHouse COLUMNS('pattern') APPLY(func) ... syntax
-                if dialect_of!(self is ClickHouseDialect | GenericDialect) && self.is_columns_function_call(&expr) {
+                if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                    && self.is_columns_function_call(&expr)
+                {
                     let transformers = self.parse_column_transformers()?;
                     if !transformers.is_empty() {
                         return Ok(SelectItem::ColumnsWithTransformers {

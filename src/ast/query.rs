@@ -1397,12 +1397,9 @@ impl fmt::Display for Join {
                 match_condition,
                 suffix(constraint)
             ),
-            JoinOperator::StraightJoin(constraint) => write!(
-                f,
-                " STRAIGHT_JOIN {}{}",
-                self.relation,
-                suffix(constraint)
-            ),
+            JoinOperator::StraightJoin(constraint) => {
+                write!(f, " STRAIGHT_JOIN {}{}", self.relation, suffix(constraint))
+            }
         }
     }
 }
