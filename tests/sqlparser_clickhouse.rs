@@ -588,6 +588,29 @@ fn parse_alter_table_attach_and_detach_partition() {
 }
 
 #[test]
+fn parse_alter_table_drop_partition_and_part() {
+    // DROP PART 'part_name'
+    match clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE mt DROP PART 'all_4_4_0'")
+    {
+        Statement::AlterTable {
+            name, operations, ..
+        } => {
+            assert_eq!("mt", name.to_string());
+            assert_eq!(
+                operations[0],
+                AlterTableOperation::DropPartition {
+                    partition: Partition::Part(Expr::Value(Value::SingleQuotedString(
+                        "all_4_4_0".to_string()
+                    ))),
+                }
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_create_materialized_view() {
     clickhouse().verified_stmt(
         r#"CREATE MATERIALIZED VIEW foo (`baz` STRING) ENGINE=ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}', created_at) ORDER BY (workspace, asset) SETTINGS index_granularity = 8192 AS SELECT bar AS baz FROM in"#,

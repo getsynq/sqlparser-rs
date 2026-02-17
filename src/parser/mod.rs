@@ -6277,6 +6277,10 @@ impl<'a> Parser<'a> {
                     partitions,
                     if_exists: true,
                 }
+            } else if self.parse_keyword(Keyword::PART) {
+                AlterTableOperation::DropPartition {
+                    partition: Partition::Part(self.parse_expr()?),
+                }
             } else if self.parse_keyword(Keyword::PARTITION) {
                 self.expect_token(&Token::LParen)?;
                 let partitions = self.parse_comma_separated(Parser::parse_expr)?;
