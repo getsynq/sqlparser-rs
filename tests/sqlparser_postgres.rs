@@ -2430,6 +2430,18 @@ fn test_json() {
         .empty_span(),
         select.selection.unwrap(),
     );
+
+    // ?| operator: do any of the strings exist as top-level keys?
+    pg().one_statement_parses_to(
+        "SELECT '{\"a\":1, \"b\":2, \"c\":3}'::jsonb ?| array['b', 'c']",
+        "SELECT CAST('{\"a\":1, \"b\":2, \"c\":3}' AS jsonb) ?| ARRAY['b', 'c']",
+    );
+
+    // ?& operator: do all of the strings exist as top-level keys?
+    pg().one_statement_parses_to(
+        "SELECT '[\"a\", \"b\"]'::jsonb ?& array['a', 'b']",
+        "SELECT CAST('[\"a\", \"b\"]' AS jsonb) ?& ARRAY['a', 'b']",
+    );
 }
 
 #[test]

@@ -2584,6 +2584,8 @@ impl<'a> Parser<'a> {
             || Token::HashMinus == tok
             || Token::AtQuestion == tok
             || Token::AtAt == tok
+            || Token::QuestionPipe == tok
+            || Token::QuestionAnd == tok
         {
             let operator = match tok.token {
                 Token::Arrow => JsonOperator::Arrow,
@@ -2595,6 +2597,8 @@ impl<'a> Parser<'a> {
                 Token::HashMinus => JsonOperator::HashMinus,
                 Token::AtQuestion => JsonOperator::AtQuestion,
                 Token::AtAt => JsonOperator::AtAt,
+                Token::QuestionPipe => JsonOperator::QuestionPipe,
+                Token::QuestionAnd => JsonOperator::QuestionAnd,
                 _ => unreachable!(),
             };
             Ok(Expr::JsonAccess {
@@ -2898,7 +2902,9 @@ impl<'a> Parser<'a> {
             | Token::ArrowAt
             | Token::HashMinus
             | Token::AtQuestion
-            | Token::AtAt => Ok(50),
+            | Token::AtAt
+            | Token::QuestionPipe
+            | Token::QuestionAnd => Ok(50),
             // MySQL assignment operator := has the lowest precedence
             Token::DuckAssignment if dialect_of!(self is MySqlDialect | GenericDialect) => Ok(5),
             _ => Ok(0),

@@ -331,6 +331,12 @@ pub enum JsonOperator {
     /// for the specified JSON value. Only the first item of the result is taken into
     /// account. If the result is not Boolean, then NULL is returned.
     AtAt,
+    /// jsonb ?| text[] -> boolean: Do any of the strings in the text array exist as
+    /// top-level keys or array elements?
+    QuestionPipe,
+    /// jsonb ?& text[] -> boolean: Do all of the strings in the text array exist as
+    /// top-level keys or array elements?
+    QuestionAnd,
 }
 
 impl fmt::Display for JsonOperator {
@@ -361,6 +367,8 @@ impl fmt::Display for JsonOperator {
             JsonOperator::HashMinus => write!(f, "#-"),
             JsonOperator::AtQuestion => write!(f, "@?"),
             JsonOperator::AtAt => write!(f, "@@"),
+            JsonOperator::QuestionPipe => write!(f, "?|"),
+            JsonOperator::QuestionAnd => write!(f, "?&"),
         }
     }
 }

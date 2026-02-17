@@ -191,6 +191,12 @@ pub enum Token {
     /// for the specified JSON value. Only the first item of the result is taken into
     /// account. If the result is not Boolean, then NULL is returned.
     AtAt,
+    /// jsonb ?| text[] -> boolean: Do any of the strings in the text array exist as
+    /// top-level keys or array elements?
+    QuestionPipe,
+    /// jsonb ?& text[] -> boolean: Do all of the strings in the text array exist as
+    /// top-level keys or array elements?
+    QuestionAnd,
 }
 
 impl fmt::Display for Token {
@@ -265,6 +271,8 @@ impl fmt::Display for Token {
             Token::HashMinus => write!(f, "#-"),
             Token::AtQuestion => write!(f, "@?"),
             Token::AtAt => write!(f, "@@"),
+            Token::QuestionPipe => write!(f, "?|"),
+            Token::QuestionAnd => write!(f, "?&"),
         }
     }
 }
@@ -1143,8 +1151,14 @@ impl<'a> Tokenizer<'a> {
                 }
                 '?' => {
                     chars.next();
-                    let s = peeking_take_while(chars, |ch| ch.is_numeric());
-                    Ok(Some(Token::Placeholder(String::from("?") + &s)))
+                    match chars.peek() {
+                        Some('|') => self.consume_and_return(chars, Token::QuestionPipe),
+                        Some('&') => self.consume_and_return(chars, Token::QuestionAnd),
+                        _ => {
+                            let s = peeking_take_while(chars, |ch| ch.is_numeric());
+                            Ok(Some(Token::Placeholder(String::from("?") + &s)))
+                        }
+                    }
                 }
 
                 // identifier or keyword
