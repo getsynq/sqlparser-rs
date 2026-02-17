@@ -1007,7 +1007,7 @@ impl<'a> Parser<'a> {
             | tok @ Token::PGSquareRoot
             | tok @ Token::PGCubeRoot
             | tok @ Token::AtSign
-                if dialect_of!(self is PostgreSqlDialect) =>
+                if dialect_of!(self is PostgreSqlDialect | DuckDbDialect) =>
             {
                 let op = match tok {
                     Token::DoubleExclamationMark => UnaryOperator::PGPrefixFactorial,

@@ -314,6 +314,12 @@ fn test_numeric_literal_underscores() {
 }
 
 #[test]
+fn test_at_sign_abs_operator() {
+    // DuckDB supports @ as absolute value operator (same as PostgreSQL)
+    duckdb().verified_stmt("SELECT (@-1) + 1");
+}
+
+#[test]
 fn test_prefix_alias_colon_select() {
     // DuckDB prefix alias: `alias: expr` is equivalent to `expr AS alias`
     duckdb().one_statement_parses_to(
