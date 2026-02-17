@@ -1587,6 +1587,10 @@ fn test_sf_trailing_commas_in_from_clause() {
 #[test]
 fn test_alter_session() {
     snowflake().verified_stmt("ALTER SESSION SET LOCK_TIMEOUT = 3600");
+    snowflake().one_statement_parses_to(
+        "ALTER SESSION SET autocommit = FALSE, QUERY_TAG = 'qtag', JSON_INDENT = 1",
+        "ALTER SESSION SET autocommit = false, QUERY_TAG = 'qtag', JSON_INDENT = 1",
+    );
     snowflake().verified_stmt("ALTER SESSION UNSET LOCK_TIMEOUT");
 }
 

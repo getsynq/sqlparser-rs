@@ -6703,8 +6703,8 @@ impl<'a> Parser<'a> {
 
     pub fn parse_alter_session(&mut self) -> Result<Statement, ParserError> {
         let session_operation = if self.parse_keyword(Keyword::SET) {
-            let option = self.parse_sql_option()?;
-            SessionOperation::Set(option)
+            let options = self.parse_comma_separated(|p| p.parse_sql_option())?;
+            SessionOperation::Set(options)
         } else if self.parse_keyword(Keyword::UNSET) {
             let vars = self.parse_comma_separated(|p| p.parse_identifier(false))?;
             SessionOperation::Unset(vars)
