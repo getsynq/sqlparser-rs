@@ -1658,6 +1658,13 @@ fn test_describe_object_types() {
     snowflake().verified_stmt("DESCRIBE VIEW db.table");
     // DESCRIBE SCHEMA
     snowflake().verified_stmt("DESCRIBE SCHEMA my_schema");
+    // DESCRIBE FUNCTION with parameter types
+    snowflake().verified_stmt("DESCRIBE FUNCTION my_echo_udf(VARCHAR)");
+    // DESC FUNCTION with TABLE parameter type
+    snowflake().one_statement_parses_to(
+        "DESC FUNCTION governance.dmfs.count_positive_numbers(TABLE(NUMBER, NUMBER, NUMBER))",
+        "DESCRIBE FUNCTION governance.dmfs.count_positive_numbers(TABLE(NUMBER, NUMBER, NUMBER))",
+    );
 }
 
 #[test]
