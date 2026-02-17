@@ -1070,7 +1070,25 @@ impl<'a> Parser<'a> {
             }
             Token::Placeholder(_) | Token::Colon | Token::AtSign => {
                 self.prev_token();
-                Ok(Expr::Value(self.parse_value()?))
+                let mut expr = Expr::Value(self.parse_value()?);
+                // Handle field access after placeholder, e.g. $1.elem
+                while self.consume_token(&Token::Period) {
+                    let tok = self.next_token();
+                    let key = match tok.token {
+                        Token::Word(word) => word.to_ident(),
+                        _ => {
+                            return parser_err!(
+                                format!("Expected identifier, found: {tok}"),
+                                tok.span.start
+                            );
+                        }
+                    };
+                    expr = Expr::CompositeAccess {
+                        expr: Box::new(expr),
+                        key,
+                    };
+                }
+                Ok(expr)
             }
             _ => self.expected("an expression:", next_token),
         }?;
