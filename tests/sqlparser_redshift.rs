@@ -408,6 +408,10 @@ fn test_escape_string() {
 fn test_distribution_styles() {
     let sql = "CREATE TABLE foo (id VARCHAR(32)) DISTSTYLE KEY DISTKEY(id) COMPOUND SORTKEY(id)";
     redshift().verified_stmt(sql);
+
+    // Redshift CTAS with numeric column references in DISTKEY/SORTKEY
+    let sql = "CREATE TABLE eventdistsort DISTKEY(1) SORTKEY(1, 3) AS SELECT eventid, venueid, dateid, eventname FROM event";
+    redshift().one_statement_parses_to(sql, sql);
 }
 
 #[test]

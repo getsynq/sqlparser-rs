@@ -4509,22 +4509,22 @@ impl<'a> Parser<'a> {
                     // DISTSTYLE EVEN|ALL|AUTO|KEY
                     let _ = self.next_token();
                 } else if self.parse_keyword(Keyword::DISTKEY) {
-                    // DISTKEY (col)
+                    // DISTKEY (col) or DISTKEY (1)
                     if self.consume_token(&Token::LParen) {
-                        let _ = self.parse_identifier(false);
+                        let _ = self.parse_identifier_or_number();
                         let _ = self.expect_token(&Token::RParen);
                     }
                 } else if self.parse_keyword(Keyword::INTERLEAVED) {
                     // INTERLEAVED SORTKEY (col1, col2, ...)
                     let _ = self.parse_keyword(Keyword::SORTKEY);
                     if self.consume_token(&Token::LParen) {
-                        let _ = self.parse_comma_separated(|p| p.parse_identifier(false));
+                        let _ = self.parse_comma_separated(|p| p.parse_identifier_or_number());
                         let _ = self.expect_token(&Token::RParen);
                     }
                 } else if self.parse_keyword(Keyword::SORTKEY) {
                     // SORTKEY (col1, col2, ...)
                     if self.consume_token(&Token::LParen) {
-                        let _ = self.parse_comma_separated(|p| p.parse_identifier(false));
+                        let _ = self.parse_comma_separated(|p| p.parse_identifier_or_number());
                         let _ = self.expect_token(&Token::RParen);
                     }
                 } else {
@@ -5364,9 +5364,10 @@ impl<'a> Parser<'a> {
         };
 
         // Redshift allows specifying DISTKEY after column definitions
+        // Column reference can be a name or a number (1-based column index)
         let dist_key = if self.parse_keywords(&[Keyword::DISTKEY]) {
             self.expect_token(&Token::LParen)?;
-            let key = self.parse_identifier(false)?;
+            let key = self.parse_identifier_or_number()?;
             self.expect_token(&Token::RParen)?;
             Some(key)
         } else {
@@ -5374,10 +5375,11 @@ impl<'a> Parser<'a> {
         };
 
         // Redshift allows specifying SORTKEY after column definitions
+        // Column references can be names or numbers (1-based column index)
         let compound_sort_key = self.parse_keywords(&[Keyword::COMPOUND]);
         let sort_key = if self.parse_keywords(&[Keyword::SORTKEY]) {
             self.expect_token(&Token::LParen)?;
-            let columns = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+            let columns = self.parse_comma_separated(|p| p.parse_identifier_or_number())?;
             self.expect_token(&Token::RParen)?;
             Some(SortKey {
                 compound: compound_sort_key,
@@ -8246,6 +8248,21 @@ impl<'a> Parser<'a> {
                 Ok(Ident::new(s).spanning(next_token.span))
             }
             _ => self.expected("identifier", next_token),
+        }
+    }
+
+    /// Parse an identifier or a numeric literal as an identifier.
+    /// Used for Redshift DISTKEY/SORTKEY which accept column names or 1-based column numbers.
+    pub fn parse_identifier_or_number(&mut self) -> Result<WithSpan<Ident>, ParserError> {
+        let next_token = self.next_token();
+        match next_token.token {
+            Token::Number(ref n, _) => {
+                Ok(Ident::new(n.clone()).spanning(next_token.span))
+            }
+            _ => {
+                self.prev_token();
+                self.parse_identifier(false)
+            }
         }
     }
 
