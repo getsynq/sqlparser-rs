@@ -8186,6 +8186,12 @@ impl<'a> Parser<'a> {
                 explain_type,
             }),
             _ => {
+                // Databricks: DESCRIBE HISTORY table_name
+                if describe_alias && self.parse_keyword(Keyword::HISTORY) {
+                    let table_name = self.parse_object_name(false)?;
+                    return Ok(Statement::DescribeHistory { table_name });
+                }
+
                 let has_table_word = self.parse_keyword(Keyword::TABLE);
                 let table_name = self.parse_object_name(false)?;
 
