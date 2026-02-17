@@ -187,7 +187,11 @@ fn parse_update() {
     let sql = "UPDATE t WHERE 1";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected SET, found: WHERE\nNear `UPDATE t `".to_string()),
+        ParserError::ParserError(
+            "Expected SET, found: WHERE\nNear `UPDATE t `"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 
@@ -195,7 +199,9 @@ fn parse_update() {
     let res = parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: extrabadstuff\nNear ` t SET a = 1`".to_string()
+            "Expected end of statement, found: extrabadstuff\nNear ` t SET a = 1`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -771,7 +777,9 @@ fn parse_select_distinct_missing_paren() {
     let result = parse_sql_statements("SELECT DISTINCT (name, id FROM customer");
     assert_eq!(
         ParserError::ParserError(
-            "Expected ), found: FROM\nNear `SELECT DISTINCT (name, id`".to_string()
+            "Expected ), found: FROM\nNear `SELECT DISTINCT (name, id`"
+                .to_string()
+                .into()
         ),
         result.unwrap_err(),
     );
@@ -786,7 +794,7 @@ fn parse_select_all() {
 fn parse_select_all_distinct() {
     let result = parse_sql_statements("SELECT ALL DISTINCT name FROM customer");
     assert_eq!(
-        ParserError::ParserError("Cannot specify both ALL and DISTINCT".to_string()),
+        ParserError::ParserError("Cannot specify both ALL and DISTINCT".to_string().into()),
         result.unwrap_err(),
     );
 }
@@ -817,7 +825,9 @@ fn parse_select_into() {
     let result = parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: asdf\nNear `SELECT * INTO table0`".to_string()
+            "Expected end of statement, found: asdf\nNear `SELECT * INTO table0`"
+                .to_string()
+                .into()
         ),
         result.unwrap_err()
     )
@@ -858,7 +868,9 @@ fn parse_select_wildcard() {
     let result = parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: +\nNear `SELECT *`".to_string()
+            "Expected end of statement, found: +\nNear `SELECT *`"
+                .to_string()
+                .into()
         ),
         result.unwrap_err(),
     );
@@ -900,7 +912,9 @@ fn test_eof_after_as() {
     let res = parse_sql_statements("SELECT foo AS");
     assert_eq!(
         ParserError::ParserError(
-            "Expected an identifier after AS, found: EOF\nNear `SELECT foo AS`".to_string()
+            "Expected an identifier after AS, found: EOF\nNear `SELECT foo AS`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -908,7 +922,9 @@ fn test_eof_after_as() {
     let res = parse_sql_statements("SELECT 1 FROM foo AS");
     assert_eq!(
         ParserError::ParserError(
-            "Expected an identifier after AS, found: EOF\nNear `SELECT 1 FROM foo AS`".to_string()
+            "Expected an identifier after AS, found: EOF\nNear `SELECT 1 FROM foo AS`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -923,7 +939,7 @@ fn test_no_infix_error() {
 
     let res = dialects.parse_sql_statements("ASSERT-URA<<");
     assert_eq!(
-        ParserError::ParserError("No infix parser for token ShiftLeft".to_string()),
+        ParserError::ParserError("No infix parser for token ShiftLeft".to_string().into()),
         res.unwrap_err()
     );
 }
@@ -984,7 +1000,7 @@ fn parse_select_count_distinct() {
     let sql = "SELECT COUNT(ALL DISTINCT + x) FROM customer";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Cannot specify both ALL and DISTINCT".to_string()),
+        ParserError::ParserError("Cannot specify both ALL and DISTINCT".to_string().into()),
         res.unwrap_err()
     );
 }
@@ -1001,7 +1017,9 @@ fn parse_invalid_infix_not() {
     let res = parse_sql_statements("SELECT c FROM t WHERE c NOT (");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: NOT\nNear ` c FROM t WHERE c`".to_string()
+            "Expected end of statement, found: NOT\nNear ` c FROM t WHERE c`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err(),
     );
@@ -1629,7 +1647,9 @@ fn parse_in_error() {
     let res = parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
-            "Expected (, found: segment\nNear ` FROM customers WHERE segment in`".to_string()
+            "Expected (, found: segment\nNear ` FROM customers WHERE segment in`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -1906,14 +1926,22 @@ fn parse_tuple_invalid() {
     let sql = "select (1";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected ), found: EOF\nNear `select (1`".to_string()),
+        ParserError::ParserError(
+            "Expected ), found: EOF\nNear `select (1`"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 
     let sql = "select (), 2";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected an expression:, found: )\nNear `select ()`".to_string()),
+        ParserError::ParserError(
+            "Expected an expression:, found: )\nNear `select ()`"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 }
@@ -2310,7 +2338,9 @@ fn parse_extract() {
     let res = dialects.parse_sql_statements("SELECT EXTRACT(JIFFY FROM d)");
     assert_eq!(
         ParserError::ParserError(
-            "Expected date/time field, found: JIFFY\nNear `SELECT EXTRACT(JIFFY`".to_string()
+            "Expected date/time field, found: JIFFY\nNear `SELECT EXTRACT(JIFFY`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -2351,7 +2381,9 @@ fn parse_ceil_datetime() {
     let res = dialects.parse_sql_statements("SELECT CEIL(d TO JIFFY) FROM df");
     assert_eq!(
         ParserError::ParserError(
-            "Expected date/time field, found: JIFFY\nNear `SELECT CEIL(d TO JIFFY`".to_string()
+            "Expected date/time field, found: JIFFY\nNear `SELECT CEIL(d TO JIFFY`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -2380,7 +2412,9 @@ fn parse_floor_datetime() {
     let res = dialects.parse_sql_statements("SELECT FLOOR(d TO JIFFY) FROM df");
     assert_eq!(
         ParserError::ParserError(
-            "Expected date/time field, found: JIFFY\nNear `SELECT FLOOR(d TO JIFFY`".to_string()
+            "Expected date/time field, found: JIFFY\nNear `SELECT FLOOR(d TO JIFFY`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -2956,7 +2990,9 @@ fn parse_create_table_hive_array() {
     assert_eq!(
         dialects.parse_sql_statements(sql).unwrap_err(),
         ParserError::ParserError(
-            "Expected >, found: )\nNear `name int, val array<int`".to_string()
+            "Expected >, found: )\nNear `name int, val array<int`"
+                .to_string()
+                .into()
         )
     );
 }
@@ -3737,7 +3773,7 @@ fn parse_alter_table_alter_column_type() {
     let res =
         dialect.parse_sql_statements(&format!("{alter_stmt} ALTER COLUMN is_active TYPE TEXT"));
     assert_eq!(
-        ParserError::ParserError("Expected SET/DROP NOT NULL, SET DEFAULT, SET DATA TYPE, SET OPTIONS after ALTER COLUMN, found: TYPE\nNear ` TABLE tab ALTER COLUMN is_active`".to_string()),
+        ParserError::ParserError("Expected SET/DROP NOT NULL, SET DEFAULT, SET DATA TYPE, SET OPTIONS after ALTER COLUMN, found: TYPE\nNear ` TABLE tab ALTER COLUMN is_active`".to_string().into()),
         res.unwrap_err()
     );
 
@@ -3748,6 +3784,7 @@ fn parse_alter_table_alter_column_type() {
         ParserError::ParserError(
             "Expected end of statement, found: USING\nNear ` is_active SET DATA TYPE TEXT`"
                 .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -3790,6 +3827,7 @@ fn parse_alter_table_drop_constraint() {
         ParserError::ParserError(
             "Expected end of statement, found: TEXT\nNear ` TABLE tab DROP CONSTRAINT is_active`"
                 .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -3800,16 +3838,16 @@ fn parse_bad_constraint() {
     let res = parse_sql_statements("ALTER TABLE tab ADD");
     assert_eq!(
         ParserError::ParserError(
-            "Expected identifier, found: EOF\nNear `ALTER TABLE tab ADD`".to_string()
+            "Expected identifier, found: EOF\nNear `ALTER TABLE tab ADD`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CREATE TABLE tab (foo int,");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected column name or constraint definition, found: EOF\nNear ` TABLE tab (foo int,`".to_string()
-        ),
+        ParserError::ParserError("Expected column name or constraint definition, found: EOF\nNear ` TABLE tab (foo int,`".to_string().into()),
         res.unwrap_err()
     );
 }
@@ -4425,6 +4463,7 @@ fn parse_interval() {
         ParserError::ParserError(
             "Expected end of statement, found: SECOND\nNear `SELECT INTERVAL '1' SECOND TO`"
                 .to_string()
+                .into()
         ),
         result.unwrap_err(),
     );
@@ -4432,7 +4471,9 @@ fn parse_interval() {
     let result = parse_sql_statements("SELECT INTERVAL '10' HOUR (1) TO HOUR (2)");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: (\nNear `HOUR (1) TO HOUR `".to_string()
+            "Expected end of statement, found: (\nNear `HOUR (1) TO HOUR `"
+                .to_string()
+                .into()
         ),
         result.unwrap_err(),
     );
@@ -4854,7 +4895,11 @@ fn parse_table_function() {
 
     let res = parse_sql_statements("SELECT * FROM TABLE (FUN(a) AS a");
     assert_eq!(
-        ParserError::ParserError("Expected ), found: AS\nNear ` FROM TABLE (FUN(a)`".to_string()),
+        ParserError::ParserError(
+            "Expected ), found: AS\nNear ` FROM TABLE (FUN(a)`"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 }
@@ -5454,6 +5499,7 @@ fn parse_natural_join() {
         ParserError::ParserError(
             "Expected a join type after NATURAL, found: EOF\nNear `SELECT * FROM t1 natural`"
                 .to_string()
+                .into()
         ),
         parse_sql_statements(sql).unwrap_err(),
     );
@@ -5536,7 +5582,9 @@ fn parse_join_syntax_variants() {
     let res = parse_sql_statements("SELECT * FROM a OUTER JOIN b ON 1");
     assert_eq!(
         ParserError::ParserError(
-            "Expected APPLY, found: JOIN\nNear `SELECT * FROM a OUTER`".to_string()
+            "Expected APPLY, found: JOIN\nNear `SELECT * FROM a OUTER`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -5840,7 +5888,7 @@ fn parse_overlay() {
     );
     assert_eq!(
         ParserError::ParserError(
-            "Expected PLACING or comma-separated arguments, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned()
+            "Expected PLACING or comma-separated arguments, found: FROM\nNear `SELECT OVERLAY('abccccde'`".to_owned().into()
         ),
         parse_sql_statements("SELECT OVERLAY('abccccde' FROM 3)").unwrap_err(),
     );
@@ -5890,7 +5938,11 @@ fn parse_trim() {
     );
 
     assert_eq!(
-        ParserError::ParserError("Expected ), found: 'xyz'\nNear `SELECT TRIM(FOO`".to_owned()),
+        ParserError::ParserError(
+            "Expected ), found: 'xyz'\nNear `SELECT TRIM(FOO`"
+                .to_owned()
+                .into()
+        ),
         parse_sql_statements("SELECT TRIM(FOO 'xyz' FROM 'xyzfooxyz')").unwrap_err()
     );
 
@@ -5912,7 +5964,11 @@ fn parse_trim() {
         options: None,
     };
     assert_eq!(
-        ParserError::ParserError("Expected ), found: 'a'\nNear `SELECT TRIM('xyz',`".to_owned()),
+        ParserError::ParserError(
+            "Expected ), found: 'a'\nNear `SELECT TRIM('xyz',`"
+                .to_owned()
+                .into()
+        ),
         all_expected_snowflake
             .parse_sql_statements("SELECT TRIM('xyz', 'a')")
             .unwrap_err()
@@ -5949,17 +6005,13 @@ fn parse_exists_subquery() {
 
     let res = parse_sql_statements("SELECT EXISTS (");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: EOF\nNear `SELECT EXISTS (`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: EOF\nNear `SELECT EXISTS (`".to_string().into()),
         res.unwrap_err(),
     );
 
     let res = parse_sql_statements("SELECT EXISTS (NULL)");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: NULL\nNear `SELECT EXISTS (`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: NULL\nNear `SELECT EXISTS (`".to_string().into()),
         res.unwrap_err(),
     );
 }
@@ -6467,13 +6519,21 @@ fn parse_drop_table() {
 
     let sql = "DROP TABLE";
     assert_eq!(
-        ParserError::ParserError("Expected identifier, found: EOF\nNear `DROP TABLE`".to_string()),
+        ParserError::ParserError(
+            "Expected identifier, found: EOF\nNear `DROP TABLE`"
+                .to_string()
+                .into()
+        ),
         parse_sql_statements(sql).unwrap_err(),
     );
 
     let sql = "DROP TABLE IF EXISTS foo, bar CASCADE RESTRICT";
     assert_eq!(
-        ParserError::ParserError("Cannot specify both CASCADE and RESTRICT in DROP".to_string()),
+        ParserError::ParserError(
+            "Cannot specify both CASCADE and RESTRICT in DROP"
+                .to_string()
+                .into()
+        ),
         parse_sql_statements(sql).unwrap_err(),
     );
 }
@@ -6500,7 +6560,9 @@ fn parse_invalid_subquery_without_parens() {
     let res = parse_sql_statements("SELECT SELECT 1 FROM bar WHERE 1=1 FROM baz");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: 1\nNear `SELECT SELECT `".to_string()
+            "Expected end of statement, found: 1\nNear `SELECT SELECT `"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -6716,7 +6778,9 @@ fn lateral_derived() {
     let res = parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: b".to_string()
+            "Expected SELECT, VALUES, or a subquery in the query body, found: b"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -6779,6 +6843,7 @@ fn parse_start_transaction() {
         ParserError::ParserError(
             "Expected isolation level, found: BAD\nNear `START TRANSACTION ISOLATION LEVEL`"
                 .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -6786,7 +6851,9 @@ fn parse_start_transaction() {
     let res = parse_sql_statements("START TRANSACTION BAD");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: BAD\nNear `START TRANSACTION`".to_string()
+            "Expected end of statement, found: BAD\nNear `START TRANSACTION`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -6796,6 +6863,7 @@ fn parse_start_transaction() {
         ParserError::ParserError(
             "Expected transaction mode, found: EOF\nNear `START TRANSACTION READ ONLY,`"
                 .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -7776,7 +7844,9 @@ fn parse_offset_and_limit() {
     let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 OFFSET 2");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: OFFSET\nNear ` foo FROM bar OFFSET 2`".to_string()
+            "Expected end of statement, found: OFFSET\nNear ` foo FROM bar OFFSET 2`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -7784,7 +7854,9 @@ fn parse_offset_and_limit() {
     let res = parse_sql_statements("SELECT foo FROM bar LIMIT 2 LIMIT 2");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: LIMIT\nNear ` foo FROM bar LIMIT 2`".to_string()
+            "Expected end of statement, found: LIMIT\nNear ` foo FROM bar LIMIT 2`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -7792,7 +7864,9 @@ fn parse_offset_and_limit() {
     let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 LIMIT 2 OFFSET 2");
     assert_eq!(
         ParserError::ParserError(
-            "Expected end of statement, found: OFFSET\nNear ` bar OFFSET 2 LIMIT 2`".to_string()
+            "Expected end of statement, found: OFFSET\nNear ` bar OFFSET 2 LIMIT 2`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -7857,7 +7931,11 @@ fn parse_position_negative() {
     let sql = "SELECT POSITION(foo IN) from bar";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError("Expected (, found: )\nNear `SELECT POSITION(foo IN`".to_string()),
+        ParserError::ParserError(
+            "Expected (, found: )\nNear `SELECT POSITION(foo IN`"
+                .to_string()
+                .into()
+        ),
         res.unwrap_err()
     );
 }
@@ -7914,10 +7992,7 @@ fn parse_is_boolean() {
     let sql = "SELECT f from foo where field is 0";
     let res = parse_sql_statements(sql);
     assert_eq!(
-        ParserError::ParserError(
-            "Expected [NOT] NULL or TRUE|FALSE or [NOT] DISTINCT FROM after IS, found: 0\nNear ` from foo where field is`"
-                .to_string()
-        ),
+        ParserError::ParserError("Expected [NOT] NULL or TRUE|FALSE or [NOT] DISTINCT FROM after IS, found: 0\nNear ` from foo where field is`".to_string().into()),
         res.unwrap_err()
     );
 }
@@ -8107,40 +8182,34 @@ fn parse_cache_table() {
 
     let res = parse_sql_statements("CACHE TABLE 'table_name' foo");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `CACHE TABLE 'table_name'`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `CACHE TABLE 'table_name'`".to_string().into()),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE flag TABLE 'table_name' OPTIONS('K1'='V1') foo");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `TABLE 'table_name' OPTIONS('K1'='V1')`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `TABLE 'table_name' OPTIONS('K1'='V1')`".to_string().into()),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE TABLE 'table_name' AS foo");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `CACHE TABLE 'table_name' AS`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `CACHE TABLE 'table_name' AS`".to_string().into()),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE flag TABLE 'table_name' OPTIONS('K1'='V1') AS foo");
     assert_eq!(
-        ParserError::ParserError(
-            "Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `'table_name' OPTIONS('K1'='V1') AS`".to_string()
-        ),
+        ParserError::ParserError("Expected SELECT, VALUES, or a subquery in the query body, found: foo\nNear `'table_name' OPTIONS('K1'='V1') AS`".to_string().into()),
         res.unwrap_err()
     );
 
     let res = parse_sql_statements("CACHE 'table_name'");
     assert_eq!(
         ParserError::ParserError(
-            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE `".to_string()
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE `"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -8148,7 +8217,9 @@ fn parse_cache_table() {
     let res = parse_sql_statements("CACHE 'table_name' OPTIONS('K1'='V1')");
     assert_eq!(
         ParserError::ParserError(
-            "Expected a `TABLE` keyword, found: OPTIONS\nNear `CACHE 'table_name'`".to_string()
+            "Expected a `TABLE` keyword, found: OPTIONS\nNear `CACHE 'table_name'`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -8156,7 +8227,9 @@ fn parse_cache_table() {
     let res = parse_sql_statements("CACHE flag 'table_name' OPTIONS('K1'='V1')");
     assert_eq!(
         ParserError::ParserError(
-            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE flag`".to_string()
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `CACHE flag`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -8183,7 +8256,9 @@ fn parse_uncache_table() {
     let res = parse_sql_statements("UNCACHE TABLE 'table_name' foo");
     assert_eq!(
         ParserError::ParserError(
-            "Expected an `EOF`, found: foo\nNear `UNCACHE TABLE 'table_name'`".to_string()
+            "Expected an `EOF`, found: foo\nNear `UNCACHE TABLE 'table_name'`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -8191,7 +8266,9 @@ fn parse_uncache_table() {
     let res = parse_sql_statements("UNCACHE 'table_name' foo");
     assert_eq!(
         ParserError::ParserError(
-            "Expected a `TABLE` keyword, found: 'table_name'\nNear `UNCACHE`".to_string()
+            "Expected a `TABLE` keyword, found: 'table_name'\nNear `UNCACHE`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );
@@ -8199,7 +8276,9 @@ fn parse_uncache_table() {
     let res = parse_sql_statements("UNCACHE IF EXISTS 'table_name' foo");
     assert_eq!(
         ParserError::ParserError(
-            "Expected a `TABLE` keyword, found: IF\nNear `UNCACHE`".to_string()
+            "Expected a `TABLE` keyword, found: IF\nNear `UNCACHE`"
+                .to_string()
+                .into()
         ),
         res.unwrap_err()
     );

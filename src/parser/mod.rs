@@ -38,17 +38,83 @@ use crate::tokenizer::*;
 
 mod alter;
 
+/// Wrapper for parser error messages with optional backtrace.
+///
+/// When `RUST_BACKTRACE=1` is set, captures a backtrace at the point where
+/// the error is created. The backtrace is ignored for equality comparisons
+/// so existing test assertions work unchanged.
+pub struct ParserErrorMessage {
+    pub message: String,
+    backtrace: Option<String>,
+}
+
+impl ParserErrorMessage {
+    /// Returns the captured backtrace, if any.
+    pub fn backtrace(&self) -> Option<&str> {
+        self.backtrace.as_deref()
+    }
+
+    fn capture_backtrace() -> Option<String> {
+        let bt = std::backtrace::Backtrace::capture();
+        match bt.status() {
+            std::backtrace::BacktraceStatus::Captured => Some(bt.to_string()),
+            _ => None,
+        }
+    }
+}
+
+impl Clone for ParserErrorMessage {
+    fn clone(&self) -> Self {
+        Self {
+            message: self.message.clone(),
+            backtrace: self.backtrace.clone(),
+        }
+    }
+}
+
+impl PartialEq for ParserErrorMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.message == other.message
+    }
+}
+
+impl Eq for ParserErrorMessage {}
+
+impl fmt::Debug for ParserErrorMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.message, f)
+    }
+}
+
+impl From<String> for ParserErrorMessage {
+    fn from(message: String) -> Self {
+        Self {
+            backtrace: Self::capture_backtrace(),
+            message,
+        }
+    }
+}
+
+impl From<&str> for ParserErrorMessage {
+    fn from(message: &str) -> Self {
+        Self {
+            backtrace: Self::capture_backtrace(),
+            message: message.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParserError {
     TokenizerError(String),
-    ParserError(String),
+    ParserError(ParserErrorMessage),
     RecursionLimitExceeded,
 }
 
 // Use `Parser::expected` instead, if possible
 macro_rules! parser_err {
     ($MSG:expr, $loc:expr) => {
-        Err(ParserError::ParserError(format!("{}{}", $MSG, $loc)))
+        Err(ParserError::ParserError(format!("{}{}", $MSG, $loc).into()))
     };
 }
 
@@ -185,8 +251,8 @@ impl fmt::Display for ParserError {
             f,
             "sql parser error: {}",
             match self {
-                ParserError::TokenizerError(s) => s,
-                ParserError::ParserError(s) => s,
+                ParserError::TokenizerError(s) => s.as_str(),
+                ParserError::ParserError(s) => s.message.as_str(),
                 ParserError::RecursionLimitExceeded => "recursion limit exceeded",
             }
         )
@@ -1406,9 +1472,9 @@ impl<'a> Parser<'a> {
             let mut type_parser = Parser::new(&ClickHouseDialect {})
                 .try_with_sql(&type_str)
                 .map_err(|e| {
-                    ParserError::ParserError(format!(
-                        "Failed to parse CAST type string '{type_str}': {e}"
-                    ))
+                    ParserError::ParserError(
+                        format!("Failed to parse CAST type string '{type_str}': {e}").into(),
+                    )
                 })?;
             let data_type = type_parser.parse_data_type()?;
             return Ok(Expr::Cast {
@@ -4188,9 +4254,9 @@ impl<'a> Parser<'a> {
         loop {
             fn ensure_not_set<T>(field: &Option<T>, name: &str) -> Result<(), ParserError> {
                 if field.is_some() {
-                    return Err(ParserError::ParserError(format!(
-                        "{name} specified more than once",
-                    )));
+                    return Err(ParserError::ParserError(
+                        format!("{name} specified more than once",).into(),
+                    ));
                 }
                 Ok(())
             }
@@ -6955,7 +7021,9 @@ impl<'a> Parser<'a> {
             // "if statement in this position is unstable: https://github.com/rust-lang/rust/issues/53667"
             if let CopySource::Query(_) = source {
                 return Err(ParserError::ParserError(
-                    "COPY ... FROM does not support query as a source".to_string(),
+                    "COPY ... FROM does not support query as a source"
+                        .to_string()
+                        .into(),
                 ));
             }
         }
@@ -7450,7 +7518,7 @@ impl<'a> Parser<'a> {
         let next_token = self.next_token();
         match next_token.token {
             Token::Number(s, _) => s.parse::<u64>().map_err(|e| {
-                ParserError::ParserError(format!("Could not parse '{s}' as u64: {e}"))
+                ParserError::ParserError(format!("Could not parse '{s}' as u64: {e}").into())
             }),
             _ => self.expected("literal int", next_token),
         }
@@ -7466,7 +7534,7 @@ impl<'a> Parser<'a> {
         let next_token = self.next_token();
         match next_token.token {
             Token::Number(s, _) => s.parse::<i64>().map(|n| n * neg).map_err(|e| {
-                ParserError::ParserError(format!("Could not parse '{s}' as i64: {e}"))
+                ParserError::ParserError(format!("Could not parse '{s}' as i64: {e}").into())
             }),
             _ => self.expected("literal int", next_token),
         }
@@ -8184,13 +8252,13 @@ impl<'a> Parser<'a> {
             Token::Word(w) => idents.push(w.to_ident()),
             Token::EOF => {
                 return Err(ParserError::ParserError(
-                    "Empty input when parsing identifier".to_string(),
+                    "Empty input when parsing identifier".to_string().into(),
                 ))?;
             }
             token => {
-                return Err(ParserError::ParserError(format!(
-                    "Unexpected token in identifier: {token}"
-                )))?;
+                return Err(ParserError::ParserError(
+                    format!("Unexpected token in identifier: {token}").into(),
+                ))?;
             }
         };
 
@@ -8202,20 +8270,21 @@ impl<'a> Parser<'a> {
                     Token::Word(w) => idents.push(w.to_ident()),
                     Token::EOF => {
                         return Err(ParserError::ParserError(
-                            "Trailing period in identifier".to_string(),
+                            "Trailing period in identifier".to_string().into(),
                         ))?;
                     }
                     token => {
-                        return Err(ParserError::ParserError(format!(
-                            "Unexpected token following period in identifier: {token}"
-                        )))?;
+                        return Err(ParserError::ParserError(
+                            format!("Unexpected token following period in identifier: {token}")
+                                .into(),
+                        ))?;
                     }
                 },
                 Token::EOF => break,
                 token => {
-                    return Err(ParserError::ParserError(format!(
-                        "Unexpected token in identifier: {token}"
-                    )))?;
+                    return Err(ParserError::ParserError(
+                        format!("Unexpected token in identifier: {token}").into(),
+                    ))?;
                 }
             }
         }
@@ -8387,7 +8456,7 @@ impl<'a> Parser<'a> {
                     Token::RParen => depth -= 1,
                     Token::EOF => {
                         return Err(ParserError::ParserError(
-                            "Unexpected EOF in function arguments".to_string(),
+                            "Unexpected EOF in function arguments".to_string().into(),
                         ))
                     }
                     _ => {}
@@ -8727,7 +8796,7 @@ impl<'a> Parser<'a> {
 
         match self.maybe_parse(|parser| parser.parse_statement()) {
             Some(Statement::Explain { .. }) | Some(Statement::ExplainTable { .. }) => Err(
-                ParserError::ParserError("Explain must be root of the plan".to_string()),
+                ParserError::ParserError("Explain must be root of the plan".to_string().into()),
             ),
             Some(statement) => Ok(Statement::Explain {
                 describe_alias,
@@ -9723,7 +9792,9 @@ impl<'a> Parser<'a> {
             Ok(self.parse_show_functions()?)
         } else if extended || full {
             Err(ParserError::ParserError(
-                "EXTENDED/FULL are not supported with this type of SHOW query".to_string(),
+                "EXTENDED/FULL are not supported with this type of SHOW query"
+                    .to_string()
+                    .into(),
             ))
         } else if self.parse_one_of_keywords(&[Keyword::CREATE]).is_some() {
             Ok(self.parse_show_create()?)
@@ -9758,9 +9829,9 @@ impl<'a> Parser<'a> {
             Keyword::PROCEDURE => Ok(ShowCreateObject::Procedure),
             Keyword::EVENT => Ok(ShowCreateObject::Event),
             Keyword::VIEW => Ok(ShowCreateObject::View),
-            keyword => Err(ParserError::ParserError(format!(
-                "Unable to map keyword to ShowCreateObject: {keyword:?}"
-            ))),
+            keyword => Err(ParserError::ParserError(
+                format!("Unable to map keyword to ShowCreateObject: {keyword:?}").into(),
+            )),
         }?;
 
         let obj_name = self.parse_object_name(false)?;
@@ -10088,9 +10159,10 @@ impl<'a> Parser<'a> {
                                 }
                             }
                             _ => {
-                                return Err(ParserError::ParserError(format!(
-                                    "expected OUTER, SEMI, ANTI or JOIN after {kw:?}"
-                                )));
+                                return Err(ParserError::ParserError(
+                                    format!("expected OUTER, SEMI, ANTI or JOIN after {kw:?}")
+                                        .into(),
+                                ));
                             }
                         }
                     }
@@ -10297,9 +10369,9 @@ impl<'a> Parser<'a> {
                         | TableFactor::NestedJoin { alias, .. } => {
                             // but not `FROM (mytable AS alias1) AS alias2`.
                             if let Some(inner_alias) = alias {
-                                return Err(ParserError::ParserError(format!(
-                                    "duplicate alias {inner_alias}"
-                                )));
+                                return Err(ParserError::ParserError(
+                                    format!("duplicate alias {inner_alias}").into(),
+                                ));
                             }
                             // Act as if the alias was specified normally next
                             // to the table name: `(mytable) AS alias` ->
@@ -10528,7 +10600,7 @@ impl<'a> Parser<'a> {
                         Token::RParen => depth -= 1,
                         Token::EOF => {
                             return Err(ParserError::ParserError(
-                                "Unexpected EOF in CHANGES clause".to_string(),
+                                "Unexpected EOF in CHANGES clause".to_string().into(),
                             ))
                         }
                         _ => {}
@@ -10560,7 +10632,7 @@ impl<'a> Parser<'a> {
                         Token::RParen => depth -= 1,
                         Token::EOF => {
                             return Err(ParserError::ParserError(
-                                "Unexpected EOF in AT/BEFORE clause".to_string(),
+                                "Unexpected EOF in AT/BEFORE clause".to_string().into(),
                             ))
                         }
                         _ => {}
@@ -10576,7 +10648,7 @@ impl<'a> Parser<'a> {
                             Token::RParen => depth -= 1,
                             Token::EOF => {
                                 return Err(ParserError::ParserError(
-                                    "Unexpected EOF in END clause".to_string(),
+                                    "Unexpected EOF in END clause".to_string().into(),
                                 ))
                             }
                             _ => {}
@@ -10921,9 +10993,10 @@ impl<'a> Parser<'a> {
 
             if !err.is_empty() {
                 let errors: Vec<Keyword> = err.into_iter().filter_map(|x| x.err()).collect();
-                return Err(ParserError::ParserError(format!(
-                    "INTERNAL ERROR: GRANT/REVOKE unexpected keyword(s) - {errors:?}"
-                )));
+                return Err(ParserError::ParserError(
+                    format!("INTERNAL ERROR: GRANT/REVOKE unexpected keyword(s) - {errors:?}")
+                        .into(),
+                ));
             }
             let act = actions.into_iter().filter_map(|x| x.ok()).collect();
             Privileges::Actions(act)
@@ -11163,7 +11236,7 @@ impl<'a> Parser<'a> {
                             Token::RParen => depth -= 1,
                             Token::EOF => {
                                 return Err(ParserError::ParserError(
-                                    "Unexpected EOF in INSERT INTO FUNCTION".to_string(),
+                                    "Unexpected EOF in INSERT INTO FUNCTION".to_string().into(),
                                 ))
                             }
                             _ => {}
@@ -12235,7 +12308,7 @@ impl<'a> Parser<'a> {
                     Some(Keyword::UPDATE) => {
                         if is_not_matched {
                             return Err(ParserError::ParserError(
-                                "UPDATE in NOT MATCHED merge clause".to_string(),
+                                "UPDATE in NOT MATCHED merge clause".to_string().into(),
                             ));
                         }
                         self.expect_keyword(Keyword::SET)?;
@@ -12248,7 +12321,7 @@ impl<'a> Parser<'a> {
                     Some(Keyword::DELETE) => {
                         if is_not_matched {
                             return Err(ParserError::ParserError(
-                                "DELETE in NOT MATCHED merge clause".to_string(),
+                                "DELETE in NOT MATCHED merge clause".to_string().into(),
                             ));
                         }
                         MergeClause::MatchedDelete(predicate)
@@ -12256,7 +12329,7 @@ impl<'a> Parser<'a> {
                     Some(Keyword::INSERT) => {
                         if !is_not_matched {
                             return Err(ParserError::ParserError(
-                                "INSERT in MATCHED merge clause".to_string(),
+                                "INSERT in MATCHED merge clause".to_string().into(),
                             ));
                         }
                         let is_mysql = dialect_of!(self is MySqlDialect);
@@ -12271,12 +12344,16 @@ impl<'a> Parser<'a> {
                     }
                     Some(_) => {
                         return Err(ParserError::ParserError(
-                            "expected UPDATE, DELETE or INSERT in merge clause".to_string(),
+                            "expected UPDATE, DELETE or INSERT in merge clause"
+                                .to_string()
+                                .into(),
                         ));
                     }
                     None => {
                         return Err(ParserError::ParserError(
-                            "expected UPDATE, DELETE or INSERT in merge clause".to_string(),
+                            "expected UPDATE, DELETE or INSERT in merge clause"
+                                .to_string()
+                                .into(),
                         ));
                     }
                 },
@@ -13277,7 +13354,7 @@ mod tests {
             ast,
             Err(ParserError::ParserError(
                 "Expected [NOT] NULL or TRUE|FALSE or [NOT] DISTINCT FROM after IS, found: a\nNear `SELECT this is`"
-                    .to_string()
+                    .to_string().into()
             ))
         );
     }
@@ -13289,7 +13366,7 @@ mod tests {
         assert_eq!(
             ast,
             Err(ParserError::ParserError(
-                "Explain must be root of the plan".to_string()
+                "Explain must be root of the plan".to_string().into()
             ))
         );
     }

@@ -214,23 +214,27 @@ fn parse_invalid_brackets() {
     let sql = "SELECT STRUCT<INT64>>(NULL)";
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError("Expected (, found: >\nNear `SELECT STRUCT<INT64>`".to_string())
+        ParserError::ParserError(
+            "Expected (, found: >\nNear `SELECT STRUCT<INT64>`"
+                .to_string()
+                .into()
+        )
     );
 
     let sql = "SELECT STRUCT<STRUCT<INT64>>>(NULL)";
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
         ParserError::ParserError(
-            "Expected (, found: >\nNear `SELECT STRUCT<STRUCT<INT64>>`".to_string()
+            "Expected (, found: >\nNear `SELECT STRUCT<STRUCT<INT64>>`"
+                .to_string()
+                .into()
         )
     );
 
     let sql = "CREATE TABLE table (x STRUCT<STRUCT<INT64>>>)";
     assert_eq!(
         bigquery().parse_sql_statements(sql).unwrap_err(),
-        ParserError::ParserError(
-            "Expected ',' or ')' after column definition, found: >\nNear `(x STRUCT<STRUCT<INT64>>`".to_string()
-        )
+        ParserError::ParserError("Expected ',' or ')' after column definition, found: >\nNear `(x STRUCT<STRUCT<INT64>>`".to_string().into())
     );
 }
 
