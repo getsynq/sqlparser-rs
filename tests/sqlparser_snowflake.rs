@@ -1740,3 +1740,17 @@ fn parse_column_comment_after_masking_policy() {
         "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description')",
     );
 }
+
+#[test]
+fn test_not_aggregate_over_window() {
+    // Parenthesized function with OVER
+    snowflake().one_statement_parses_to(
+        "SELECT (BOOLOR_AGG(col_22)) OVER (PARTITION BY col_1) FROM t",
+        "SELECT BOOLOR_AGG(col_22) OVER (PARTITION BY col_1) FROM t",
+    );
+    // NOT applied to aggregate with OVER window clause
+    snowflake().one_statement_parses_to(
+        "SELECT NOT (BOOLOR_AGG(col_22)) OVER (PARTITION BY col_1) AS IS_MAGIC_RIDE FROM t",
+        "SELECT NOT BOOLOR_AGG(col_22) OVER (PARTITION BY col_1) AS IS_MAGIC_RIDE FROM t",
+    );
+}
