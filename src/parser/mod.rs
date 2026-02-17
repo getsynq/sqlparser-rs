@@ -9904,10 +9904,19 @@ impl<'a> Parser<'a> {
                 }
             } else if self.parse_keyword(Keyword::ARRAY) {
                 self.expect_keyword(Keyword::JOIN)?;
-                Join {
+                let first = Join {
                     relation: self.parse_array_join_table_factor()?,
                     join_operator: JoinOperator::Array,
+                };
+                joins.push(first);
+                // ClickHouse ARRAY JOIN supports comma-separated list of expressions
+                while self.consume_token(&Token::Comma) {
+                    joins.push(Join {
+                        relation: self.parse_array_join_table_factor()?,
+                        join_operator: JoinOperator::Array,
+                    });
                 }
+                continue;
             } else if self.parse_keyword(Keyword::ASOF) && dialect_of!(self is SnowflakeDialect) {
                 self.expect_keyword(Keyword::JOIN)?;
                 let relation = self.parse_table_factor()?;

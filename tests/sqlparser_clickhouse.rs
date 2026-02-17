@@ -1053,6 +1053,26 @@ fn parse_array_accessor() {
 fn parse_array_join() {
     clickhouse().verified_stmt(r#"SELECT asset AS a FROM runs AS r ARRAY JOIN r.assets AS asset"#);
     clickhouse().verified_stmt(r#"SELECT asset AS a FROM runs ARRAY JOIN r.assets AS asset"#);
+
+    // Multiple comma-separated array expressions in ARRAY JOIN
+    clickhouse().verified_stmt(
+        r#"SELECT s, arr, a, b FROM arrays_test ARRAY JOIN arr AS a, [['a', 'b'], ['c']] AS b"#,
+    );
+
+    // Array literals in ARRAY JOIN
+    clickhouse().verified_stmt(
+        r#"SELECT * FROM arrays_test ARRAY JOIN [1, 2, 3] AS arr_external1, ['a', 'b', 'c'] AS arr_external2"#,
+    );
+
+    // Mixed: column ref and array literal
+    clickhouse().verified_stmt(
+        r#"SELECT * FROM arrays_test ARRAY JOIN arr1, arrays_test.arr2 AS foo, ['a', 'b', 'c'] AS elem"#,
+    );
+
+    // Array literals and function calls in ARRAY JOIN
+    clickhouse().verified_stmt(
+        r#"SELECT * FROM arrays_test ARRAY JOIN [1, 2, 3] AS arr_external1, ['a', 'b', 'c'] AS arr_external2, splitByString(',', 'asd,qwerty,zxc') AS arr_external3"#,
+    );
 }
 
 #[test]
