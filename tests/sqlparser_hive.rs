@@ -226,6 +226,7 @@ fn set_statement_with_minus() {
                 op: UnaryOperator::Minus,
                 expr: Box::new(Expr::Identifier(Ident::new("Xmx4g").empty_span()))
             }],
+            additional_assignments: vec![],
         }
     );
 

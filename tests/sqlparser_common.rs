@@ -6763,6 +6763,7 @@ fn parse_set_variable() {
             hivevar,
             variable,
             value,
+            additional_assignments: _,
         } => {
             assert!(!local);
             assert!(!hivevar);
@@ -6786,6 +6787,7 @@ fn parse_set_time_zone() {
             hivevar,
             variable,
             value,
+            additional_assignments: _,
         } => {
             assert!(!local);
             assert!(!hivevar);

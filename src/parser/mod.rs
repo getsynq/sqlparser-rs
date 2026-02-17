@@ -545,6 +545,7 @@ impl<'a> Parser<'a> {
                         hivevar: false,
                         variable: ObjectName(vec!["SYSTEM".into()]),
                         value: vec![],
+                        additional_assignments: vec![],
                     })
                 }
                 // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
@@ -556,6 +557,7 @@ impl<'a> Parser<'a> {
                         hivevar: false,
                         variable: ObjectName(vec![]),
                         value: vec![expr],
+                        additional_assignments: vec![],
                     })
                 }
                 _ => self.expected("an SQL statement", next_token),
@@ -4813,6 +4815,7 @@ impl<'a> Parser<'a> {
                     hivevar: false,
                     variable: ObjectName(vec![name]),
                     value: vec![],
+                    additional_assignments: vec![],
                 });
             }
             self.index = idx;
@@ -9021,6 +9024,7 @@ impl<'a> Parser<'a> {
                 hivevar: Some(Keyword::HIVEVAR) == modifier,
                 variable,
                 value: vec![value],
+                additional_assignments: vec![],
             });
         }
 
@@ -9049,25 +9053,63 @@ impl<'a> Parser<'a> {
                 collation_name,
             })
         } else if self.consume_token(&Token::Eq) || self.parse_keyword(Keyword::TO) {
-            let mut values = vec![];
-            loop {
-                let value = if let Ok(expr) = self.parse_expr() {
+            let value = if let Ok(expr) = self.parse_expr() {
+                expr
+            } else {
+                self.expected("variable value", self.peek_token())?
+            };
+
+            // MySQL supports comma-separated assignments:
+            // SET @x = 1, SESSION sql_mode = '', var = val
+            if dialect_of!(self is MySqlDialect) {
+                let mut additional_assignments = vec![];
+                while self.consume_token(&Token::Comma) {
+                    let scope = match self.parse_one_of_keywords(&[
+                        Keyword::SESSION,
+                        Keyword::LOCAL,
+                        Keyword::GLOBAL,
+                    ]) {
+                        Some(Keyword::SESSION) => Some(SetVariableScope::Session),
+                        Some(Keyword::LOCAL) => Some(SetVariableScope::Local),
+                        Some(Keyword::GLOBAL) => Some(SetVariableScope::Global),
+                        _ => None,
+                    };
+                    let var_name = self.parse_object_name(false)?;
+                    self.expect_token(&Token::Eq)?;
+                    let val = self.parse_expr()?;
+                    additional_assignments.push(SetVariableAssignment {
+                        scope,
+                        variable: var_name,
+                        value: vec![val],
+                    });
+                }
+                return Ok(Statement::SetVariable {
+                    local: modifier == Some(Keyword::LOCAL),
+                    hivevar: false,
+                    variable,
+                    value: vec![value],
+                    additional_assignments,
+                });
+            }
+
+            // For other dialects, comma separates multiple values for the same variable
+            // e.g. PostgreSQL: SET search_path = schema1, schema2
+            let mut values = vec![value];
+            while self.consume_token(&Token::Comma) {
+                let v = if let Ok(expr) = self.parse_expr() {
                     expr
                 } else {
                     self.expected("variable value", self.peek_token())?
                 };
-
-                values.push(value);
-                if self.consume_token(&Token::Comma) {
-                    continue;
-                }
-                return Ok(Statement::SetVariable {
-                    local: modifier == Some(Keyword::LOCAL),
-                    hivevar: Some(Keyword::HIVEVAR) == modifier,
-                    variable,
-                    value: values,
-                });
+                values.push(v);
             }
+            return Ok(Statement::SetVariable {
+                local: modifier == Some(Keyword::LOCAL),
+                hivevar: Some(Keyword::HIVEVAR) == modifier,
+                variable,
+                value: values,
+                additional_assignments: vec![],
+            });
         } else if variable.to_string().eq_ignore_ascii_case("TIMEZONE") {
             // for some db (e.g. postgresql), SET TIME ZONE <value> is an alias for SET TIMEZONE [TO|=] <value>
             match self.parse_expr() {

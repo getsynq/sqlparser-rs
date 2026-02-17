@@ -263,6 +263,25 @@ fn parse_set_variables() {
             hivevar: false,
             variable: ObjectName(vec!["autocommit".into()]),
             value: vec![Expr::Value(number("1"))],
+            additional_assignments: vec![],
+        }
+    );
+
+    // MySQL supports comma-separated assignments with optional scope modifiers
+    mysql().verified_stmt("SET @x = 1, SESSION sql_mode = ''");
+    mysql().verified_stmt("SET @x = 1, @y = 2");
+    assert_eq!(
+        mysql().verified_stmt("SET @x = 1, SESSION sql_mode = ''"),
+        Statement::SetVariable {
+            local: false,
+            hivevar: false,
+            variable: ObjectName(vec!["@x".into()]),
+            value: vec![Expr::Value(number("1"))],
+            additional_assignments: vec![SetVariableAssignment {
+                scope: Some(SetVariableScope::Session),
+                variable: ObjectName(vec!["sql_mode".into()]),
+                value: vec![Expr::Value(Value::SingleQuotedString("".into()))],
+            }],
         }
     );
 }
