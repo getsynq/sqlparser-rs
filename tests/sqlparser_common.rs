@@ -3843,7 +3843,7 @@ fn parse_explain_table() {
         Statement::ExplainTable {
             describe_alias,
             table_name,
-            has_table_word: _,
+            object_type: _,
             format: _,
         } => {
             assert_eq!(describe_alias, expected_describe_alias);

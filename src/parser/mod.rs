@@ -8325,7 +8325,19 @@ impl<'a> Parser<'a> {
                     return Ok(Statement::DescribeHistory { table_name });
                 }
 
-                let has_table_word = self.parse_keyword(Keyword::TABLE);
+                // Parse optional object type: TABLE, DATABASE, WAREHOUSE, SEQUENCE, STREAM, FUNCTION, VIEW, SCHEMA
+                let object_type = self
+                    .parse_one_of_keywords(&[
+                        Keyword::TABLE,
+                        Keyword::DATABASE,
+                        Keyword::WAREHOUSE,
+                        Keyword::SEQUENCE,
+                        Keyword::STREAM,
+                        Keyword::FUNCTION,
+                        Keyword::VIEW,
+                        Keyword::SCHEMA,
+                    ])
+                    .map(|kw| Ident::new(format!("{kw:?}")));
                 let table_name = self.parse_object_name(false)?;
 
                 // ClickHouse: DESCRIBE TABLE tab FORMAT Vertical
@@ -8337,7 +8349,7 @@ impl<'a> Parser<'a> {
 
                 Ok(Statement::ExplainTable {
                     describe_alias,
-                    has_table_word,
+                    object_type,
                     table_name,
                     format,
                 })
