@@ -1602,6 +1602,25 @@ fn test_describe_table() {
 }
 
 #[test]
+fn test_describe_object_types() {
+    // DESCRIBE DATABASE
+    snowflake().verified_stmt("DESCRIBE DATABASE desc_demo");
+    // DESCRIBE WAREHOUSE
+    snowflake().verified_stmt("DESCRIBE WAREHOUSE temporary_warehouse");
+    // DESC SEQUENCE (DESC is alias for DESCRIBE)
+    snowflake().one_statement_parses_to(
+        "DESC SEQUENCE my_sequence",
+        "DESCRIBE SEQUENCE my_sequence",
+    );
+    // DESC STREAM (DESC is alias for DESCRIBE)
+    snowflake().one_statement_parses_to("DESC STREAM mystream", "DESCRIBE STREAM mystream");
+    // DESCRIBE VIEW
+    snowflake().verified_stmt("DESCRIBE VIEW db.table");
+    // DESCRIBE SCHEMA
+    snowflake().verified_stmt("DESCRIBE SCHEMA my_schema");
+}
+
+#[test]
 fn test_asof_join() {
     snowflake().verified_stmt("SELECT * FROM table1 ASOF JOIN table2 MATCH_CONDITION (table1.timestamp <= table2.timestamp) ON table1.id = table2.id");
 }

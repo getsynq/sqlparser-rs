@@ -2316,8 +2316,8 @@ pub enum Statement {
         /// Table name
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         table_name: ObjectName,
-        /// EXPLAIN TABLE
-        has_table_word: bool,
+        /// Optional object type keyword (TABLE, DATABASE, WAREHOUSE, SEQUENCE, STREAM, FUNCTION, VIEW, etc.)
+        object_type: Option<Ident>,
         /// Optional output format (ClickHouse)
         format: Option<Ident>,
     },
@@ -2462,7 +2462,7 @@ impl fmt::Display for Statement {
             Statement::ExplainTable {
                 describe_alias,
                 table_name,
-                has_table_word,
+                object_type,
                 format,
             } => {
                 if *describe_alias {
@@ -2470,8 +2470,8 @@ impl fmt::Display for Statement {
                 } else {
                     write!(f, "EXPLAIN ")?;
                 }
-                if *has_table_word {
-                    write!(f, "TABLE ")?;
+                if let Some(obj_type) = object_type {
+                    write!(f, "{obj_type} ")?;
                 }
 
                 write!(f, "{table_name}")?;
