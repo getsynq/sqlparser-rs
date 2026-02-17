@@ -1702,7 +1702,7 @@ impl<'a> Parser<'a> {
                     trim_characters: None,
                 })
             } else if self.consume_token(&Token::Comma)
-                && dialect_of!(self is SnowflakeDialect | BigQueryDialect | RedshiftSqlDialect)
+                && dialect_of!(self is SnowflakeDialect | BigQueryDialect | RedshiftSqlDialect | DuckDbDialect)
             {
                 let characters = self.parse_comma_separated(Parser::parse_expr)?;
                 self.expect_token(&Token::RParen)?;
