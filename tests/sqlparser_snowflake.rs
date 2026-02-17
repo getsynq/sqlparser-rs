@@ -2005,3 +2005,11 @@ fn test_primary_as_column_name() {
         "CREATE OR REPLACE TABLE t1 (id VARCHAR(16777216), PRIMARY VARCHAR(16777216))",
     );
 }
+
+#[test]
+fn test_positional_column_parameters() {
+    // Snowflake positional parameters for staged file columns: :1, :2, etc.
+    snowflake().verified_stmt("SELECT :1");
+    snowflake().verified_stmt("SELECT :1, :2");
+    snowflake().verified_stmt("SELECT :1 + :2");
+}

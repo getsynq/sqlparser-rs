@@ -7201,9 +7201,17 @@ impl<'a> Parser<'a> {
             Token::HexStringLiteral(ref s) => Ok(Value::HexStringLiteral(s.to_string())),
             Token::Placeholder(ref s) => Ok(Value::Placeholder(s.to_string())),
             tok @ Token::Colon | tok @ Token::AtSign => {
-                let ident = self.parse_identifier(false)?;
-                let placeholder = tok.to_string() + &ident.value;
-                Ok(Value::Placeholder(placeholder))
+                // Allow :1, :2 etc. as positional parameters (e.g., Snowflake staged file columns)
+                let next = self.peek_token();
+                if let Token::Number(ref n, _) = next.token {
+                    let placeholder = tok.to_string() + n;
+                    self.next_token(); // consume the number
+                    Ok(Value::Placeholder(placeholder))
+                } else {
+                    let ident = self.parse_identifier(false)?;
+                    let placeholder = tok.to_string() + &ident.value;
+                    Ok(Value::Placeholder(placeholder))
+                }
             }
             Token::LBrace => {
                 //Databricks {{param}}
