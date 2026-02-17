@@ -1624,6 +1624,17 @@ fn parse_update_from_multiple_tables() {
 }
 
 #[test]
+fn parse_cast_field_access() {
+    // Single-level field access on CAST
+    bigquery().verified_stmt("SELECT CAST(col AS STRUCT<fld1 INT64>).fld1");
+    // Multi-level field access on CAST
+    bigquery().one_statement_parses_to(
+        "SELECT CAST(col AS STRUCT<fld1 STRUCT<fld2 INT64>>).fld1.fld2",
+        "SELECT CAST(col AS STRUCT<fld1 STRUCT<fld2 INT64>>).fld1.fld2",
+    );
+}
+
+#[test]
 fn parse_wildcard_table() {
     // BigQuery wildcard table syntax
     // https://cloud.google.com/bigquery/docs/querying-wildcard-tables

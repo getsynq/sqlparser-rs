@@ -1323,11 +1323,31 @@ impl<'a> Parser<'a> {
         };
 
         self.expect_token(&Token::RParen)?;
-        Ok(Expr::Cast {
+        let mut result = Expr::Cast {
             expr: Box::new(expr),
             data_type,
             format,
-        })
+        };
+
+        // Handle field access after CAST, e.g. CAST(col AS STRUCT<f1 INT64>).f1
+        while self.consume_token(&Token::Period) {
+            let tok = self.next_token();
+            let key = match tok.token {
+                Token::Word(word) => word.to_ident(),
+                _ => {
+                    return parser_err!(
+                        format!("Expected identifier, found: {tok}"),
+                        tok.span.start
+                    );
+                }
+            };
+            result = Expr::CompositeAccess {
+                expr: Box::new(result),
+                key,
+            };
+        }
+
+        Ok(result)
     }
 
     /// Parse a SQL TRY_CAST function e.g. `TRY_CAST(expr AS FLOAT)`
