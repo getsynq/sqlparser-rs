@@ -614,6 +614,17 @@ fn parse_alter_table_constraints_rename() {
 }
 
 #[test]
+fn parse_alter_table_set_storage_parameters() {
+    pg().one_statement_parses_to(
+        "ALTER TABLE t1 SET (fillfactor = 5, autovacuum_enabled = TRUE)",
+        "ALTER TABLE t1 SET (fillfactor = 5, autovacuum_enabled = true)",
+    );
+    pg().verified_stmt(
+        "ALTER TABLE t1 SET (autovacuum_vacuum_scale_factor = 0.01)",
+    );
+}
+
+#[test]
 fn parse_alter_table_alter_column() {
     pg().one_statement_parses_to(
         "ALTER TABLE tab ALTER COLUMN is_active TYPE TEXT USING 'text'",

@@ -6730,15 +6730,29 @@ impl<'a> Parser<'a> {
             let table_name = self.parse_object_name(false)?;
             AlterTableOperation::SwapWith { table_name }
         } else if self.parse_keyword(Keyword::SET) {
-            // OPTIONS keyword is optional (e.g., Snowflake: ALTER TABLE ... SET key = value)
             if self.parse_keyword(Keyword::OPTIONS) {
+                // BigQuery: SET OPTIONS(key = value, ...)
                 self.prev_token();
                 let options = self.parse_options(Keyword::OPTIONS)?;
-                AlterTableOperation::SetOptions { options }
-            } else {
-                // Parse options without OPTIONS keyword
+                AlterTableOperation::SetOptions {
+                    options,
+                    has_options_keyword: true,
+                }
+            } else if self.consume_token(&Token::LParen) {
+                // PostgreSQL: SET (key = value, ...)
                 let options = self.parse_comma_separated(Parser::parse_sql_option)?;
-                AlterTableOperation::SetOptions { options }
+                self.expect_token(&Token::RParen)?;
+                AlterTableOperation::SetOptions {
+                    options,
+                    has_options_keyword: false,
+                }
+            } else {
+                // Snowflake: SET key = value, ...
+                let options = self.parse_comma_separated(Parser::parse_sql_option)?;
+                AlterTableOperation::SetOptions {
+                    options,
+                    has_options_keyword: false,
+                }
             }
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::ATTACH)
