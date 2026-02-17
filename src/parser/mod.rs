@@ -9459,9 +9459,17 @@ impl<'a> Parser<'a> {
         } else {
             self.parse_object_name(false)?
         };
+        // For USE SECONDARY ROLES, parse comma-separated list of additional role names
+        let mut additional_names = vec![];
+        if object_type.as_deref() == Some("SECONDARY ROLES") {
+            while self.consume_token(&Token::Comma) {
+                additional_names.push(self.parse_object_name(false)?);
+            }
+        }
         Ok(Statement::Use {
             db_name,
             object_type,
+            additional_names,
         })
     }
 

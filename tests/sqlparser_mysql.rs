@@ -261,6 +261,7 @@ fn parse_use() {
         Statement::Use {
             db_name: ObjectName(vec![Ident::new("mydb")]),
             object_type: None,
+            additional_names: vec![],
         }
     );
 }
