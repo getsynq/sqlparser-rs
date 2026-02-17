@@ -1921,3 +1921,15 @@ fn test_revoke_from_application() {
         "REVOKE SELECT ON VIEW data.views.credit_usage FROM APPLICATION app_snowflake_credits RESTRICT",
     );
 }
+
+#[test]
+fn test_snowflake_model_method_syntax() {
+    // Simple model method call
+    snowflake().verified_stmt("SELECT model!PREDICT(1)");
+
+    // Model method with named argument and object wildcard
+    snowflake().verified_stmt("SELECT m!PREDICT(INPUT_DATA => {*}) AS p FROM tbl");
+
+    // Model method with qualified object wildcard
+    snowflake().verified_stmt("SELECT m!PREDICT(INPUT_DATA => {tbl.*}) AS p FROM tbl");
+}
