@@ -138,6 +138,9 @@ pub enum BinaryOperator {
     /// See [CREATE OPERATOR](https://www.postgresql.org/docs/current/sql-createoperator.html)
     /// for more information.
     PGCustomBinaryOperator(Vec<String>),
+    /// SQL standard OVERLAPS operator for datetime range comparison, e.g.
+    /// `(start1, end1) OVERLAPS (start2, end2)`
+    Overlaps,
 }
 
 impl fmt::Display for BinaryOperator {
@@ -178,6 +181,7 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::PGCustomBinaryOperator(idents) => {
                 write!(f, "OPERATOR({})", display_separated(idents, "."))
             }
+            BinaryOperator::Overlaps => f.write_str("OVERLAPS"),
         }
     }
 }
