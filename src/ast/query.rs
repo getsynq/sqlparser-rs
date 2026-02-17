@@ -448,6 +448,42 @@ pub enum SelectItem {
     QualifiedWildcard(ObjectName, WildcardAdditionalOptions),
     /// An unqualified `*`
     Wildcard(WildcardAdditionalOptions),
+    /// ClickHouse `COLUMNS('pattern')` with optional `APPLY(func)` chains
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/select#columns-expression>
+    ColumnsWithTransformers {
+        /// The COLUMNS expression (e.g., `COLUMNS('pattern')` or `COLUMNS(col1, col2)`)
+        columns: Expr,
+        /// Optional chain of `APPLY(func)` transformers
+        transformers: Vec<ColumnTransformer>,
+    },
+}
+
+/// ClickHouse column transformer applied to COLUMNS expression
+/// <https://clickhouse.com/docs/en/sql-reference/statements/select#columns-expression>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum ColumnTransformer {
+    /// `APPLY(func)` - applies function to each matched column
+    Apply(Ident),
+    /// `EXCEPT(col1, col2, ...)` - excludes columns
+    Except(Vec<Ident>),
+    /// `REPLACE(expr AS col, ...)` - replaces column expressions
+    Replace(Vec<SelectItem>),
+}
+
+impl fmt::Display for ColumnTransformer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ColumnTransformer::Apply(func) => write!(f, "APPLY({func})"),
+            ColumnTransformer::Except(cols) => {
+                write!(f, "EXCEPT({})", display_comma_separated(cols))
+            }
+            ColumnTransformer::Replace(items) => {
+                write!(f, "REPLACE({})", display_comma_separated(items))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -689,6 +725,16 @@ impl fmt::Display for SelectItem {
             SelectItem::Wildcard(additional_options) => {
                 write!(f, "*")?;
                 write!(f, "{additional_options}")?;
+                Ok(())
+            }
+            SelectItem::ColumnsWithTransformers {
+                columns,
+                transformers,
+            } => {
+                write!(f, "{columns}")?;
+                for transformer in transformers {
+                    write!(f, " {transformer}")?;
+                }
                 Ok(())
             }
         }
