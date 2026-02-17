@@ -10441,10 +10441,14 @@ impl<'a> Parser<'a> {
             match object_type {
                 Some(Keyword::SCHEMA) => GrantObjects::Schemas(objects?),
                 Some(Keyword::SEQUENCE) => GrantObjects::Sequences(objects?),
-                Some(Keyword::TABLE) | None => GrantObjects::Tables(objects?),
-                // Treat other object types (DATABASE, FUNCTION, VIEW, ROLE) as Tables
-                // since we don't have specific GrantObjects variants for them
-                Some(_) => GrantObjects::Tables(objects?),
+                None => GrantObjects::Tables {
+                    tables: objects?,
+                    object_type: None,
+                },
+                Some(kw) => GrantObjects::Tables {
+                    tables: objects?,
+                    object_type: Some(format!("{kw:?}")),
+                },
             }
         };
 

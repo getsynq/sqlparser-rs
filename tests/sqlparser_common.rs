@@ -7050,7 +7050,7 @@ fn parse_grant() {
             granted_by,
             ..
         } => match (privileges, objects) {
-            (Privileges::Actions(actions), GrantObjects::Tables(objects)) => {
+            (Privileges::Actions(actions), GrantObjects::Tables { tables: objects, .. }) => {
                 assert_eq!(
                     vec![
                         Action::Select { columns: None },
@@ -7182,7 +7182,7 @@ fn test_revoke() {
     match verified_stmt(sql) {
         Statement::Revoke {
             privileges,
-            objects: GrantObjects::Tables(tables),
+            objects: GrantObjects::Tables { tables, .. },
             grantees,
             cascade,
             granted_by,
