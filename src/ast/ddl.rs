@@ -124,10 +124,15 @@ pub enum AlterTableOperation {
     /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
     SwapWith { table_name: ObjectName },
 
-    /// `SET OPTIONS(table_set_options_list)`
+    /// `SET OPTIONS(table_set_options_list)` (BigQuery)
+    /// or `SET (key = value, ...)` (PostgreSQL storage parameters)
     ///
-    /// Note: this is BigQuery specific <https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#alter_table_set_options_statement>
-    SetOptions { options: Vec<SqlOption> },
+    /// Note: BigQuery uses `SET OPTIONS(...)`, PostgreSQL uses `SET (...)`
+    SetOptions {
+        options: Vec<SqlOption>,
+        /// Whether the `OPTIONS` keyword is used (BigQuery style)
+        has_options_keyword: bool,
+    },
 
     /// `ADD ROW ACCESS POLICY <policy_name> ON (<col_name>, ...)`
     ///
@@ -280,8 +285,15 @@ impl fmt::Display for AlterTableOperation {
             AlterTableOperation::SwapWith { table_name } => {
                 write!(f, "SWAP WITH {table_name}")
             }
-            AlterTableOperation::SetOptions { options } => {
-                write!(f, "SET OPTIONS({})", display_comma_separated(options))
+            AlterTableOperation::SetOptions {
+                options,
+                has_options_keyword,
+            } => {
+                if *has_options_keyword {
+                    write!(f, "SET OPTIONS({})", display_comma_separated(options))
+                } else {
+                    write!(f, "SET ({})", display_comma_separated(options))
+                }
             }
             AlterTableOperation::AddRowAccessPolicy { policy, on } => {
                 write!(
