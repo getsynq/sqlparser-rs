@@ -1593,6 +1593,13 @@ fn parse_columns_with_apply_transformers() {
     }
 }
 
+#[test]
+fn test_query_parameters() {
+    // ClickHouse query parameters: {name: Type}
+    let sql = "SELECT * FROM users WHERE id = {id: UInt32} AND name = {name: String}";
+    clickhouse_and_generic().one_statement_parses_to(sql, sql);
+}
+
 fn clickhouse_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(ClickHouseDialect {}), Box::new(GenericDialect {})],

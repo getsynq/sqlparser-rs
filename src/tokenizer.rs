@@ -743,12 +743,8 @@ impl<'a> Tokenizer<'a> {
                 {
                     chars.next(); // consume
                     match chars.peek() {
-                        Some('\'') => {
-                            let s = self.tokenize_quoted_string(chars, '\'')?;
-                            Ok(Some(Token::RawStringLiteral(s)))
-                        }
-                        Some('\"') => {
-                            let s = self.tokenize_quoted_string(chars, '\"')?;
+                        Some(&quote @ '\'') | Some(&quote @ '\"') => {
+                            let s = self.tokenize_possibly_triple_quoted_string(chars, quote)?;
                             Ok(Some(Token::RawStringLiteral(s)))
                         }
                         _ => {
@@ -1467,6 +1463,93 @@ impl<'a> Tokenizer<'a> {
             }
         }
         self.tokenizer_error(error_loc, "Unterminated string literal")
+    }
+
+    /// Try to tokenize a triple-quoted string ("""...""" or '''...'''), falling
+    /// back to a regular quoted string if not triple-quoted.
+    fn tokenize_possibly_triple_quoted_string(
+        &self,
+        chars: &mut State,
+        quote_style: char,
+    ) -> Result<String, TokenizerError> {
+        let error_loc = chars.location();
+
+        // Consume the first quote
+        chars.next();
+
+        // Check for triple-quote: we need two more quotes
+        if chars.peek() == Some(&quote_style) {
+            // Consume second quote
+            chars.next();
+            if chars.peek() == Some(&quote_style) {
+                // Consume third quote - this is a triple-quoted string
+                chars.next();
+                return self.tokenize_triple_quoted_string(chars, quote_style, error_loc);
+            } else {
+                // Just two quotes: "" or '' - this is an empty string
+                return Ok(String::new());
+            }
+        }
+
+        // Not triple-quoted, tokenize as a regular quoted string
+        // (opening quote already consumed, so we manually do the loop)
+        let mut s = String::new();
+        while let Some(&ch) = chars.peek() {
+            match ch {
+                c if c == quote_style => {
+                    chars.next(); // consume
+                    if chars.peek().map(|c| *c == quote_style).unwrap_or(false) {
+                        s.push(ch);
+                        if !self.unescape {
+                            s.push(ch);
+                        }
+                        chars.next();
+                    } else {
+                        return Ok(s);
+                    }
+                }
+                _ => {
+                    chars.next(); // consume
+                    s.push(ch);
+                }
+            }
+        }
+        self.tokenizer_error(error_loc, "Unterminated string literal")
+    }
+
+    /// Read a triple-quoted string (the opening """ or ''' has already been consumed).
+    /// The string ends when we encounter the matching closing triple-quote.
+    fn tokenize_triple_quoted_string(
+        &self,
+        chars: &mut State,
+        quote_style: char,
+        error_loc: Location,
+    ) -> Result<String, TokenizerError> {
+        let mut s = String::new();
+
+        while let Some(&ch) = chars.peek() {
+            if ch == quote_style {
+                chars.next(); // consume first quote
+                if chars.peek() == Some(&quote_style) {
+                    chars.next(); // consume second quote
+                    if chars.peek() == Some(&quote_style) {
+                        chars.next(); // consume third quote - end of string
+                        return Ok(s);
+                    } else {
+                        // Only two quotes in a row - they are part of the content
+                        s.push(quote_style);
+                        s.push(quote_style);
+                    }
+                } else {
+                    // Only one quote - it's part of the content
+                    s.push(quote_style);
+                }
+            } else {
+                chars.next();
+                s.push(ch);
+            }
+        }
+        self.tokenizer_error(error_loc, "Unterminated triple-quoted string literal")
     }
 
     fn tokenize_multiline_comment(

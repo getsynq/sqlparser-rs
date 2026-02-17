@@ -1971,3 +1971,18 @@ fn test_placeholder_field_access() {
     // Multi-level field access
     snowflake().verified_stmt("SELECT $1.elem.sub");
 }
+
+#[test]
+fn test_create_function_dollar_quoted() {
+    // Snowflake CREATE FUNCTION with $$...$$ body (extra clauses like RUNTIME_VERSION are consumed but not serialized)
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE FUNCTION py_udf() RETURNS VARIANT LANGUAGE PYTHON RUNTIME_VERSION = '3.10' HANDLER = 'udf' AS $$\nimport numpy as np\ndef udf():\n    return [np.__version__]\n$$",
+        "CREATE OR REPLACE FUNCTION py_udf RETURNS VARIANT LANGUAGE PYTHON AS $$\nimport numpy as np\ndef udf():\n    return [np.__version__]\n$$",
+    );
+
+    // Simple function with $$...$$ body (no extra clauses)
+    snowflake().one_statement_parses_to(
+        "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
+        "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
+    );
+}

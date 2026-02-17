@@ -7175,6 +7175,42 @@ impl<'a> Parser<'a> {
                 if self.consume_token(&Token::RBrace) {
                     return Ok(Value::ObjectConstant(vec![]));
                 }
+
+                // ClickHouse query parameters: {name: Type}
+                if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                    let idx = self.index;
+                    if let Ok(name) = self.parse_identifier(false) {
+                        if self.consume_token(&Token::Colon) {
+                            if let Ok(type_name) = self.parse_identifier(false) {
+                                if self.consume_token(&Token::RBrace) {
+                                    return Ok(Value::Placeholder(format!(
+                                        "{{{}: {}}}",
+                                        name.unwrap().value,
+                                        type_name.unwrap().value
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                    self.index = idx;
+                }
+
+                // Databricks named parameters: {:name}
+                if dialect_of!(self is DatabricksDialect | GenericDialect) {
+                    let idx = self.index;
+                    if self.consume_token(&Token::Colon) {
+                        if let Ok(name) = self.parse_identifier(false) {
+                            if self.consume_token(&Token::RBrace) {
+                                return Ok(Value::Placeholder(format!(
+                                    "{{:{}}}",
+                                    name.unwrap().value
+                                )));
+                            }
+                        }
+                    }
+                    self.index = idx;
+                }
+
                 let mut fields = vec![];
                 loop {
                     let key = self.parse_literal_string()?;
@@ -7325,7 +7361,7 @@ impl<'a> Parser<'a> {
     pub fn parse_function_definition(&mut self) -> Result<FunctionDefinition, ParserError> {
         let peek_token = self.peek_token();
         match peek_token.token {
-            Token::DollarQuotedString(value) if dialect_of!(self is PostgreSqlDialect) => {
+            Token::DollarQuotedString(value) => {
                 self.next_token();
                 Ok(FunctionDefinition::DoubleDollarDef(value.value))
             }
@@ -7351,6 +7387,8 @@ impl<'a> Parser<'a> {
             Token::EscapedStringLiteral(s) if dialect_of!(self is PostgreSqlDialect | GenericDialect | DuckDbDialect | RedshiftSqlDialect) => {
                 Ok(s)
             }
+            Token::RawStringLiteral(s) => Ok(s),
+            Token::DollarQuotedString(s) => Ok(s.value),
             _ => self.expected("literal string", next_token),
         }
     }
