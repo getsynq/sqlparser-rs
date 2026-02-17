@@ -1759,3 +1759,14 @@ fn parse_bigquery_chained_subscript_access() {
         "SELECT col[0].field AS x FROM t1",
     );
 }
+
+#[test]
+fn parse_bigquery_empty_struct() {
+    // STRUCT() - empty struct literal
+    bigquery().verified_stmt("SELECT STRUCT()");
+    // Empty struct as function argument
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM ML.FORECAST(MODEL `mydataset.mymodel`, (SELECT * FROM t1), STRUCT())",
+        "SELECT * FROM ML.FORECAST(MODEL `mydataset`.`mymodel`, (SELECT * FROM t1), STRUCT())",
+    );
+}

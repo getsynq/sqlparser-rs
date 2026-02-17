@@ -2155,8 +2155,13 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_token(&Token::LParen)?;
-        let values = self
-            .parse_comma_separated(|parser| parser.parse_struct_field_expr(!fields.is_empty()))?;
+        let values = if self.peek_token_kind() == &Token::RParen {
+            vec![]
+        } else {
+            self.parse_comma_separated(|parser| {
+                parser.parse_struct_field_expr(!fields.is_empty())
+            })?
+        };
         self.expect_token(&Token::RParen)?;
 
         Ok(Expr::Struct { values, fields })
