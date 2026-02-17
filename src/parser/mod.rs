@@ -7758,6 +7758,10 @@ impl<'a> Parser<'a> {
             Token::DoubleQuotedString(s) => {
                 Ok(Ident::with_quote('\"', s).spanning(next_token.span))
             }
+            // Handle ${variable} placeholders as identifiers (e.g., Databricks widget syntax)
+            Token::Placeholder(s) if s.starts_with("${") && s.ends_with('}') => {
+                Ok(Ident::new(s).spanning(next_token.span))
+            }
             _ => self.expected("identifier", next_token),
         }
     }

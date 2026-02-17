@@ -115,6 +115,12 @@ fn test_select_placeholder() {
 }
 
 #[test]
+fn test_select_dollar_brace_placeholder() {
+    let sql = "SELECT ${x} FROM ${y} WHERE ${z} > 1";
+    databricks().verified_stmt(sql);
+}
+
+#[test]
 fn test_underscore_column_name() {
     databricks().verified_stmt("SELECT _column FROM `myproject`.`mydataset`.`mytable`");
 
