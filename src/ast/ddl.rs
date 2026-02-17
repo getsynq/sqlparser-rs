@@ -74,6 +74,12 @@ pub enum AlterTableOperation {
         // See `AttachPartition` for more details
         partition: Partition,
     },
+    /// `DROP PART|PARTITION <partition_expr>`
+    /// Note: this is a ClickHouse-specific operation, please refer to
+    /// [ClickHouse](https://clickhouse.com/docs/en/sql-reference/statements/alter/partition#drop-partitionpart)
+    DropPartition {
+        partition: Partition,
+    },
     /// `DROP PRIMARY KEY`
     ///
     /// Note: this is a MySQL-specific operation.
@@ -186,6 +192,9 @@ impl fmt::Display for AlterTableOperation {
                     name,
                     if *cascade { " CASCADE" } else { "" },
                 )
+            }
+            AlterTableOperation::DropPartition { partition } => {
+                write!(f, "DROP {partition}")
             }
             AlterTableOperation::DropPrimaryKey => write!(f, "DROP PRIMARY KEY"),
             AlterTableOperation::DropColumn {
