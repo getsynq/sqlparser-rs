@@ -84,10 +84,11 @@ The `corpus-runner` binary is a standalone tool for parsing corpus tests without
 cargo build --release --bin corpus-runner
 
 # Run all corpus tests (completes in ~7 seconds for 100k files)
-target/release/corpus-runner tests/corpus
+# Use RUST_BACKTRACE=1 to get parser call chain in error messages for easier debugging
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus --errors
 
 # Run specific dialect directory
-target/release/corpus-runner tests/corpus/bigquery
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus/bigquery --errors
 
 # Compare reports
 node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
@@ -217,6 +218,14 @@ if !matches!(self.peek_token().token, Token::Word(w) if w.keyword == Keyword::PA
 - Problem: Keyword parsed in multiple locations (e.g., SAMPLE as table factor vs SELECT clause)
 - Solution: Use `dialect_of!` to exclude conflicting dialects from one parsing location
 - Example: ClickHouse `SAMPLE n` (clause) vs Snowflake `SAMPLE (n)` (table factor) - exclude ClickHouse from table factor parsing
+
+**ParserError construction:**
+`ParserError::ParserError` wraps `ParserErrorMessage` (not a raw `String`). Use `.into()` to convert:
+```rust
+ParserError::ParserError(format!("msg {x}").into())
+ParserError::ParserError("literal message".into())
+```
+This applies to test assertions too. The `parser_err!` macro handles conversion automatically.
 
 ## Development Guidelines
 
