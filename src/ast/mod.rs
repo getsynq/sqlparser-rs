@@ -2264,6 +2264,16 @@ pub enum Statement {
         /// ClickHouse: EXPLAIN type (e.g., SYNTAX, AST, PLAN, PIPELINE)
         explain_type: Option<Ident>,
     },
+    /// ```sql
+    /// DESCRIBE HISTORY table_name
+    /// ```
+    /// Databricks Delta Lake: show table history/changelog
+    /// See <https://docs.databricks.com/aws/en/sql/language-manual/delta-describe-history>
+    DescribeHistory {
+        /// Table name
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+    },
     /// SAVEPOINT -- define a new savepoint within the current transaction
     Savepoint { name: Ident },
     // MERGE INTO statement, based on Snowflake. See <https://docs.snowflake.com/en/sql-reference/sql/merge.html>
@@ -2434,6 +2444,9 @@ impl fmt::Display for Statement {
                 }
 
                 write!(f, "{statement}")
+            }
+            Statement::DescribeHistory { table_name } => {
+                write!(f, "DESCRIBE HISTORY {table_name}")
             }
             Statement::Query(s) => write!(f, "{s}"),
             Statement::Declare {

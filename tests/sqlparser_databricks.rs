@@ -243,3 +243,25 @@ fn test_create_table_with_location() {
 fn test_cross_join() {
     databricks_and_generic().verified_stmt("SELECT * FROM tbl CROSS JOIN tbl2 ON tbl.id = tbl2.id");
 }
+
+#[test]
+fn test_describe_history() {
+    // Simple table name
+    match databricks().verified_stmt("DESCRIBE HISTORY table_name") {
+        Statement::DescribeHistory { table_name } => {
+            assert_eq!(table_name.to_string(), "table_name");
+        }
+        _ => unreachable!(),
+    }
+
+    // Qualified table name
+    match databricks().verified_stmt("DESCRIBE HISTORY a.b") {
+        Statement::DescribeHistory { table_name } => {
+            assert_eq!(table_name.to_string(), "a.b");
+        }
+        _ => unreachable!(),
+    }
+
+    // DESC alias
+    databricks().one_statement_parses_to("DESC HISTORY my_table", "DESCRIBE HISTORY my_table");
+}
