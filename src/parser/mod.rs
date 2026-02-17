@@ -2407,7 +2407,7 @@ impl<'a> Parser<'a> {
             Token::Neq => Some(BinaryOperator::NotEq),
             Token::Gt => {
                 // Two consecutive > tokens form >> (bitwise shift right) for PostgreSQL/DuckDB
-                if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect)
+                if dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | DuckDbDialect | GenericDialect)
                     && matches!(self.peek_token().token, Token::Gt)
                 {
                     self.next_token(); // consume the second >
@@ -2442,7 +2442,7 @@ impl<'a> Parser<'a> {
             Token::DuckIntDiv if dialect_of!(self is DuckDbDialect | GenericDialect) => {
                 Some(BinaryOperator::DuckIntegerDivide)
             }
-            Token::ShiftLeft if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect) => {
+            Token::ShiftLeft if dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | DuckDbDialect | GenericDialect) => {
                 Some(BinaryOperator::PGBitwiseShiftLeft)
             }
             Token::Sharp if dialect_of!(self is PostgreSqlDialect) => {
@@ -3027,7 +3027,7 @@ impl<'a> Parser<'a> {
             | Token::Spaceship => Ok(20),
             Token::Gt => {
                 // Two consecutive > tokens form >> (shift right) at higher precedence
-                if dialect_of!(self is PostgreSqlDialect | DuckDbDialect | GenericDialect)
+                if dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | DuckDbDialect | GenericDialect)
                     && matches!(self.peek_nth_token(1).token, Token::Gt)
                 {
                     Ok(22)
