@@ -7841,6 +7841,67 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Snowflake stage references with quoted identifiers: @"schema"."stage"/path.gz
+        // When the first ident is just "@" (from tokenizer splitting on quoted idents),
+        // the tokenizer couldn't consume the quoted parts. We need to greedily consume
+        // subsequent identifiers (with or without leading dots) and collapse them into a
+        // single Ident to match the non-quoted behavior (e.g., @namespace.stage_name/path
+        // is already a single token from the tokenizer).
+        if in_table_clause
+            && dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && idents.len() == 1
+            && idents[0].value == "@"
+        {
+            // Build stage path from the @ prefix and subsequent identifiers
+            let mut stage_path = String::from("@");
+            // Consume the first identifier after @ (no dot required between @ and first part)
+            if let Ok(ident) = self.parse_identifier(false) {
+                let ident = ident.unwrap();
+                if let Some(q) = ident.quote_style {
+                    stage_path.push(q);
+                    stage_path.push_str(&ident.value);
+                    stage_path.push(q);
+                } else {
+                    stage_path.push_str(&ident.value);
+                }
+                // Consume additional dot-separated identifiers
+                while self.consume_token(&Token::Period) {
+                    stage_path.push('.');
+                    let ident = self.parse_identifier(false)?.unwrap();
+                    if let Some(q) = ident.quote_style {
+                        stage_path.push(q);
+                        stage_path.push_str(&ident.value);
+                        stage_path.push(q);
+                    } else {
+                        stage_path.push_str(&ident.value);
+                    }
+                }
+            }
+            // Consume /path suffix (e.g., /file.gz)
+            if self.consume_token(&Token::Div) {
+                stage_path.push('/');
+                // Consume path components: identifiers, numbers, and dots
+                loop {
+                    match self.peek_token_kind() {
+                        Token::Word(_) | Token::Number(_, _) => {
+                            let tok = self.next_token();
+                            match tok.token {
+                                Token::Word(w) => stage_path.push_str(&w.value),
+                                Token::Number(n, _) => stage_path.push_str(&n),
+                                _ => unreachable!(),
+                            }
+                        }
+                        Token::Period => {
+                            self.next_token();
+                            stage_path.push('.');
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            idents = vec![Ident::new(stage_path)];
+        }
+
         Ok(ObjectName(idents))
     }
 
