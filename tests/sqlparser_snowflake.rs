@@ -1933,3 +1933,12 @@ fn test_snowflake_model_method_syntax() {
     // Model method with qualified object wildcard
     snowflake().verified_stmt("SELECT m!PREDICT(INPUT_DATA => {tbl.*}) AS p FROM tbl");
 }
+
+#[test]
+fn test_placeholder_field_access() {
+    // Snowflake positional column reference with field access
+    snowflake().verified_stmt("SELECT $1.elem");
+
+    // Multi-level field access
+    snowflake().verified_stmt("SELECT $1.elem.sub");
+}
