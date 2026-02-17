@@ -1970,3 +1970,9 @@ fn parse_variable_assignment_operator() {
     mysql_and_generic().verified_stmt("SELECT @var1, @var2 := @var1");
     mysql_and_generic().verified_stmt("SELECT @var1 := 1, @var2");
 }
+
+#[test]
+fn parse_straight_join() {
+    mysql_and_generic().verified_stmt("SELECT e.* FROM e STRAIGHT_JOIN p ON e.x = p.y");
+    mysql_and_generic().verified_stmt("SELECT * FROM t1 STRAIGHT_JOIN t2 ON t1.id = t2.id");
+}

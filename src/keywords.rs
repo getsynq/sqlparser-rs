@@ -666,6 +666,7 @@ define_keywords!(
     STEP,
     STORAGE_INTEGRATION,
     STORED,
+    STRAIGHT_JOIN,
     STRICT,
     STRING,
     STRUCT,
@@ -851,6 +852,8 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     // Reserved for snowflake ASOF JOIN
     Keyword::ASOF,
     Keyword::MATCH_CONDITION,
+    // for MySQL STRAIGHT_JOIN
+    Keyword::STRAIGHT_JOIN,
 ];
 
 /// Can't be used as a column alias, so that `SELECT <expr> alias`
