@@ -2589,6 +2589,12 @@ impl<'a> Parser<'a> {
             self.expect_token(&Token::DoubleColon)?;
             self.parse_pg_try_cast(expr)
         } else if Token::ExclamationMark == tok {
+            // Snowflake model method syntax: model!PREDICT(args)
+            if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+                if let Some(method_name) = self.parse_model_method_name(&expr) {
+                    return self.parse_function(method_name);
+                }
+            }
             // PostgreSQL factorial operation
             Ok(Expr::UnaryOp {
                 op: UnaryOperator::PGPostfixFactorial,
@@ -2818,6 +2824,39 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a postgresql casting style which is in the form of `expr::datatype`
+    /// Try to extract a model method name from `expr!METHOD` syntax (Snowflake).
+    /// Returns `Some(ObjectName)` if the next token is a word followed by `(`,
+    /// combining the expr's identifier parts with `!METHOD` as the function name.
+    fn parse_model_method_name(&mut self, expr: &Expr) -> Option<ObjectName> {
+        // Next token must be a word (the method name) followed by (
+        let next = self.peek_token();
+        if !matches!(next.token, Token::Word(_)) {
+            return None;
+        }
+        if self.peek_nth_token_ref(1).token != Token::LParen {
+            return None;
+        }
+        // Extract identifier parts from the expression
+        let mut idents: Vec<Ident> = match expr {
+            Expr::Identifier(ident) => vec![(**ident).clone()],
+            Expr::CompoundIdentifier(parts) => (**parts).clone(),
+            _ => return None,
+        };
+
+        // Consume the method name token
+        let method_token = self.next_token();
+        let method_name = match method_token.token {
+            Token::Word(w) => w.value,
+            _ => return None,
+        };
+
+        // Build the function name: last ident gets !METHOD appended
+        if let Some(last) = idents.last_mut() {
+            last.value = format!("{}!{}", last.value, method_name);
+        }
+        Some(ObjectName(idents))
+    }
+
     pub fn parse_pg_cast(&mut self, expr: Expr) -> Result<Expr, ParserError> {
         Ok(Expr::Cast {
             expr: Box::new(expr),
@@ -7024,6 +7063,40 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::RBrace)?;
                     self.expect_token(&Token::RBrace)?;
                     return Ok(Value::Parameter(placeholder));
+                }
+
+                // Snowflake object wildcard: {*} or {tbl.*}
+                if self.consume_token(&Token::Mul) {
+                    self.expect_token(&Token::RBrace)?;
+                    return Ok(Value::ObjectWildcard(None));
+                }
+                // Check for {name.*} or {schema.name.*} pattern
+                if matches!(self.peek_token().token, Token::Word(_)) {
+                    let idx = self.index;
+                    let mut idents = vec![];
+                    let mut found_wildcard = false;
+                    loop {
+                        if let Ok(ident) = self.parse_identifier(false) {
+                            idents.push(ident.unwrap());
+                            if self.consume_token(&Token::Period) {
+                                if self.consume_token(&Token::Mul) {
+                                    found_wildcard = true;
+                                    break;
+                                }
+                                // Continue to parse next identifier part
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    if found_wildcard && !idents.is_empty() {
+                        self.expect_token(&Token::RBrace)?;
+                        return Ok(Value::ObjectWildcard(Some(ObjectName(idents))));
+                    }
+                    // Backtrack if not a wildcard pattern
+                    self.index = idx;
                 }
 
                 if self.consume_token(&Token::RBrace) {

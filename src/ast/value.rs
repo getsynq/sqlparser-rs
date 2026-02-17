@@ -89,6 +89,9 @@ pub enum Value {
     /// MAP literal as used by DuckDB
     /// MAP {'key': value, ...}
     MapLiteral(Vec<ObjectConstantKeyValue>),
+    /// Snowflake object wildcard: `{*}` or `{tbl.*}`
+    /// Used in ML model function calls, e.g. `m!PREDICT(INPUT_DATA => {*})`
+    ObjectWildcard(Option<ObjectName>),
 }
 
 impl fmt::Display for Value {
@@ -155,6 +158,10 @@ impl fmt::Display for Value {
                     write!(f, "{}", " }")
                 }
             }
+            Value::ObjectWildcard(qualifier) => match qualifier {
+                Some(name) => write!(f, "{{{name}.*}}"),
+                None => write!(f, "{{*}}"),
+            },
         }
     }
 }
