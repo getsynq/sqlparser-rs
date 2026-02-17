@@ -5703,7 +5703,7 @@ impl fmt::Display for SearchModifier {
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum SessionOperation {
     Unset(Vec<WithSpan<Ident>>),
-    Set(SqlOption),
+    Set(Vec<SqlOption>),
 }
 
 impl fmt::Display for SessionOperation {
@@ -5713,7 +5713,7 @@ impl fmt::Display for SessionOperation {
                 write!(f, "UNSET {}", display_comma_separated(vars))?;
             }
             SessionOperation::Set(options) => {
-                write!(f, "SET {options}")?;
+                write!(f, "SET {}", display_comma_separated(options))?;
             }
         }
         Ok(())
