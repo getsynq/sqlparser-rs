@@ -790,6 +790,13 @@ pub enum Expr {
     ArrayIndex { obj: Box<Expr>, indexes: Vec<Expr> },
     /// An array expression e.g. `ARRAY[1, 2]`
     Array(Array),
+    /// A typed array expression e.g. `ARRAY<INT64>[1, 2]` (BigQuery)
+    TypedArray {
+        /// The element type, e.g. `INT64` or `STRUCT<x INT64>`
+        data_type: DataType,
+        /// The list of expressions between brackets
+        values: Vec<Expr>,
+    },
     /// An interval expression e.g. `INTERVAL '1' YEAR`
     Interval(Interval),
     /// `MySQL` specific text search function [(1)].
@@ -1242,6 +1249,13 @@ impl fmt::Display for Expr {
             }
             Expr::Array(set) => {
                 write!(f, "{set}")
+            }
+            Expr::TypedArray { data_type, values } => {
+                write!(
+                    f,
+                    "ARRAY<{data_type}>[{}]",
+                    display_comma_separated(values)
+                )
             }
             Expr::JsonAccess {
                 left,
