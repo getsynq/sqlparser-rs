@@ -458,6 +458,7 @@ define_keywords!(
     MINVALUE,
     MOD,
     MODE,
+    MODEL,
     MODIFIES,
     MODULE,
     MONTH,

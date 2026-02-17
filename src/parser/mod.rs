@@ -11030,6 +11030,25 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_function_args(&mut self) -> Result<FunctionArg, ParserError> {
+        // BigQuery ML functions use MODEL/TABLE keyword-prefixed table references
+        // e.g. ML.PREDICT(MODEL `mydataset.mymodel`, TABLE `mydataset.mytable`)
+        if let Some(kw) = self.parse_one_of_keywords(&[Keyword::MODEL, Keyword::TABLE]) {
+            // TABLE followed by `(` is the TABLE(subquery) syntax, not a table ref
+            if kw == Keyword::TABLE && self.peek_token_is(&Token::LParen) {
+                self.prev_token();
+            } else {
+                let keyword = match kw {
+                    Keyword::MODEL => FunctionArgKeyword::Model,
+                    Keyword::TABLE => FunctionArgKeyword::Table,
+                    _ => unreachable!(),
+                };
+                let table_name = self.parse_object_name(false)?;
+                return Ok(FunctionArg::Unnamed(FunctionArgExpr::TableRef {
+                    keyword,
+                    table_name,
+                }));
+            }
+        }
         if self.peek_nth_token(1) == Token::RArrow {
             let name = self.parse_identifier(false)?.unwrap();
 
