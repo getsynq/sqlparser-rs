@@ -432,3 +432,27 @@ fn test_extract_with_string_date_part() {
 fn test_utf8_column_names() {
     redshift().verified_stmt("SELECT financing_cost_€k FROM tbl");
 }
+
+#[test]
+fn test_redshift_unpivot_super() {
+    // Basic UNPIVOT with AS and AT
+    redshift().verified_stmt(
+        "SELECT attr, val FROM customer_orders_lineitem AS c, UNPIVOT c.c_orders AS val AT attr WHERE c_custkey = 9451",
+    );
+
+    // UNPIVOT with array subscript
+    redshift().verified_stmt(
+        "SELECT attr, val FROM customer_orders_lineitem AS c, UNPIVOT c.c_orders[0] WHERE c_custkey = 9451",
+    );
+
+    // UNPIVOT without AT clause
+    redshift().one_statement_parses_to(
+        "SELECT * FROM tbl AS t, UNPIVOT t.col AS val",
+        "SELECT * FROM tbl AS t, UNPIVOT t.col AS val",
+    );
+
+    // UNPIVOT with AS and AT in complex query
+    redshift().verified_stmt(
+        "SELECT col_1, col_2, SPLIT_PART(col_12, '_', 2) AS currency_code FROM tbl_1 AS tbl_1, UNPIVOT tbl_2.col_14 AS val AT attr",
+    );
+}

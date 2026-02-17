@@ -9585,6 +9585,28 @@ impl<'a> Parser<'a> {
                     over,
                 })
             }
+        } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+            && self.parse_keyword(Keyword::UNPIVOT)
+        {
+            // Redshift UNPIVOT for SUPER data types:
+            // UNPIVOT expression [AS value_alias [AT attribute_alias]]
+            let expr = self.parse_expr()?;
+            let (value_alias, attribute_alias) = if self.parse_keyword(Keyword::AS) {
+                let value_alias = self.parse_identifier(false)?;
+                let attribute_alias = if self.parse_keyword(Keyword::AT) {
+                    Some(self.parse_identifier(false)?)
+                } else {
+                    None
+                };
+                (Some(value_alias), attribute_alias)
+            } else {
+                (None, None)
+            };
+            Ok(TableFactor::RedshiftUnpivot {
+                expr,
+                value_alias,
+                attribute_alias,
+            })
         } else if self.parse_keyword_with_tokens(Keyword::TABLE, &[Token::LParen]) {
             // parse table function (SELECT * FROM TABLE (<expr>) [ AS <alias> ])
             let expr = self.parse_expr()?;
@@ -9706,6 +9728,7 @@ impl<'a> Parser<'a> {
                         }
                         TableFactor::TableSample { .. } => {}
                         TableFactor::ExternalQuery { .. } => {}
+                        TableFactor::RedshiftUnpivot { .. } => {}
                     };
                 }
                 // Do not store the extra set of parens in the AST
@@ -9814,7 +9837,8 @@ impl<'a> Parser<'a> {
                         *alias = Some(prefix_alias);
                     }
                     TableFactor::TableSample { .. }
-                    | TableFactor::ExternalQuery { .. } => {}
+                    | TableFactor::ExternalQuery { .. }
+                    | TableFactor::RedshiftUnpivot { .. } => {}
                 }
                 return Ok(table);
             }
