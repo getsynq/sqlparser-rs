@@ -326,3 +326,30 @@ fn test_try_cast_operator() {
     // Chaining with regular cast
     databricks().one_statement_parses_to("SELECT col?::VARCHAR", "SELECT TRY_CAST(col AS VARCHAR)");
 }
+
+#[test]
+fn test_named_parameter_placeholder() {
+    // Databricks {:name} parameter syntax
+    let sql = "SELECT * FROM tbl WHERE col = {:store} LIMIT 10";
+    databricks_and_generic().one_statement_parses_to(sql, sql);
+}
+
+#[test]
+fn test_create_function_dollar_quoted() {
+    // Databricks CREATE FUNCTION with $$...$$ body
+    let sql = "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $$def add_one(x):\n  return x+1$$";
+    databricks().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $$def add_one(x):\n  return x+1$$",
+    );
+}
+
+#[test]
+fn test_create_function_tagged_dollar_quoted() {
+    // Databricks CREATE FUNCTION with $TAG$...$TAG$ body
+    let sql = "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $FOO$def add_one(x):\n  return x+1$FOO$";
+    databricks().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $$def add_one(x):\n  return x+1$$",
+    );
+}

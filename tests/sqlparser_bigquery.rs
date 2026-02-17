@@ -88,6 +88,59 @@ fn parse_raw_literal() {
 }
 
 #[test]
+fn parse_raw_literal_triple_quoted() {
+    // Simple triple-quoted raw string
+    let sql = "SELECT R\"\"\"hello world\"\"\"";
+    let stmt = bigquery_unescaped().one_statement_parses_to(
+        sql,
+        "SELECT R'hello world'",
+    );
+    if let Statement::Query(query) = stmt {
+        if let SetExpr::Select(select) = *query.body {
+            assert_eq!(1, select.projection.len());
+            assert_eq!(
+                &Expr::Value(Value::RawStringLiteral("hello world".to_string())),
+                expr_from_projection(&select.projection[0])
+            );
+        } else {
+            panic!("invalid query body")
+        }
+    } else {
+        panic!("invalid statement")
+    }
+
+    // Triple-quoted raw string with embedded quotes and newlines
+    let sql = "SELECT R\"\"\"\n  return x*y;\n\"\"\"";
+    let stmt = bigquery_unescaped().one_statement_parses_to(
+        sql,
+        "SELECT R'\n  return x*y;\n'",
+    );
+    if let Statement::Query(query) = stmt {
+        if let SetExpr::Select(select) = *query.body {
+            assert_eq!(1, select.projection.len());
+            assert_eq!(
+                &Expr::Value(Value::RawStringLiteral("\n  return x*y;\n".to_string())),
+                expr_from_projection(&select.projection[0])
+            );
+        } else {
+            panic!("invalid query body")
+        }
+    } else {
+        panic!("invalid statement")
+    }
+}
+
+#[test]
+fn parse_create_function_with_triple_quoted_raw_string() {
+    // BigQuery CREATE TEMP FUNCTION with r"""...""" body (JS UDF)
+    let sql = "CREATE TEMP FUNCTION multiplyInputs(x FLOAT64, y FLOAT64) RETURNS FLOAT64 LANGUAGE js AS r\"\"\"\n  return x*y;\n\"\"\"";
+    bigquery_unescaped().one_statement_parses_to(
+        sql,
+        "CREATE TEMPORARY FUNCTION multiplyInputs(x FLOAT64, y FLOAT64) RETURNS FLOAT64 LANGUAGE js AS '\n  return x*y;\n'",
+    );
+}
+
+#[test]
 fn parse_nested_data_types() {
     let sql = "CREATE TABLE table (x STRUCT<a ARRAY<INT64>, b BYTES(42)>, y ARRAY<STRUCT<INT64>>)";
     match bigquery().one_statement_parses_to(sql, sql) {

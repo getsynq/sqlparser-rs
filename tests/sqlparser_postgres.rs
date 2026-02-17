@@ -2564,6 +2564,12 @@ fn parse_comments() {
         _ => unreachable!(),
     }
 
+    // Dollar-quoted comment
+    pg().one_statement_parses_to(
+        "COMMENT ON TABLE mytable IS $$doc this$$",
+        "COMMENT ON TABLE mytable IS 'doc this'",
+    );
+
     match pg().verified_stmt("COMMENT IF EXISTS ON TABLE public.tab IS NULL") {
         Statement::Comment {
             object_type,
