@@ -334,6 +334,7 @@ define_keywords!(
     GENERATED,
     GEOGRAPHY,
     GET,
+    GLOB,
     GLOBAL,
     GRANT,
     GRANTED,

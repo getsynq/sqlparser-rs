@@ -588,6 +588,13 @@ pub enum Expr {
         expr: Box<Expr>,
         pattern: Box<Expr>,
     },
+    /// GLOB (SQLite pattern matching with Unix-style wildcards)
+    /// <https://www.sqlite.org/lang_expr.html#glob>
+    Glob {
+        negated: bool,
+        expr: Box<Expr>,
+        pattern: Box<Expr>,
+    },
     /// ILIKE (case-insensitive LIKE)
     ILike {
         negated: bool,
@@ -981,6 +988,17 @@ impl fmt::Display for Expr {
             } => write!(
                 f,
                 "{} {}REGEXP {}",
+                expr,
+                if *negated { "NOT " } else { "" },
+                pattern
+            ),
+            Expr::Glob {
+                negated,
+                expr,
+                pattern,
+            } => write!(
+                f,
+                "{} {}GLOB {}",
                 expr,
                 if *negated { "NOT " } else { "" },
                 pattern

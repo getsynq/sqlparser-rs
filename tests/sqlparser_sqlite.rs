@@ -293,6 +293,17 @@ fn sqlite() -> TestedDialects {
     }
 }
 
+#[test]
+fn parse_glob() {
+    // Basic GLOB
+    let sql = "SELECT 'xyz' GLOB '*y*'";
+    sqlite_and_generic().verified_only_select(sql);
+
+    // NOT GLOB
+    let sql = "SELECT 'xyz' NOT GLOB '*y*'";
+    sqlite_and_generic().verified_only_select(sql);
+}
+
 fn sqlite_and_generic() -> TestedDialects {
     TestedDialects {
         // we don't have a separate SQLite dialect, so test only the generic dialect for now
