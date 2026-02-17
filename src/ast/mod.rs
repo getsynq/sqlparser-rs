@@ -45,7 +45,7 @@ pub use self::ddl::{
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
     AggregateItem, ColumnTransformer, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
-    FormatClause, GroupByExpr, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint,
+    FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint,
     JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NonBlock, Offset,
     OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query, RenameSelectItem,
     ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem,
@@ -2198,6 +2198,8 @@ pub enum Statement {
         schema_name: SchemaName,
         if_not_exists: bool,
         comment: Option<String>,
+        /// Trino: `WITH (key = 'value', ...)`
+        with_properties: Vec<SqlOption>,
     },
     /// ```sql
     /// CREATE DATABASE
@@ -3803,6 +3805,7 @@ impl fmt::Display for Statement {
                 schema_name,
                 if_not_exists,
                 comment,
+                with_properties,
             } => {
                 write!(
                     f,
@@ -3812,6 +3815,13 @@ impl fmt::Display for Statement {
                 )?;
                 if let Some(c) = comment {
                     write!(f, " COMMENT='{c}'")?;
+                }
+                if !with_properties.is_empty() {
+                    write!(
+                        f,
+                        " WITH ({})",
+                        display_comma_separated(with_properties)
+                    )?;
                 }
                 Ok(())
             }
@@ -4170,6 +4180,8 @@ pub enum SequenceOptions {
     StartWith(Expr, bool),
     Cache(Expr),
     Cycle(bool),
+    /// Snowflake: ORDER | NOORDER
+    OrderBy(bool),
 }
 
 impl fmt::Display for SequenceOptions {
@@ -4218,6 +4230,9 @@ impl fmt::Display for SequenceOptions {
             }
             SequenceOptions::Cycle(no) => {
                 write!(f, " {}CYCLE", if *no { "NO " } else { "" })
+            }
+            SequenceOptions::OrderBy(order) => {
+                write!(f, " {}", if *order { "ORDER" } else { "NOORDER" })
             }
         }
     }

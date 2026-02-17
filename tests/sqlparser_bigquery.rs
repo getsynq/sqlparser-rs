@@ -741,6 +741,7 @@ fn parse_table_identifiers() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             },]
@@ -920,6 +921,7 @@ fn parse_table_time_travel() {
                     Value::SingleQuotedString(version)
                 ))),
                 partitions: vec![],
+                    with_ordinality: false,
             },
             joins: vec![],
         },]
@@ -946,6 +948,7 @@ fn parse_join_constraint_unnest_alias() {
                 )],
                 with_offset: false,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             join_operator: JoinOperator::Inner(JoinConstraint::On(Expr::BinaryOp {
                 left: Box::new(Expr::Identifier(Ident::new("c1").empty_span())),

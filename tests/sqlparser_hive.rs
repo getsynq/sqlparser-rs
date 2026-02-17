@@ -321,6 +321,7 @@ fn parse_delimited_identifiers() {
             with_hints,
             version,
             partitions: _,
+            with_ordinality: _,
         } => {
             assert_eq!(vec![Ident::with_quote('"', "a table")], name.0);
             assert_eq!(

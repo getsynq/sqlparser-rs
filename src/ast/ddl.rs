@@ -143,6 +143,24 @@ pub enum AlterTableOperation {
     DropRowAccessPolicy {
         policy: ObjectName,
     },
+
+    /// `ADD PROJECTION [IF NOT EXISTS] <name> (<select> [ORDER BY ...]) [WITH SETTINGS (...)]`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/projection>
+    AddProjection {
+        if_not_exists: bool,
+        projection: TableProjection,
+    },
+
+    /// `DROP PROJECTION [IF EXISTS] <name>`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/projection>
+    DropProjection {
+        if_exists: bool,
+        name: Ident,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -274,6 +292,23 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::DropRowAccessPolicy { policy } => {
                 write!(f, "DROP ROW ACCESS POLICY {policy}")
+            }
+            AlterTableOperation::AddProjection {
+                if_not_exists,
+                projection,
+            } => {
+                write!(f, "ADD")?;
+                if *if_not_exists {
+                    write!(f, " IF NOT EXISTS")?;
+                }
+                write!(f, " {projection}")
+            }
+            AlterTableOperation::DropProjection { if_exists, name } => {
+                write!(f, "DROP PROJECTION")?;
+                if *if_exists {
+                    write!(f, " IF EXISTS")?;
+                }
+                write!(f, " {name}")
             }
         }
     }
@@ -1062,6 +1097,8 @@ pub struct TableProjection {
     pub name: WithSpan<Ident>,
     pub select: Select,
     pub order_by: Option<OrderBy>,
+    /// ClickHouse: `WITH SETTINGS (key = value, ...)`
+    pub settings: Vec<SqlOption>,
 }
 
 impl fmt::Display for TableProjection {
@@ -1079,6 +1116,13 @@ impl fmt::Display for TableProjection {
             }
         }
         write!(f, ")")?;
+        if !self.settings.is_empty() {
+            write!(
+                f,
+                " WITH SETTINGS ({})",
+                display_comma_separated(&self.settings)
+            )?;
+        }
         Ok(())
     }
 }

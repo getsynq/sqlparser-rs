@@ -1309,6 +1309,26 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse optional WITH modifiers after GROUP BY expressions:
+    /// WITH CUBE, WITH ROLLUP, WITH TOTALS
+    fn parse_group_by_with_modifiers(
+        &mut self,
+    ) -> Result<Vec<GroupByWithModifier>, ParserError> {
+        let mut modifiers = vec![];
+        loop {
+            if self.parse_keywords(&[Keyword::WITH, Keyword::CUBE]) {
+                modifiers.push(GroupByWithModifier::Cube);
+            } else if self.parse_keywords(&[Keyword::WITH, Keyword::ROLLUP]) {
+                modifiers.push(GroupByWithModifier::Rollup);
+            } else if self.parse_keywords(&[Keyword::WITH, Keyword::TOTALS]) {
+                modifiers.push(GroupByWithModifier::Totals);
+            } else {
+                break;
+            }
+        }
+        Ok(modifiers)
+    }
+
     /// parse a tuple with `(` and `)`.
     /// If `lift_singleton` is true, then a singleton tuple is lifted to a tuple of length 1, otherwise it will fail.
     /// If `allow_empty` is true, then an empty tuple is allowed.
@@ -3885,10 +3905,14 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Trino: WITH (LOCATION='s3://bucket/foo')
+        let with_properties = self.parse_options(Keyword::WITH)?;
+
         Ok(Statement::CreateSchema {
             schema_name,
             if_not_exists,
             comment,
+            with_properties,
         })
     }
 
@@ -5688,13 +5712,14 @@ impl<'a> Parser<'a> {
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
+                                    with_ordinality: false,
                                 },
                                 joins: vec![],
                             }],
                             lateral_views: vec![],
                             sample: None,
                             selection: None,
-                            group_by: GroupByExpr::Expressions(vec![]),
+                            group_by: GroupByExpr::Expressions(vec![], vec![]),
                             cluster_by: vec![],
                             distribute_by: vec![],
                             sort_by: vec![],
@@ -6395,6 +6420,7 @@ impl<'a> Parser<'a> {
                 name,
                 select,
                 order_by,
+                settings: vec![],
             }))
         } else {
             Ok(None)
@@ -6490,7 +6516,40 @@ impl<'a> Parser<'a> {
             } else {
                 let if_not_exists =
                     self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
-                if self.parse_keyword(Keyword::PARTITION) {
+                if self.parse_keyword(Keyword::PROJECTION) {
+                    let name = self.parse_identifier(false)?;
+                    self.expect_token(&Token::LParen)?;
+                    self.expect_keyword(Keyword::SELECT)?;
+                    let select = self.parse_select()?;
+                    let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                        let order_by_exprs =
+                            self.parse_comma_separated(Parser::parse_order_by_expr)?;
+                        Some(OrderBy {
+                            exprs: order_by_exprs,
+                            interpolate: None,
+                        })
+                    } else {
+                        None
+                    };
+                    self.expect_token(&Token::RParen)?;
+                    let settings = if self.parse_keywords(&[Keyword::WITH, Keyword::SETTINGS]) {
+                        self.expect_token(&Token::LParen)?;
+                        let opts = self.parse_comma_separated(Parser::parse_sql_option)?;
+                        self.expect_token(&Token::RParen)?;
+                        opts
+                    } else {
+                        vec![]
+                    };
+                    AlterTableOperation::AddProjection {
+                        if_not_exists,
+                        projection: TableProjection {
+                            name,
+                            select,
+                            order_by,
+                            settings,
+                        },
+                    }
+                } else if self.parse_keyword(Keyword::PARTITION) {
                     self.expect_token(&Token::LParen)?;
                     let partitions = self.parse_comma_separated(Parser::parse_expr)?;
                     self.expect_token(&Token::RParen)?;
@@ -6573,6 +6632,10 @@ impl<'a> Parser<'a> {
                 && dialect_of!(self is MySqlDialect | GenericDialect)
             {
                 AlterTableOperation::DropPrimaryKey
+            } else if self.parse_keyword(Keyword::PROJECTION) {
+                let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+                let name = self.parse_identifier(false)?.unwrap();
+                AlterTableOperation::DropProjection { if_exists, name }
             } else {
                 let _ = self.parse_keyword(Keyword::COLUMN); // [ COLUMN ]
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
@@ -8499,6 +8562,7 @@ impl<'a> Parser<'a> {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                        with_ordinality: false,
                     },
                     joins: vec![],
                 }];
@@ -8977,7 +9041,7 @@ impl<'a> Parser<'a> {
                 lateral_views: vec![],
                 sample: None,
                 selection: None,
-                group_by: GroupByExpr::Expressions(vec![]),
+                group_by: GroupByExpr::Expressions(vec![], vec![]),
                 cluster_by: vec![],
                 distribute_by: vec![],
                 sort_by: vec![],
@@ -9220,12 +9284,15 @@ impl<'a> Parser<'a> {
 
         let group_by = if self.parse_keywords(&[Keyword::GROUP, Keyword::BY]) {
             if self.parse_keyword(Keyword::ALL) {
-                GroupByExpr::All
+                let modifiers = self.parse_group_by_with_modifiers()?;
+                GroupByExpr::All(modifiers)
             } else {
-                GroupByExpr::Expressions(self.parse_comma_separated(Parser::parse_group_by_expr)?)
+                let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
+                let modifiers = self.parse_group_by_with_modifiers()?;
+                GroupByExpr::Expressions(exprs, modifiers)
             }
         } else {
-            GroupByExpr::Expressions(vec![])
+            GroupByExpr::Expressions(vec![], vec![])
         };
 
         let cluster_by = if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
@@ -9306,12 +9373,15 @@ impl<'a> Parser<'a> {
 
         let group_by = if self.parse_keywords(&[Keyword::GROUP, Keyword::BY]) {
             if self.parse_keyword(Keyword::ALL) {
-                GroupByExpr::All
+                let modifiers = self.parse_group_by_with_modifiers()?;
+                GroupByExpr::All(modifiers)
             } else {
-                GroupByExpr::Expressions(self.parse_comma_separated(Parser::parse_group_by_expr)?)
+                let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
+                let modifiers = self.parse_group_by_with_modifiers()?;
+                GroupByExpr::Expressions(exprs, modifiers)
             }
         } else {
-            GroupByExpr::Expressions(vec![])
+            GroupByExpr::Expressions(vec![], vec![])
         };
 
         let having = if self.parse_keyword(Keyword::HAVING) {
@@ -9985,6 +10055,8 @@ impl<'a> Parser<'a> {
                 } else {
                     None
                 };
+                let with_ordinality =
+                    self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
                 let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
                 Ok(TableFactor::Function {
                     lateral: true,
@@ -9992,6 +10064,7 @@ impl<'a> Parser<'a> {
                     args,
                     alias,
                     over,
+                    with_ordinality,
                 })
             }
         } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
@@ -10189,6 +10262,9 @@ impl<'a> Parser<'a> {
             let array_exprs = self.parse_comma_separated(Parser::parse_expr)?;
             self.expect_token(&Token::RParen)?;
 
+            let with_ordinality =
+                self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
+
             let alias = match self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS) {
                 Ok(Some(alias)) => Some(alias),
                 Ok(None) => None,
@@ -10215,6 +10291,7 @@ impl<'a> Parser<'a> {
                 array_exprs,
                 with_offset,
                 with_offset_alias,
+                with_ordinality,
             })
         } else {
             let name = self.parse_object_name(true)?;
@@ -10269,6 +10346,10 @@ impl<'a> Parser<'a> {
                 None
             };
 
+            // PostgreSQL: WITH ORDINALITY for table-valued functions
+            let with_ordinality = args.is_some()
+                && self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
+
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
 
             // ClickHouse: SELECT ... FROM table [AS alias] FINAL
@@ -10296,6 +10377,7 @@ impl<'a> Parser<'a> {
                 with_hints,
                 version,
                 partitions,
+                with_ordinality,
             };
 
             let sample_keywords = if dialect_of!(self is ClickHouseDialect) {
@@ -12141,6 +12223,8 @@ impl<'a> Parser<'a> {
         if self.parse_keywords(&[Keyword::AS]) {
             data_type = Some(self.parse_data_type()?)
         }
+        // Snowflake: optional WITH before sequence options
+        let _ = self.parse_keyword(Keyword::WITH);
         let sequence_options = self.parse_create_sequence_options()?;
         // [ OWNED BY { table_name.column_name | NONE } ]
         let owned_by = if self.parse_keywords(&[Keyword::OWNED, Keyword::BY]) {
@@ -12162,69 +12246,82 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Parse a number value for sequence options, consuming optional `=` before the value
+    fn parse_sequence_number_value(&mut self) -> Result<Value, ParserError> {
+        // Snowflake uses `=` syntax: START=1, INCREMENT=1
+        let _ = self.consume_token(&Token::Eq);
+        self.parse_number_value()
+    }
+
     fn parse_create_sequence_options(&mut self) -> Result<Vec<SequenceOptions>, ParserError> {
         let mut sequence_options = vec![];
-        //[ INCREMENT [ BY ] increment ]
-        if self.parse_keywords(&[Keyword::INCREMENT]) {
-            if self.parse_keywords(&[Keyword::BY]) {
-                sequence_options.push(SequenceOptions::IncrementBy(
-                    Expr::Value(self.parse_number_value()?),
-                    true,
-                ));
-            } else {
-                sequence_options.push(SequenceOptions::IncrementBy(
-                    Expr::Value(self.parse_number_value()?),
-                    false,
-                ));
+        loop {
+            //[ INCREMENT [ BY ] increment ]
+            if self.parse_keywords(&[Keyword::INCREMENT]) {
+                if self.parse_keywords(&[Keyword::BY]) {
+                    sequence_options.push(SequenceOptions::IncrementBy(
+                        Expr::Value(self.parse_sequence_number_value()?),
+                        true,
+                    ));
+                } else {
+                    sequence_options.push(SequenceOptions::IncrementBy(
+                        Expr::Value(self.parse_sequence_number_value()?),
+                        false,
+                    ));
+                }
             }
-        }
-        //[ MINVALUE minvalue | NO MINVALUE ]
-        if self.parse_keyword(Keyword::MINVALUE) {
-            sequence_options.push(SequenceOptions::MinValue(MinMaxValue::Some(Expr::Value(
-                self.parse_number_value()?,
-            ))));
-        } else if self.parse_keywords(&[Keyword::NO, Keyword::MINVALUE]) {
-            sequence_options.push(SequenceOptions::MinValue(MinMaxValue::None));
-        } else {
-            sequence_options.push(SequenceOptions::MinValue(MinMaxValue::Empty));
-        }
-        //[ MAXVALUE maxvalue | NO MAXVALUE ]
-        if self.parse_keywords(&[Keyword::MAXVALUE]) {
-            sequence_options.push(SequenceOptions::MaxValue(MinMaxValue::Some(Expr::Value(
-                self.parse_number_value()?,
-            ))));
-        } else if self.parse_keywords(&[Keyword::NO, Keyword::MAXVALUE]) {
-            sequence_options.push(SequenceOptions::MaxValue(MinMaxValue::None));
-        } else {
-            sequence_options.push(SequenceOptions::MaxValue(MinMaxValue::Empty));
-        }
-        //[ START [ WITH ] start ]
-        if self.parse_keywords(&[Keyword::START]) {
-            if self.parse_keywords(&[Keyword::WITH]) {
-                sequence_options.push(SequenceOptions::StartWith(
-                    Expr::Value(self.parse_number_value()?),
-                    true,
-                ));
-            } else {
-                sequence_options.push(SequenceOptions::StartWith(
-                    Expr::Value(self.parse_number_value()?),
-                    false,
-                ));
+            //[ MINVALUE minvalue | NO MINVALUE ]
+            else if self.parse_keyword(Keyword::MINVALUE) {
+                sequence_options.push(SequenceOptions::MinValue(MinMaxValue::Some(Expr::Value(
+                    self.parse_sequence_number_value()?,
+                ))));
+            } else if self.parse_keywords(&[Keyword::NO, Keyword::MINVALUE]) {
+                sequence_options.push(SequenceOptions::MinValue(MinMaxValue::None));
             }
-        }
-        //[ CACHE cache ]
-        if self.parse_keywords(&[Keyword::CACHE]) {
-            sequence_options.push(SequenceOptions::Cache(Expr::Value(
-                self.parse_number_value()?,
-            )));
-        }
-        // [ [ NO ] CYCLE ]
-        if self.parse_keywords(&[Keyword::NO]) {
-            if self.parse_keywords(&[Keyword::CYCLE]) {
+            //[ MAXVALUE maxvalue | NO MAXVALUE ]
+            else if self.parse_keyword(Keyword::MAXVALUE) {
+                sequence_options.push(SequenceOptions::MaxValue(MinMaxValue::Some(Expr::Value(
+                    self.parse_sequence_number_value()?,
+                ))));
+            } else if self.parse_keywords(&[Keyword::NO, Keyword::MAXVALUE]) {
+                sequence_options.push(SequenceOptions::MaxValue(MinMaxValue::None));
+            }
+            //[ START [ WITH ] start ]
+            else if self.parse_keywords(&[Keyword::START]) {
+                if self.parse_keywords(&[Keyword::WITH]) {
+                    sequence_options.push(SequenceOptions::StartWith(
+                        Expr::Value(self.parse_number_value()?),
+                        true,
+                    ));
+                } else {
+                    sequence_options.push(SequenceOptions::StartWith(
+                        Expr::Value(self.parse_sequence_number_value()?),
+                        false,
+                    ));
+                }
+            }
+            //[ CACHE cache ]
+            else if self.parse_keywords(&[Keyword::CACHE]) {
+                sequence_options.push(SequenceOptions::Cache(Expr::Value(
+                    self.parse_sequence_number_value()?,
+                )));
+            }
+            // [ [ NO ] CYCLE ]
+            else if self.parse_keywords(&[Keyword::NO, Keyword::CYCLE]) {
                 sequence_options.push(SequenceOptions::Cycle(true));
+            } else if self.parse_keywords(&[Keyword::CYCLE]) {
+                sequence_options.push(SequenceOptions::Cycle(false));
             }
-        } else if self.parse_keywords(&[Keyword::CYCLE]) {
-            sequence_options.push(SequenceOptions::Cycle(false));
+            // [ ORDER | NOORDER ] (Snowflake)
+            else if self.parse_keyword(Keyword::ORDER) {
+                sequence_options.push(SequenceOptions::OrderBy(true));
+            } else if self.parse_keyword(Keyword::NOORDER) {
+                sequence_options.push(SequenceOptions::OrderBy(false));
+            } else {
+                break;
+            }
+            // consume optional comma between options (Snowflake WITH syntax)
+            let _ = self.consume_token(&Token::Comma);
         }
         Ok(sequence_options)
     }

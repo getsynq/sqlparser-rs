@@ -78,6 +78,7 @@ fn parse_array_access_expr() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             }],
@@ -122,7 +123,7 @@ fn parse_array_access_expr() {
                 }
                 .empty_span()
             ),
-            group_by: GroupByExpr::Expressions(vec![]),
+            group_by: GroupByExpr::Expressions(vec![], vec![]),
             cluster_by: vec![],
             distribute_by: vec![],
             sort_by: vec![],
@@ -240,6 +241,7 @@ fn parse_delimited_identifiers() {
             with_hints,
             version,
             partitions: _,
+            with_ordinality: _,
         } => {
             assert_eq!(vec![Ident::with_quote('"', "a table")], name.0);
             assert_eq!(
@@ -1598,6 +1600,46 @@ fn test_query_parameters() {
     // ClickHouse query parameters: {name: Type}
     let sql = "SELECT * FROM users WHERE id = {id: UInt32} AND name = {name: String}";
     clickhouse_and_generic().one_statement_parses_to(sql, sql);
+}
+
+#[test]
+fn parse_alter_table_add_projection() {
+    clickhouse_and_generic().verified_stmt(
+        "ALTER TABLE t ADD PROJECTION p (SELECT x ORDER BY x)",
+    );
+}
+
+#[test]
+fn parse_alter_table_add_projection_with_settings() {
+    clickhouse_and_generic().one_statement_parses_to(
+        "ALTER TABLE t ADD PROJECTION p (SELECT x ORDER BY x) WITH SETTINGS (index_granularity = 4096, index_granularity_bytes = 1048576)",
+        "ALTER TABLE t ADD PROJECTION p (SELECT x ORDER BY x) WITH SETTINGS (index_granularity = 4096, index_granularity_bytes = 1048576)",
+    );
+}
+
+#[test]
+fn parse_alter_table_drop_projection() {
+    clickhouse_and_generic().verified_stmt(
+        "ALTER TABLE t DROP PROJECTION p",
+    );
+}
+
+#[test]
+fn parse_group_by_with_cube() {
+    let sql = "SELECT year, month, day, count(*) FROM t GROUP BY year, month, day WITH CUBE";
+    clickhouse_and_generic().verified_stmt(sql);
+}
+
+#[test]
+fn parse_group_by_with_rollup() {
+    let sql = "SELECT year, month, day, count(*) FROM t GROUP BY year, month, day WITH ROLLUP";
+    clickhouse_and_generic().verified_stmt(sql);
+}
+
+#[test]
+fn parse_group_by_with_totals() {
+    let sql = "SELECT x, COUNT() FROM y GROUP BY x WITH TOTALS";
+    clickhouse_and_generic().verified_stmt(sql);
 }
 
 fn clickhouse_and_generic() -> TestedDialects {

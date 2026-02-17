@@ -752,6 +752,7 @@ fn parse_create_schema_if_not_exists() {
             if_not_exists: true,
             schema_name,
             comment: _,
+            with_properties: _,
         } => assert_eq!("schema_name", schema_name.to_string()),
         _ => unreachable!(),
     }
@@ -1074,7 +1075,7 @@ fn parse_copy_to() {
                     lateral_views: vec![],
                     sample: None,
                     selection: None,
-                    group_by: GroupByExpr::Expressions(vec![]),
+                    group_by: GroupByExpr::Expressions(vec![], vec![]),
                     having: None,
                     named_window: vec![],
                     cluster_by: vec![],
@@ -2213,7 +2214,7 @@ fn parse_array_subquery_expr() {
                     lateral_views: vec![],
                     sample: None,
                     selection: None,
-                    group_by: GroupByExpr::Expressions(vec![]),
+                    group_by: GroupByExpr::Expressions(vec![], vec![]),
                     cluster_by: vec![],
                     distribute_by: vec![],
                     sort_by: vec![],
@@ -2234,7 +2235,7 @@ fn parse_array_subquery_expr() {
                     lateral_views: vec![],
                     sample: None,
                     selection: None,
-                    group_by: GroupByExpr::Expressions(vec![]),
+                    group_by: GroupByExpr::Expressions(vec![], vec![]),
                     cluster_by: vec![],
                     distribute_by: vec![],
                     sort_by: vec![],
@@ -3192,6 +3193,7 @@ fn parse_delimited_identifiers() {
             with_hints,
             version,
             partitions: _,
+            with_ordinality: _,
         } => {
             assert_eq!(vec![Ident::with_quote('"', "a table")], name.0);
             assert_eq!(
@@ -3658,7 +3660,7 @@ fn parse_select_group_by_grouping_sets() {
                 vec![Expr::Identifier(Ident::new("size").empty_span())],
                 vec![],
             ]),
-        ]),
+        ], vec![]),
         select.group_by
     );
 }
@@ -3675,7 +3677,7 @@ fn parse_select_group_by_rollup() {
                 vec![Expr::Identifier(Ident::new("brand").empty_span())],
                 vec![Expr::Identifier(Ident::new("size").empty_span())],
             ]),
-        ]),
+        ], vec![]),
         select.group_by
     );
 }
@@ -3692,8 +3694,37 @@ fn parse_select_group_by_cube() {
                 vec![Expr::Identifier(Ident::new("brand").empty_span())],
                 vec![Expr::Identifier(Ident::new("size").empty_span())],
             ]),
-        ]),
+        ], vec![]),
         select.group_by
+    );
+}
+
+#[test]
+fn parse_with_ordinality() {
+    pg_and_generic().verified_stmt(
+        "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY",
+    );
+    pg_and_generic().verified_stmt(
+        "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY AS kv_json",
+    );
+    pg_and_generic().one_statement_parses_to(
+        "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY AS kv_json(a, b)",
+        "SELECT * FROM JSON_ARRAY_ELEMENTS('[1,true, [2,false]]') WITH ORDINALITY AS kv_json (a, b)",
+    );
+}
+
+#[test]
+fn parse_lateral_with_ordinality() {
+    pg_and_generic().one_statement_parses_to(
+        "SELECT * FROM test_data, LATERAL JSONB_ARRAY_ELEMENTS(data) WITH ORDINALITY AS elem(value, ordinality)",
+        "SELECT * FROM test_data, LATERAL JSONB_ARRAY_ELEMENTS(data) WITH ORDINALITY AS elem (value, ordinality)",
+    );
+}
+
+#[test]
+fn parse_unnest_with_ordinality() {
+    pg_and_generic().verified_stmt(
+        "SELECT * FROM UNNEST(x) WITH ORDINALITY",
     );
 }
 
@@ -3826,7 +3857,8 @@ fn parse_join_constraint_unnest_alias() {
                     vec![Ident::new("t1"), Ident::new("a")].empty_span()
                 )],
                 with_offset: false,
-                with_offset_alias: None
+                with_offset_alias: None,
+                with_ordinality: false,
             },
             join_operator: JoinOperator::Inner(JoinConstraint::On(Expr::BinaryOp {
                 left: Box::new(Expr::Identifier(Ident::new("c1").empty_span())),

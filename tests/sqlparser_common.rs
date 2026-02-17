@@ -228,6 +228,7 @@ fn parse_update_set_from() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             },
@@ -264,6 +265,7 @@ fn parse_update_set_from() {
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
+                    with_ordinality: false,
                                 },
                                 joins: vec![],
                             }],
@@ -272,7 +274,7 @@ fn parse_update_set_from() {
                             selection: None,
                             group_by: GroupByExpr::Expressions(vec![Expr::Identifier(
                                 Ident::new("id").empty_span()
-                            )]),
+                            )], vec![]),
                             cluster_by: vec![],
                             distribute_by: vec![],
                             sort_by: vec![],
@@ -334,6 +336,7 @@ fn parse_update_with_table_alias() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                    with_ordinality: false,
                     },
                     joins: vec![],
                 },
@@ -404,6 +407,7 @@ fn parse_select_with_table_alias() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             joins: vec![],
         }]
@@ -437,6 +441,7 @@ fn parse_delete_statement() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].relation
             );
@@ -466,6 +471,7 @@ fn parse_delete_statement_for_multi_tables() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].relation
             );
@@ -477,6 +483,7 @@ fn parse_delete_statement_for_multi_tables() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].joins[0].relation
             );
@@ -502,6 +509,7 @@ fn parse_delete_statement_for_multi_tables_with_using() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].relation
             );
@@ -513,6 +521,7 @@ fn parse_delete_statement_for_multi_tables_with_using() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[1].relation
             );
@@ -524,6 +533,7 @@ fn parse_delete_statement_for_multi_tables_with_using() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 using[0].relation
             );
@@ -535,6 +545,7 @@ fn parse_delete_statement_for_multi_tables_with_using() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 using[0].joins[0].relation
             );
@@ -564,6 +575,7 @@ fn parse_where_delete_statement() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].relation,
             );
@@ -607,6 +619,7 @@ fn parse_where_delete_with_alias_statement() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 from[0].relation,
             );
@@ -622,6 +635,7 @@ fn parse_where_delete_with_alias_statement() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                    with_ordinality: false,
                     },
                     joins: vec![],
                 }]),
@@ -1995,7 +2009,7 @@ fn parse_select_group_by() {
         GroupByExpr::Expressions(vec![
             Expr::Identifier(Ident::new("lname").empty_span()),
             Expr::Identifier(Ident::new("fname").empty_span()),
-        ]),
+        ], vec![]),
         select.group_by
     );
 
@@ -2010,7 +2024,7 @@ fn parse_select_group_by() {
 fn parse_select_group_by_all() {
     let sql = "SELECT id, fname, lname, SUM(order) FROM customer GROUP BY ALL";
     let select = verified_only_select(sql);
-    assert_eq!(GroupByExpr::All, select.group_by);
+    assert_eq!(GroupByExpr::All(vec![]), select.group_by);
 
     one_statement_parses_to(
         "SELECT id, fname, lname, SUM(order) FROM customer GROUP BY ALL",
@@ -3038,6 +3052,13 @@ fn parse_create_schema_with_name_and_authorization() {
         }
         _ => unreachable!(),
     }
+}
+
+#[test]
+fn parse_create_schema_with_properties() {
+    // Trino: WITH (key=value)
+    let sql = "CREATE SCHEMA foo WITH (LOCATION = 's3://bucket/foo')";
+    verified_stmt(sql);
 }
 
 #[test]
@@ -4103,13 +4124,14 @@ fn test_parse_named_window() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             joins: vec![],
         }],
         lateral_views: vec![],
         sample: None,
         selection: None,
-        group_by: GroupByExpr::Expressions(vec![]),
+        group_by: GroupByExpr::Expressions(vec![], vec![]),
         cluster_by: vec![],
         distribute_by: vec![],
         sort_by: vec![],
@@ -4469,6 +4491,7 @@ fn parse_interval_and_or_xor() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             }],
@@ -4538,7 +4561,7 @@ fn parse_interval_and_or_xor() {
                 }
                 .empty_span(),
             ),
-            group_by: GroupByExpr::Expressions(vec![]),
+            group_by: GroupByExpr::Expressions(vec![], vec![]),
             cluster_by: vec![],
             distribute_by: vec![],
             sort_by: vec![],
@@ -4884,6 +4907,7 @@ fn parse_unnest_in_from_clause() {
                 array_exprs: vec![Expr::Identifier(Ident::new("expr").empty_span())],
                 with_offset: true,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -4901,6 +4925,7 @@ fn parse_unnest_in_from_clause() {
                 array_exprs: vec![Expr::Identifier(Ident::new("expr").empty_span())],
                 with_offset: false,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -4918,6 +4943,7 @@ fn parse_unnest_in_from_clause() {
                 array_exprs: vec![Expr::Identifier(Ident::new("expr").empty_span())],
                 with_offset: true,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -4938,6 +4964,7 @@ fn parse_unnest_in_from_clause() {
                 array_exprs: vec![Expr::Identifier(Ident::new("expr").empty_span())],
                 with_offset: false,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -4972,6 +4999,7 @@ fn parse_unnest_in_from_clause() {
                 })],
                 with_offset: false,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -5025,6 +5053,7 @@ fn parse_unnest_in_from_clause() {
                 ],
                 with_offset: false,
                 with_offset_alias: None,
+                with_ordinality: false,
             },
             joins: vec![],
         }],
@@ -5134,6 +5163,7 @@ fn parse_implicit_join() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             },
@@ -5145,6 +5175,7 @@ fn parse_implicit_join() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![],
             },
@@ -5164,6 +5195,7 @@ fn parse_implicit_join() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![Join {
                     relation: TableFactor::Table {
@@ -5173,6 +5205,7 @@ fn parse_implicit_join() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                    with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -5185,6 +5218,7 @@ fn parse_implicit_join() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 },
                 joins: vec![Join {
                     relation: TableFactor::Table {
@@ -5194,6 +5228,7 @@ fn parse_implicit_join() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                    with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -5216,6 +5251,7 @@ fn parse_cross_join() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             join_operator: JoinOperator::CrossJoin(JoinConstraint::None),
         },
@@ -5238,6 +5274,7 @@ fn parse_joins_on() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             join_operator: f(JoinConstraint::On(Expr::BinaryOp {
                 left: Box::new(Expr::Identifier(Ident::new("c1").empty_span())),
@@ -5309,6 +5346,7 @@ fn parse_joins_using() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             join_operator: f(JoinConstraint::Using(vec![Ident::new("c1").empty_span()])),
         }
@@ -5372,6 +5410,7 @@ fn parse_natural_join() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             },
             join_operator: f(JoinConstraint::Natural),
         }
@@ -5648,6 +5687,7 @@ fn parse_derived_tables() {
                         with_hints: vec![],
                         version: None,
                         partitions: vec![],
+                    with_ordinality: false,
                     },
                     join_operator: JoinOperator::Inner(JoinConstraint::Natural),
                 }],
@@ -7246,6 +7286,7 @@ fn parse_merge() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 }
             );
             assert_eq!(table, table_no_into);
@@ -7272,13 +7313,14 @@ fn parse_merge() {
                                     with_hints: vec![],
                                     version: None,
                                     partitions: vec![],
+                    with_ordinality: false,
                                 },
                                 joins: vec![],
                             }],
                             lateral_views: vec![],
                             sample: None,
                             selection: None,
-                            group_by: GroupByExpr::Expressions(vec![]),
+                            group_by: GroupByExpr::Expressions(vec![], vec![]),
                             cluster_by: vec![],
                             distribute_by: vec![],
                             sort_by: vec![],
@@ -8244,6 +8286,7 @@ fn parse_pivot_table() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             }),
             aggregates: vec![AggregateItem::UnnamedExpr(Expr::Function(Function {
                 name: ObjectName(vec![Ident::new("SUM")]),
@@ -8331,6 +8374,7 @@ fn parse_pivot_table_aliases() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             }),
             aggregates: vec![
                 AggregateItem::ExprWithAlias {
@@ -8476,6 +8520,7 @@ fn parse_unpivot_table() {
                 with_hints: vec![],
                 version: None,
                 partitions: vec![],
+                    with_ordinality: false,
             }),
             value: Ident::new("quantity").empty_span(),
 
@@ -8559,6 +8604,7 @@ fn parse_pivot_unpivot_table() {
                     with_hints: vec![],
                     version: None,
                     partitions: vec![],
+                    with_ordinality: false,
                 }),
                 value: Ident::new("population").empty_span(),
                 name: Ident::new("year").empty_span(),
@@ -8796,13 +8842,14 @@ fn parse_unload() {
                             with_hints: vec![],
                             version: None,
                             partitions: vec![],
+                    with_ordinality: false,
                         },
                         joins: vec![],
                     }],
                     lateral_views: vec![],
                     sample: None,
                     selection: None,
-                    group_by: GroupByExpr::Expressions(vec![]),
+                    group_by: GroupByExpr::Expressions(vec![], vec![]),
                     cluster_by: vec![],
                     distribute_by: vec![],
                     sort_by: vec![],
