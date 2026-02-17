@@ -984,11 +984,16 @@ impl<'a> Parser<'a> {
                     expr: Box::new(self.parse_subexpr(Self::MUL_DIV_MOD_OP_PREC)?),
                 })
             }
+            Token::Tilde => {
+                Ok(Expr::UnaryOp {
+                    op: UnaryOperator::PGBitwiseNot,
+                    expr: Box::new(self.parse_subexpr(Self::PLUS_MINUS_PREC)?),
+                })
+            }
             tok @ Token::DoubleExclamationMark
             | tok @ Token::PGSquareRoot
             | tok @ Token::PGCubeRoot
             | tok @ Token::AtSign
-            | tok @ Token::Tilde
                 if dialect_of!(self is PostgreSqlDialect) =>
             {
                 let op = match tok {
@@ -996,7 +1001,6 @@ impl<'a> Parser<'a> {
                     Token::PGSquareRoot => UnaryOperator::PGSquareRoot,
                     Token::PGCubeRoot => UnaryOperator::PGCubeRoot,
                     Token::AtSign => UnaryOperator::PGAbs,
-                    Token::Tilde => UnaryOperator::PGBitwiseNot,
                     _ => unreachable!(),
                 };
                 Ok(Expr::UnaryOp {

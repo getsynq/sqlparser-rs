@@ -1677,6 +1677,13 @@ fn parse_bitwise_ops() {
 }
 
 #[test]
+fn parse_unary_bitwise_not() {
+    // Bitwise NOT (~) should work across all dialects
+    verified_stmt("SELECT ~1");
+    verified_stmt("SELECT ~a FROM t");
+}
+
+#[test]
 fn parse_binary_any() {
     let select = verified_only_select("SELECT a = ANY(b)");
     assert_eq!(
