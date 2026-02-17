@@ -837,7 +837,13 @@ impl<'a> Tokenizer<'a> {
                 }
                 // numbers and period
                 '0'..='9' | '.' => {
-                    let mut s = peeking_take_while(chars, |ch| ch.is_ascii_digit());
+                    let numeric_underscore =
+                        self.dialect.supports_numeric_literal_underscores();
+                    let digit_pred = |ch: char| {
+                        ch.is_ascii_digit() || (numeric_underscore && ch == '_')
+                    };
+
+                    let mut s = peeking_take_while(chars, digit_pred);
 
                     // match binary literal that starts with 0x
                     if s == "0" && chars.peek() == Some(&'x') {
@@ -854,7 +860,7 @@ impl<'a> Tokenizer<'a> {
                         s.push('.');
                         chars.next();
                     }
-                    s += &peeking_take_while(chars, |ch| ch.is_ascii_digit());
+                    s += &peeking_take_while(chars, digit_pred);
 
                     // No number -> Token::Period
                     if s == "." {
@@ -883,12 +889,17 @@ impl<'a> Tokenizer<'a> {
                                     chars.next();
                                 }
                                 exponent_part +=
-                                    &peeking_take_while(chars, |ch| ch.is_ascii_digit());
+                                    &peeking_take_while(chars, digit_pred);
                                 s += exponent_part.as_str();
                             }
                             // Not an exponent, discard the work done
                             _ => (),
                         }
+                    }
+
+                    // Strip underscores from numeric literal
+                    if numeric_underscore && s.contains('_') {
+                        s = s.replace('_', "");
                     }
 
                     // mysql dialect supports identifiers that start with a numeric prefix,

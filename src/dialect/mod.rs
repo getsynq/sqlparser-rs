@@ -127,6 +127,11 @@ pub trait Dialect: Debug + Any {
     fn supports_substring_from_for_expr(&self) -> bool {
         true
     }
+    /// Returns true if the dialect supports underscores as numeric literal separators.
+    /// e.g. `1_000_000`, `1_2E+1_0`
+    fn supports_numeric_literal_underscores(&self) -> bool {
+        false
+    }
     /// Dialect-specific prefix parser override
     fn parse_prefix(&self, _parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
         // return None to fall back to the default behavior
@@ -304,6 +309,10 @@ mod tests {
 
             fn supports_substring_from_for_expr(&self) -> bool {
                 self.0.supports_substring_from_for_expr()
+            }
+
+            fn supports_numeric_literal_underscores(&self) -> bool {
+                self.0.supports_numeric_literal_underscores()
             }
 
             fn parse_prefix(

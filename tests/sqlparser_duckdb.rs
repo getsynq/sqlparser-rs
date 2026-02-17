@@ -299,3 +299,20 @@ fn test_select_union_by_name() {
     });
     assert_eq!(ast.body, expected);
 }
+
+#[test]
+fn test_numeric_literal_underscores() {
+    // Underscores in numeric literals are stripped during tokenization
+    duckdb_and_generic().one_statement_parses_to(
+        "SELECT 1_000_000",
+        "SELECT 1000000",
+    );
+    duckdb_and_generic().one_statement_parses_to(
+        "SELECT 1_2E+1_0::FLOAT",
+        "SELECT CAST(12E+10 AS FLOAT)",
+    );
+    duckdb_and_generic().one_statement_parses_to(
+        "SELECT 1_000.50_0",
+        "SELECT 1000.500",
+    );
+}
