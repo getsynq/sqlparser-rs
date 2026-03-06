@@ -622,6 +622,22 @@ impl<'a> Parser<'a> {
                         additional_assignments: vec![],
                     })
                 }
+                // PostgreSQL DO block: DO $$ ... $$;
+                Keyword::DO if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
+                    // Skip remaining tokens until end of statement
+                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
+                    {
+                        self.next_token();
+                    }
+                    Ok(Statement::SetVariable {
+                        local: false,
+                        hivevar: false,
+                        tuple: false,
+                        variable: ObjectName(vec!["DO".into()]),
+                        value: vec![],
+                        additional_assignments: vec![],
+                    })
+                }
                 // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
                 Keyword::CASE if dialect_of!(self is SnowflakeDialect | BigQueryDialect) => {
                     self.prev_token();
@@ -2747,9 +2763,21 @@ impl<'a> Parser<'a> {
         } else if Token::DoubleColon == tok {
             self.parse_pg_cast(expr)
         } else if matches!(&tok.token, Token::Placeholder(s) if s == "?") {
-            // ?:: is a try cast operator (e.g., Databricks)
-            self.expect_token(&Token::DoubleColon)?;
-            self.parse_pg_try_cast(expr)
+            if self.peek_token() == Token::DoubleColon {
+                // ?:: is a try cast operator (e.g., Databricks)
+                self.expect_token(&Token::DoubleColon)?;
+                self.parse_pg_try_cast(expr)
+            } else if dialect_of!(self is PostgreSqlDialect | GenericDialect) {
+                // PostgreSQL jsonb `?` (has key) operator
+                Ok(Expr::BinaryOp {
+                    left: Box::new(expr),
+                    op: BinaryOperator::PGCustomBinaryOperator(vec!["?".to_string()]),
+                    right: Box::new(self.parse_subexpr(Self::PLUS_MINUS_PREC)?),
+                })
+            } else {
+                self.expect_token(&Token::DoubleColon)?;
+                self.parse_pg_try_cast(expr)
+            }
         } else if Token::ExclamationMark == tok {
             // Snowflake model method syntax: model!PREDICT(args)
             if dialect_of!(self is SnowflakeDialect | GenericDialect) {
@@ -3137,11 +3165,8 @@ impl<'a> Parser<'a> {
             }
             Token::DoubleColon => Ok(50),
             // ?:: is a try cast operator (e.g., Databricks)
-            Token::Placeholder(ref s)
-                if s == "?" && self.peek_nth_token(1).token == Token::DoubleColon =>
-            {
-                Ok(50)
-            }
+            // ? is jsonb has-key operator (PostgreSQL)
+            Token::Placeholder(ref s) if s == "?" => Ok(50),
             Token::Colon => Ok(50),
             Token::ExclamationMark => Ok(50),
             Token::Number(s, _) if s.starts_with(".") => Ok(50),
@@ -5961,7 +5986,15 @@ impl<'a> Parser<'a> {
 
     pub fn parse_column_def(&mut self) -> Result<ColumnDef, ParserError> {
         let name = self.parse_identifier(false)?;
-        let data_type = self.parse_data_type()?;
+        // Handle missing data type (e.g., `ADD COLUMN id;`)
+        let data_type = if self.peek_token_is(&Token::SemiColon)
+            || self.peek_token_is(&Token::EOF)
+            || self.peek_token().token == Token::Comma
+        {
+            DataType::Unspecified
+        } else {
+            self.parse_data_type()?
+        };
         let collation = if self.parse_keyword(Keyword::COLLATE) {
             Some(self.parse_collation_name()?)
         } else {
@@ -6636,69 +6669,72 @@ impl<'a> Parser<'a> {
                 }
             } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 AlterTableOperation::AddConstraint(constraint)
-            } else if self.parse_keyword(Keyword::PROJECTION) {
-                let if_not_exists =
-                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
-                let name = self.parse_identifier(false)?;
-                self.expect_token(&Token::LParen)?;
-                self.expect_keyword(Keyword::SELECT)?;
-                let select = self.parse_select()?;
-                let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
-                    let order_by_exprs =
-                        self.parse_comma_separated(Parser::parse_order_by_expr)?;
-                    Some(OrderBy {
-                        exprs: order_by_exprs,
-                        interpolate: None,
-                    })
-                } else {
-                    None
-                };
-                self.expect_token(&Token::RParen)?;
-                let settings = if self.parse_keywords(&[Keyword::WITH, Keyword::SETTINGS]) {
-                    self.expect_token(&Token::LParen)?;
-                    let opts = self.parse_comma_separated(Parser::parse_sql_option)?;
-                    self.expect_token(&Token::RParen)?;
-                    opts
-                } else {
-                    vec![]
-                };
-                AlterTableOperation::AddProjection {
-                    if_not_exists,
-                    projection: TableProjection {
-                        name,
-                        select,
-                        order_by,
-                        settings,
-                    },
-                }
-            } else if self.parse_keyword(Keyword::PARTITION) {
-                let if_not_exists =
-                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
-                self.expect_token(&Token::LParen)?;
-                let partitions = self.parse_comma_separated(Parser::parse_expr)?;
-                self.expect_token(&Token::RParen)?;
-                AlterTableOperation::AddPartitions {
-                    if_not_exists,
-                    new_partitions: partitions,
-                }
             } else {
+                // Parse optional IF NOT EXISTS before determining the operation type
                 let if_not_exists =
                     self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
-                let column_keyword = self.parse_keyword(Keyword::COLUMN);
 
-                let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect | ClickHouseDialect)
-                {
-                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS])
-                        || if_not_exists
+                if self.parse_keyword(Keyword::PROJECTION) {
+                    // ADD [IF NOT EXISTS] PROJECTION ... or ADD PROJECTION IF NOT EXISTS ...
+                    let if_not_exists = if_not_exists
+                        || self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+                    let name = self.parse_identifier(false)?;
+                    self.expect_token(&Token::LParen)?;
+                    self.expect_keyword(Keyword::SELECT)?;
+                    let select = self.parse_select()?;
+                    let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                        let order_by_exprs =
+                            self.parse_comma_separated(Parser::parse_order_by_expr)?;
+                        Some(OrderBy {
+                            exprs: order_by_exprs,
+                            interpolate: None,
+                        })
+                    } else {
+                        None
+                    };
+                    self.expect_token(&Token::RParen)?;
+                    let settings = if self.parse_keywords(&[Keyword::WITH, Keyword::SETTINGS]) {
+                        self.expect_token(&Token::LParen)?;
+                        let opts = self.parse_comma_separated(Parser::parse_sql_option)?;
+                        self.expect_token(&Token::RParen)?;
+                        opts
+                    } else {
+                        vec![]
+                    };
+                    AlterTableOperation::AddProjection {
+                        if_not_exists,
+                        projection: TableProjection {
+                            name,
+                            select,
+                            order_by,
+                            settings,
+                        },
+                    }
+                } else if self.parse_keyword(Keyword::PARTITION) {
+                    self.expect_token(&Token::LParen)?;
+                    let partitions = self.parse_comma_separated(Parser::parse_expr)?;
+                    self.expect_token(&Token::RParen)?;
+                    AlterTableOperation::AddPartitions {
+                        if_not_exists,
+                        new_partitions: partitions,
+                    }
                 } else {
-                    false
-                };
+                    let column_keyword = self.parse_keyword(Keyword::COLUMN);
 
-                let column_def = self.parse_column_def()?;
-                AlterTableOperation::AddColumn {
-                    column_keyword,
-                    if_not_exists,
-                    column_def,
+                    let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect | ClickHouseDialect)
+                    {
+                        self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS])
+                            || if_not_exists
+                    } else {
+                        false
+                    };
+
+                    let column_def = self.parse_column_def()?;
+                    AlterTableOperation::AddColumn {
+                        column_keyword,
+                        if_not_exists,
+                        column_def,
+                    }
                 }
             }
         } else if self.parse_keyword(Keyword::RENAME) {
@@ -6774,7 +6810,13 @@ impl<'a> Parser<'a> {
             } else {
                 let _ = self.parse_keyword(Keyword::COLUMN); // [ COLUMN ]
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
-                let column_name = self.parse_identifier(false)?.unwrap();
+                // Column name may be missing in broken SQL (e.g., `ALTER TABLE t DROP COLUMN;`)
+                let column_name =
+                    if self.peek_token_is(&Token::SemiColon) || self.peek_token_is(&Token::EOF) {
+                        Ident::new("")
+                    } else {
+                        self.parse_identifier(false)?.unwrap()
+                    };
                 let cascade = self.parse_keyword(Keyword::CASCADE);
                 AlterTableOperation::DropColumn {
                     column_name,
@@ -6936,10 +6978,7 @@ impl<'a> Parser<'a> {
                 let name = self.parse_identifier(false)?.unwrap();
                 AlterTableOperation::MaterializeProjection { name }
             } else {
-                return self.expected(
-                    "COLUMN or PROJECTION after MATERIALIZE",
-                    self.peek_token(),
-                );
+                return self.expected("COLUMN or PROJECTION after MATERIALIZE", self.peek_token());
             }
         } else if dialect_of!(self is ClickHouseDialect|PostgreSqlDialect|GenericDialect)
             && self.parse_keyword(Keyword::UPDATE)
