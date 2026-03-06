@@ -165,7 +165,8 @@ pub enum AlterTableOperation {
     /// <https://clickhouse.com/docs/en/sql-reference/statements/alter/column#modify-column>
     ModifyColumn {
         column_name: Ident,
-        column_type: DataType,
+        /// Data type is optional (e.g., `MODIFY COLUMN x REMOVE DEFAULT` has no type)
+        column_type: Option<DataType>,
         /// Optional column options (e.g., DEFAULT, REMOVE DEFAULT, etc.)
         options: Vec<ColumnOption>,
     },
@@ -357,7 +358,10 @@ impl fmt::Display for AlterTableOperation {
                 column_type,
                 options,
             } => {
-                write!(f, "MODIFY COLUMN {column_name} {column_type}")?;
+                write!(f, "MODIFY COLUMN {column_name}")?;
+                if let Some(dt) = column_type {
+                    write!(f, " {dt}")?;
+                }
                 for option in options {
                     write!(f, " {option}")?;
                 }
