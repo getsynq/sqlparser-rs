@@ -622,6 +622,22 @@ impl<'a> Parser<'a> {
                         additional_assignments: vec![],
                     })
                 }
+                // PostgreSQL LOCK TABLE: LOCK TABLE <name> IN <mode> MODE;
+                Keyword::LOCK if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
+                    // Skip remaining tokens until end of statement
+                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
+                    {
+                        self.next_token();
+                    }
+                    Ok(Statement::SetVariable {
+                        local: false,
+                        hivevar: false,
+                        tuple: false,
+                        variable: ObjectName(vec!["LOCK".into()]),
+                        value: vec![],
+                        additional_assignments: vec![],
+                    })
+                }
                 // PostgreSQL DO block: DO $$ ... $$;
                 Keyword::DO if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
                     // Skip remaining tokens until end of statement

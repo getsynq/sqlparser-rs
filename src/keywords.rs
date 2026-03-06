@@ -424,6 +424,7 @@ define_keywords!(
     LOCALTIME,
     LOCALTIMESTAMP,
     LOCATION,
+    LOCK,
     LOCKED,
     LOGIN,
     LOGS,
