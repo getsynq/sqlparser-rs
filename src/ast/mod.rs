@@ -1951,6 +1951,16 @@ pub enum Statement {
         name: Ident,
         operation: AlterRoleOperation,
     },
+    /// `EXCHANGE TABLES <table1> AND <table2>`
+    ///
+    /// Note: this is a ClickHouse-specific statement
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/exchange>
+    ExchangeTables {
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        first: ObjectName,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        second: ObjectName,
+    },
     /// DROP
     Drop {
         /// The type of the object to drop: TABLE, VIEW, etc.
@@ -3538,6 +3548,9 @@ impl fmt::Display for Statement {
                     "{name} {operations}",
                     operations = display_comma_separated(operations)
                 )
+            }
+            Statement::ExchangeTables { first, second } => {
+                write!(f, "EXCHANGE TABLES {first} AND {second}")
             }
             Statement::AlterIndex { name, operation } => {
                 write!(f, "ALTER INDEX {name} {operation}")

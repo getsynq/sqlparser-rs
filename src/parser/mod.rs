@@ -561,6 +561,13 @@ impl<'a> Parser<'a> {
                 Keyword::UNCACHE => Ok(self.parse_uncache_table()?),
                 Keyword::UPDATE => Ok(self.parse_update()?),
                 Keyword::ALTER => Ok(self.parse_alter()?),
+                Keyword::EXCHANGE => {
+                    self.expect_keyword(Keyword::TABLES)?;
+                    let first = self.parse_object_name(false)?;
+                    self.expect_keyword(Keyword::AND)?;
+                    let second = self.parse_object_name(false)?;
+                    Ok(Statement::ExchangeTables { first, second })
+                }
                 Keyword::CALL => Ok(self.parse_call()?),
                 Keyword::COPY => Ok(self.parse_copy()?),
                 Keyword::CLOSE => Ok(self.parse_close()?),
@@ -5771,6 +5778,35 @@ impl<'a> Parser<'a> {
                     } else {
                         None
                     };
+                    // ClickHouse: CREATE TABLE t1 AS t2 ENGINE = Buffer(...)
+                    // Parse ENGINE after AS table_name if not already set
+                    if engine.is_none() {
+                        engine = if self.parse_keyword(Keyword::ENGINE) {
+                            self.expect_token(&Token::Eq)?;
+                            let next_token = self.next_token();
+                            let engine_name = match next_token.token {
+                                Token::Word(w) => w.value,
+                                _ => self.expected("identifier", next_token)?,
+                            };
+                            let engine_options = if self.consume_token(&Token::LParen) {
+                                let columns = if !self.peek_token_is(&Token::RParen) {
+                                    self.parse_comma_separated(|p| p.parse_expr())?
+                                } else {
+                                    vec![]
+                                };
+                                self.expect_token(&Token::RParen)?;
+                                Some(columns)
+                            } else {
+                                None
+                            };
+                            Some(EngineSpec {
+                                name: engine_name,
+                                options: engine_options,
+                            })
+                        } else {
+                            None
+                        };
+                    }
                     Some(Box::new(Query {
                         with: None,
                         body: Box::new(SetExpr::Select(Box::new(Select {
@@ -6341,7 +6377,7 @@ impl<'a> Parser<'a> {
                 let columns = self.parse_parenthesized_column_list(Mandatory, false)?;
                 self.expect_keyword(Keyword::REFERENCES)?;
                 let foreign_table = self.parse_object_name(false)?;
-                let referred_columns = self.parse_parenthesized_column_list(Mandatory, false)?;
+                let referred_columns = self.parse_parenthesized_column_list(Optional, false)?;
                 let mut on_delete = None;
                 let mut on_update = None;
                 loop {
@@ -6600,67 +6636,69 @@ impl<'a> Parser<'a> {
                 }
             } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 AlterTableOperation::AddConstraint(constraint)
+            } else if self.parse_keyword(Keyword::PROJECTION) {
+                let if_not_exists =
+                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+                let name = self.parse_identifier(false)?;
+                self.expect_token(&Token::LParen)?;
+                self.expect_keyword(Keyword::SELECT)?;
+                let select = self.parse_select()?;
+                let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                    let order_by_exprs =
+                        self.parse_comma_separated(Parser::parse_order_by_expr)?;
+                    Some(OrderBy {
+                        exprs: order_by_exprs,
+                        interpolate: None,
+                    })
+                } else {
+                    None
+                };
+                self.expect_token(&Token::RParen)?;
+                let settings = if self.parse_keywords(&[Keyword::WITH, Keyword::SETTINGS]) {
+                    self.expect_token(&Token::LParen)?;
+                    let opts = self.parse_comma_separated(Parser::parse_sql_option)?;
+                    self.expect_token(&Token::RParen)?;
+                    opts
+                } else {
+                    vec![]
+                };
+                AlterTableOperation::AddProjection {
+                    if_not_exists,
+                    projection: TableProjection {
+                        name,
+                        select,
+                        order_by,
+                        settings,
+                    },
+                }
+            } else if self.parse_keyword(Keyword::PARTITION) {
+                let if_not_exists =
+                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+                self.expect_token(&Token::LParen)?;
+                let partitions = self.parse_comma_separated(Parser::parse_expr)?;
+                self.expect_token(&Token::RParen)?;
+                AlterTableOperation::AddPartitions {
+                    if_not_exists,
+                    new_partitions: partitions,
+                }
             } else {
                 let if_not_exists =
                     self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
-                if self.parse_keyword(Keyword::PROJECTION) {
-                    let name = self.parse_identifier(false)?;
-                    self.expect_token(&Token::LParen)?;
-                    self.expect_keyword(Keyword::SELECT)?;
-                    let select = self.parse_select()?;
-                    let order_by = if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
-                        let order_by_exprs =
-                            self.parse_comma_separated(Parser::parse_order_by_expr)?;
-                        Some(OrderBy {
-                            exprs: order_by_exprs,
-                            interpolate: None,
-                        })
-                    } else {
-                        None
-                    };
-                    self.expect_token(&Token::RParen)?;
-                    let settings = if self.parse_keywords(&[Keyword::WITH, Keyword::SETTINGS]) {
-                        self.expect_token(&Token::LParen)?;
-                        let opts = self.parse_comma_separated(Parser::parse_sql_option)?;
-                        self.expect_token(&Token::RParen)?;
-                        opts
-                    } else {
-                        vec![]
-                    };
-                    AlterTableOperation::AddProjection {
-                        if_not_exists,
-                        projection: TableProjection {
-                            name,
-                            select,
-                            order_by,
-                            settings,
-                        },
-                    }
-                } else if self.parse_keyword(Keyword::PARTITION) {
-                    self.expect_token(&Token::LParen)?;
-                    let partitions = self.parse_comma_separated(Parser::parse_expr)?;
-                    self.expect_token(&Token::RParen)?;
-                    AlterTableOperation::AddPartitions {
-                        if_not_exists,
-                        new_partitions: partitions,
-                    }
+                let column_keyword = self.parse_keyword(Keyword::COLUMN);
+
+                let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect | ClickHouseDialect)
+                {
+                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS])
+                        || if_not_exists
                 } else {
-                    let column_keyword = self.parse_keyword(Keyword::COLUMN);
+                    false
+                };
 
-                    let if_not_exists = if dialect_of!(self is PostgreSqlDialect | BigQueryDialect | DuckDbDialect | GenericDialect | ClickHouseDialect)
-                    {
-                        self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS])
-                            || if_not_exists
-                    } else {
-                        false
-                    };
-
-                    let column_def = self.parse_column_def()?;
-                    AlterTableOperation::AddColumn {
-                        column_keyword,
-                        if_not_exists,
-                        column_def,
-                    }
+                let column_def = self.parse_column_def()?;
+                AlterTableOperation::AddColumn {
+                    column_keyword,
+                    if_not_exists,
+                    column_def,
                 }
             }
         } else if self.parse_keyword(Keyword::RENAME) {
@@ -6853,13 +6891,12 @@ impl<'a> Parser<'a> {
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::MODIFY)
         {
-            // ClickHouse: MODIFY COLUMN <name> <type> [options]
+            // ClickHouse: MODIFY COLUMN <name> [<type>] [REMOVE DEFAULT | ...]
             self.expect_keyword(Keyword::COLUMN)?;
             let column_name = self.parse_identifier(false)?.unwrap();
-            let column_type = self.parse_data_type()?;
             let mut options = vec![];
-            // Parse optional REMOVE DEFAULT or other column options
-            if self.parse_keyword(Keyword::REMOVE) {
+            // Check if next token is REMOVE (no data type) or a data type
+            let column_type = if self.parse_keyword(Keyword::REMOVE) {
                 if self.parse_keyword(Keyword::DEFAULT) {
                     options.push(ColumnOption::DialectSpecific(vec![
                         Token::make_keyword("REMOVE"),
@@ -6868,7 +6905,22 @@ impl<'a> Parser<'a> {
                 } else {
                     self.prev_token();
                 }
-            }
+                None
+            } else {
+                let dt = self.parse_data_type()?;
+                // Parse optional REMOVE DEFAULT after data type
+                if self.parse_keyword(Keyword::REMOVE) {
+                    if self.parse_keyword(Keyword::DEFAULT) {
+                        options.push(ColumnOption::DialectSpecific(vec![
+                            Token::make_keyword("REMOVE"),
+                            Token::make_keyword("DEFAULT"),
+                        ]));
+                    } else {
+                        self.prev_token();
+                    }
+                }
+                Some(dt)
+            };
             AlterTableOperation::ModifyColumn {
                 column_name,
                 column_type,
@@ -6889,7 +6941,7 @@ impl<'a> Parser<'a> {
                     self.peek_token(),
                 );
             }
-        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+        } else if dialect_of!(self is ClickHouseDialect|PostgreSqlDialect|GenericDialect)
             && self.parse_keyword(Keyword::UPDATE)
         {
             // ClickHouse: ALTER TABLE ... UPDATE col = expr WHERE condition
