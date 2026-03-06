@@ -26,8 +26,8 @@ use sqlparser_derive::{Visit, VisitMut};
 
 use crate::ast::value::escape_single_quote_string;
 use crate::ast::{
-    display_comma_separated, display_separated, DataType, Expr, Ident, ObjectName, OrderBy, Select,
-    SequenceOptions,
+    display_comma_separated, display_separated, Assignment, DataType, Expr, Ident, ObjectName,
+    OrderBy, Select, SequenceOptions,
 };
 use crate::tokenizer::Token;
 
@@ -158,6 +158,44 @@ pub enum AlterTableOperation {
     /// Note: this is a ClickHouse-specific operation
     /// <https://clickhouse.com/docs/sql-reference/statements/alter/projection>
     DropProjection { if_exists: bool, name: Ident },
+
+    /// `MODIFY COLUMN <column_name> <data_type> [<options>]`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/alter/column#modify-column>
+    ModifyColumn {
+        column_name: Ident,
+        column_type: DataType,
+        /// Optional column options (e.g., DEFAULT, REMOVE DEFAULT, etc.)
+        options: Vec<ColumnOption>,
+    },
+
+    /// `MATERIALIZE COLUMN <column_name>`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/alter/column#materialize-column>
+    MaterializeColumn { column_name: Ident },
+
+    /// `MATERIALIZE PROJECTION <projection_name>`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/projection>
+    MaterializeProjection { name: Ident },
+
+    /// `DROP INDEX [IF EXISTS] <index_name>`
+    ///
+    /// Note: this is a ClickHouse-specific operation
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/alter/index#drop-index>
+    DropIndex { if_exists: bool, name: Ident },
+
+    /// `UPDATE <column> = <expr> [, ...] WHERE <condition>`
+    ///
+    /// Note: this is a ClickHouse-specific operation (lightweight mutation)
+    /// <https://clickhouse.com/docs/en/sql-reference/statements/alter/update>
+    UpdateData {
+        assignments: Vec<Assignment>,
+        selection: Option<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -313,6 +351,40 @@ impl fmt::Display for AlterTableOperation {
                     write!(f, " IF EXISTS")?;
                 }
                 write!(f, " {name}")
+            }
+            AlterTableOperation::ModifyColumn {
+                column_name,
+                column_type,
+                options,
+            } => {
+                write!(f, "MODIFY COLUMN {column_name} {column_type}")?;
+                for option in options {
+                    write!(f, " {option}")?;
+                }
+                Ok(())
+            }
+            AlterTableOperation::MaterializeColumn { column_name } => {
+                write!(f, "MATERIALIZE COLUMN {column_name}")
+            }
+            AlterTableOperation::MaterializeProjection { name } => {
+                write!(f, "MATERIALIZE PROJECTION {name}")
+            }
+            AlterTableOperation::DropIndex { if_exists, name } => {
+                write!(f, "DROP INDEX")?;
+                if *if_exists {
+                    write!(f, " IF EXISTS")?;
+                }
+                write!(f, " {name}")
+            }
+            AlterTableOperation::UpdateData {
+                assignments,
+                selection,
+            } => {
+                write!(f, "UPDATE {}", display_comma_separated(assignments))?;
+                if let Some(predicate) = selection {
+                    write!(f, " WHERE {predicate}")?;
+                }
+                Ok(())
             }
         }
     }

@@ -6729,6 +6729,10 @@ impl<'a> Parser<'a> {
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
                 let name = self.parse_identifier(false)?.unwrap();
                 AlterTableOperation::DropProjection { if_exists, name }
+            } else if self.parse_keyword(Keyword::INDEX) {
+                let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+                let name = self.parse_identifier(false)?.unwrap();
+                AlterTableOperation::DropIndex { if_exists, name }
             } else {
                 let _ = self.parse_keyword(Keyword::COLUMN); // [ COLUMN ]
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
@@ -6845,6 +6849,59 @@ impl<'a> Parser<'a> {
         {
             AlterTableOperation::DetachPartition {
                 partition: self.parse_part_or_partition()?,
+            }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::MODIFY)
+        {
+            // ClickHouse: MODIFY COLUMN <name> <type> [options]
+            self.expect_keyword(Keyword::COLUMN)?;
+            let column_name = self.parse_identifier(false)?.unwrap();
+            let column_type = self.parse_data_type()?;
+            let mut options = vec![];
+            // Parse optional REMOVE DEFAULT or other column options
+            if self.parse_keyword(Keyword::REMOVE) {
+                if self.parse_keyword(Keyword::DEFAULT) {
+                    options.push(ColumnOption::DialectSpecific(vec![
+                        Token::make_keyword("REMOVE"),
+                        Token::make_keyword("DEFAULT"),
+                    ]));
+                } else {
+                    self.prev_token();
+                }
+            }
+            AlterTableOperation::ModifyColumn {
+                column_name,
+                column_type,
+                options,
+            }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::MATERIALIZE)
+        {
+            if self.parse_keyword(Keyword::COLUMN) {
+                let column_name = self.parse_identifier(false)?.unwrap();
+                AlterTableOperation::MaterializeColumn { column_name }
+            } else if self.parse_keyword(Keyword::PROJECTION) {
+                let name = self.parse_identifier(false)?.unwrap();
+                AlterTableOperation::MaterializeProjection { name }
+            } else {
+                return self.expected(
+                    "COLUMN or PROJECTION after MATERIALIZE",
+                    self.peek_token(),
+                );
+            }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keyword(Keyword::UPDATE)
+        {
+            // ClickHouse: ALTER TABLE ... UPDATE col = expr WHERE condition
+            let assignments = self.parse_comma_separated(Parser::parse_assignment)?;
+            let selection = if self.parse_keyword(Keyword::WHERE) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+            AlterTableOperation::UpdateData {
+                assignments,
+                selection,
             }
         } else {
             return self.expected(
