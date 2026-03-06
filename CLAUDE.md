@@ -107,7 +107,10 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - Handles panics and stack overflows gracefully
 - Same binary used in GitHub Actions (`.github/workflows/corpus.yml`)
 - Can be used for profiling (same workload as tests)
-- `customer_*` dialect prefixes automatically stripped (customer_bigquery → bigquery)
+- `customer_*` and `synq_*` dialect prefixes automatically stripped (customer_bigquery → bigquery, synq_clickhouse → clickhouse)
+- **Cannot run corpus-runner on subdirectories** — dialect is extracted from first path component relative to corpus root
+- **Corpus files are symlinked** from `kernel-cll-corpus` repo — commit corpus changes there, not in sqlparser-rs
+- Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
 
 **Development workflow:**
 - Use corpus-runner for fast feedback (6.7s vs 2+ hours)
@@ -244,6 +247,11 @@ Semantic analysis varies drastically between SQL dialects and is left to consume
 2. **Update Parser** (`src/parser/mod.rs`): Add parsing logic
 3. **Add Tests**: Write dialect-specific tests in appropriate test file
 4. **Consider Dialect**: Use `dialect_of!` if syntax is dialect-specific
+
+#### Adding New Keywords
+Keywords in `src/keywords.rs` MUST be in strict alphabetical order — `ALL_KEYWORDS` uses binary search.
+If a keyword is out of order, the tokenizer silently fails to recognize it (maps to `Keyword::NoKeyword`).
+Verify ordering carefully: e.g., `EXCHANGE` < `EXCLUDE` < `EXEC` (compare character by character).
 
 #### AST Change Workflow
 When adding fields to AST structs, you must update ALL pattern matches:
