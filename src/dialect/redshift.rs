@@ -59,13 +59,18 @@ impl Dialect for RedshiftSqlDialect {
                 // like an expression rather than an identifier:
                 // - [0], [1] -> array subscript (starts with digit)
                 // - [CAST(x AS INTEGER) - 1] -> expression (contains parentheses)
+                // - [tbl.col] -> array subscript with compound index (contains dot before closing ])
                 // - [column_name] -> valid delimited identifier
                 match chars.peek() {
                     Some(ch) if ch.is_ascii_digit() => false,
                     _ => {
-                        // Scan for parentheses - identifiers don't contain them
+                        // Scan up to and including the closing ] for parentheses or dots.
+                        // Identifiers don't contain these; array subscripts do.
                         for ch in chars {
-                            if ch == '(' {
+                            if ch == ']' {
+                                break; // stop at the closing bracket — don't scan further
+                            }
+                            if ch == '(' || ch == '.' {
                                 return false;
                             }
                         }
