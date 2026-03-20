@@ -59,6 +59,15 @@ fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
 
     let sql = std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
 
+    // Normalize log-escaped SQL: some corpus files come from query logs where actual
+    // newlines/CRs were escaped as literal \n / \r sequences. Unescape them before parsing
+    // so the parser sees proper whitespace.
+    let sql = if sql.contains("\\n") || sql.contains("\\r") {
+        sql.replace("\\r\\n", "\n").replace("\\r", "\r").replace("\\n", "\n")
+    } else {
+        sql
+    };
+
     match Parser::parse_sql(&*dialect, &sql) {
         Ok(statements) => {
             if statements.is_empty() {
