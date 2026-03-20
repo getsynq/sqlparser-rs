@@ -1938,3 +1938,23 @@ fn parse_merge_not_matched_by_source() {
         WHEN NOT MATCHED THEN INSERT (id) VALUES (S.id)",
     );
 }
+
+#[test]
+fn parse_deferred_join_on_clause() {
+    // BigQuery supports deferred ON clause for nested joins:
+    // FROM A INNER JOIN B LEFT JOIN C ON c_cond ON a_b_cond
+    // The last ON applies to the preceding join with no constraint
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM tbl_a INNER JOIN tbl_b LEFT JOIN tbl_c ON tbl_c.id = tbl_b.id ON tbl_a.id = tbl_b.id",
+        "SELECT * FROM tbl_a JOIN tbl_b ON tbl_a.id = tbl_b.id LEFT JOIN tbl_c ON tbl_c.id = tbl_b.id",
+    );
+}
+
+#[test]
+fn parse_deferred_join_on_in_cte() {
+    // Test exact pattern from customer_bigquery corpus files
+    bigquery().one_statement_parses_to(
+        "WITH add_first AS (SELECT a.*, b.x, c.v FROM b INNER JOIN a LEFT JOIN c ON c.id = a.id ON b.id = a.id WHERE c.v <= a.v), result AS (SELECT * FROM add_first) SELECT * FROM result",
+        "WITH add_first AS (SELECT a.*, b.x, c.v FROM b JOIN a ON b.id = a.id LEFT JOIN c ON c.id = a.id WHERE c.v <= a.v), result AS (SELECT * FROM add_first) SELECT * FROM result",
+    );
+}

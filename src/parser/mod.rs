@@ -10520,6 +10520,41 @@ impl<'a> Parser<'a> {
             };
             joins.push(join);
         }
+        // Handle deferred ON clauses (BigQuery/Standard SQL nested join syntax).
+        // e.g., FROM A INNER JOIN B LEFT JOIN C ON c_cond ON a_b_cond
+        // The ON clauses are applied in order to the most recent unconstrained join.
+        while self.parse_keyword(Keyword::ON) {
+            let constraint = self.parse_expr()?;
+            let mut updated = false;
+            for join in joins.iter_mut().rev() {
+                let needs_update = matches!(
+                    &join.join_operator,
+                    JoinOperator::Inner(JoinConstraint::None)
+                        | JoinOperator::LeftOuter(JoinConstraint::None)
+                        | JoinOperator::RightOuter(JoinConstraint::None)
+                        | JoinOperator::FullOuter(JoinConstraint::None)
+                        | JoinOperator::CrossJoin(JoinConstraint::None)
+                );
+                if needs_update {
+                    let on = JoinConstraint::On(constraint.clone());
+                    join.join_operator = match &join.join_operator {
+                        JoinOperator::Inner(_) => JoinOperator::Inner(on),
+                        JoinOperator::LeftOuter(_) => JoinOperator::LeftOuter(on),
+                        JoinOperator::RightOuter(_) => JoinOperator::RightOuter(on),
+                        JoinOperator::FullOuter(_) => JoinOperator::FullOuter(on),
+                        JoinOperator::CrossJoin(_) => JoinOperator::CrossJoin(on),
+                        _ => unreachable!(),
+                    };
+                    updated = true;
+                    break;
+                }
+            }
+            if !updated {
+                return Err(ParserError::ParserError(
+                    "Unexpected ON clause with no preceding JOIN to apply it to".into(),
+                ));
+            }
+        }
         Ok(TableWithJoins { relation, joins })
     }
 
