@@ -2333,6 +2333,10 @@ pub enum Statement {
     Execute {
         name: WithSpan<Ident>,
         parameters: Vec<Expr>,
+        /// For `EXECUTE IMMEDIATE 'sql'` syntax (Trino, Oracle, etc.)
+        immediate: Option<Expr>,
+        /// USING parameters for `EXECUTE IMMEDIATE 'sql' USING p1, p2`
+        using: Vec<Expr>,
     },
     /// ```sql
     /// EXECUTE AS <user>
@@ -3904,10 +3908,22 @@ impl fmt::Display for Statement {
                 prepare = if *prepare { "PREPARE " } else { "" },
                 name = name,
             ),
-            Statement::Execute { name, parameters } => {
-                write!(f, "EXECUTE {name}")?;
-                if !parameters.is_empty() {
-                    write!(f, "({})", display_comma_separated(parameters))?;
+            Statement::Execute {
+                name,
+                parameters,
+                immediate,
+                using,
+            } => {
+                if let Some(imm) = immediate {
+                    write!(f, "EXECUTE IMMEDIATE {imm}")?;
+                    if !using.is_empty() {
+                        write!(f, " USING {}", display_comma_separated(using))?;
+                    }
+                } else {
+                    write!(f, "EXECUTE {name}")?;
+                    if !parameters.is_empty() {
+                        write!(f, "({})", display_comma_separated(parameters))?;
+                    }
                 }
                 Ok(())
             }
