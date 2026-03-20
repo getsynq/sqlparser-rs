@@ -7830,6 +7830,11 @@ impl<'a> Parser<'a> {
                 if self.peek_token_is(&Token::LParen) {
                     return self.parse_function(ObjectName(vec![Ident::new(value)]));
                 }
+                // If followed by a period, this is a compound identifier (e.g. tbl.col used as array index)
+                if self.peek_token_is(&Token::Period) {
+                    self.prev_token();
+                    return self.parse_expr();
+                }
                 Ok(Expr::Value(Value::SingleQuotedString(value)))
             }
             // Handle SQL keywords used as functions inside brackets (e.g., [CAST(x AS INTEGER) - 1])

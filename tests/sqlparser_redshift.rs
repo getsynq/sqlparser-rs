@@ -586,3 +586,17 @@ fn test_redshift_array_function_call() {
     // ARRAY(subquery) should still work as array subquery
     redshift().verified_stmt("SELECT ARRAY(SELECT x FROM t)");
 }
+
+#[test]
+fn test_redshift_array_subscript_compound_index() {
+    // Redshift supports array subscript with compound column references as index
+    // e.g. col[tbl.idx] where tbl.idx is a column reference
+    redshift().one_statement_parses_to(
+        "SELECT col[tbl.idx] FROM t",
+        "SELECT col[tbl.idx] FROM t",
+    );
+    redshift().one_statement_parses_to(
+        "SELECT a FROM t WHERE col1 = arr_col[tbl.idx]",
+        "SELECT a FROM t WHERE col1 = arr_col[tbl.idx]",
+    );
+}
