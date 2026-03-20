@@ -1449,6 +1449,17 @@ fn parse_pivot_of_table_factor_derived() {
 }
 
 #[test]
+fn parse_pivot_with_subquery_in_clause() {
+    // Snowflake supports subqueries in PIVOT's IN clause
+    snowflake().verified_stmt(
+        "SELECT * FROM quarterly_sales PIVOT(SUM(amount) FOR quarter IN (SELECT DISTINCT quarter FROM ad_campaign_types_by_quarter WHERE television = true ORDER BY quarter)) ORDER BY empid",
+    );
+    snowflake().verified_stmt(
+        "SELECT * FROM tbl PIVOT(AVG(col_5) FOR col_4 IN (SELECT DISTINCT col_4 FROM tbl))",
+    );
+}
+
+#[test]
 fn parse_create_table_column_comment() {
     snowflake()
         .verified_stmt("CREATE TABLE my_table (my_column STRING COMMENT 'this is comment3')");
