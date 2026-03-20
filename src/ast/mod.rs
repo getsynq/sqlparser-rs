@@ -44,7 +44,7 @@ pub use self::ddl::{
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
-    AggregateItem, ColumnTransformer, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
+    AggregateItem, ColumnTransformer, ConnectBy, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
     FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr,
     Join, JoinConstraint, JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition,
     NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue,
@@ -1030,7 +1030,10 @@ impl fmt::Display for Expr {
             Expr::UnaryOp { op, expr } => {
                 if op == &UnaryOperator::PGPostfixFactorial {
                     write!(f, "{expr}{op}")
-                } else if op == &UnaryOperator::Not {
+                } else if matches!(
+                    op,
+                    UnaryOperator::Not | UnaryOperator::Prior | UnaryOperator::ConnectByRoot
+                ) {
                     write!(f, "{op} {expr}")
                 } else {
                     write!(f, "{op}{expr}")

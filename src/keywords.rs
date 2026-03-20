@@ -177,6 +177,7 @@ define_keywords!(
     CONFLICT,
     CONNECT,
     CONNECTION,
+    CONNECT_BY_ROOT,
     CONSTRAINT,
     CONTAINS,
     CONVERT,
@@ -484,6 +485,7 @@ define_keywords!(
     NOBYPASSRLS,
     NOCREATEDB,
     NOCREATEROLE,
+    NOCYCLE,
     NOINHERIT,
     NOLOGIN,
     NONE,
@@ -907,4 +909,7 @@ pub const RESERVED_FOR_COLUMN_ALIAS: &[Keyword] = &[
     Keyword::FORMAT,
     Keyword::SETTINGS,
     Keyword::SAMPLE,
+    // for Snowflake START WITH .. CONNECT BY hierarchical queries
+    Keyword::START,
+    Keyword::CONNECT,
 ];

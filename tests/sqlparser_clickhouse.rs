@@ -131,6 +131,8 @@ fn parse_array_access_expr() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
+                            start_with: None,
+                            connect_by: None,
         },
         select
     );

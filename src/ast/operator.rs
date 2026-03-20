@@ -46,6 +46,10 @@ pub enum UnaryOperator {
     PGPrefixFactorial,
     /// Absolute value, e.g. `@ -9` (PostgreSQL-specific)
     PGAbs,
+    /// `PRIOR` in Oracle/Snowflake hierarchical queries (CONNECT BY), e.g. `PRIOR col`
+    Prior,
+    /// `CONNECT_BY_ROOT` in Oracle/Snowflake hierarchical queries, e.g. `CONNECT_BY_ROOT col`
+    ConnectByRoot,
 }
 
 impl fmt::Display for UnaryOperator {
@@ -60,6 +64,8 @@ impl fmt::Display for UnaryOperator {
             UnaryOperator::PGPostfixFactorial => "!",
             UnaryOperator::PGPrefixFactorial => "!!",
             UnaryOperator::PGAbs => "@",
+            UnaryOperator::Prior => "PRIOR",
+            UnaryOperator::ConnectByRoot => "CONNECT_BY_ROOT",
         })
     }
 }

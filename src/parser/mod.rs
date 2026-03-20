@@ -1009,6 +1009,15 @@ impl<'a> Parser<'a> {
                 // DuckDB MAP literal: MAP {'key': value, ...}
                 Keyword::MAP if self.peek_token_is(&Token::LBrace) => self.parse_map_literal(),
                 Keyword::NOT => self.parse_not(),
+                // Oracle/Snowflake hierarchical query prefix operators
+                Keyword::PRIOR => {
+                    let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
+                    Ok(Expr::UnaryOp { op: UnaryOperator::Prior, expr: Box::new(expr) })
+                }
+                Keyword::CONNECT_BY_ROOT => {
+                    let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
+                    Ok(Expr::UnaryOp { op: UnaryOperator::ConnectByRoot, expr: Box::new(expr) })
+                }
                 Keyword::MATCH if dialect_of!(self is MySqlDialect | GenericDialect) => {
                     self.parse_match_against()
                 }
@@ -5940,6 +5949,8 @@ impl<'a> Parser<'a> {
                             named_window: vec![],
                             qualify: None,
                             value_table_mode: None,
+                            start_with: None,
+                            connect_by: None,
                         }))),
                         order_by: None,
                         limit: None,
@@ -9434,6 +9445,8 @@ impl<'a> Parser<'a> {
                 named_window: vec![],
                 qualify: None,
                 value_table_mode: None,
+                start_with: None,
+                connect_by: None,
             }))),
             order_by: None,
             limit: None,
@@ -9768,6 +9781,21 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Oracle/Snowflake hierarchical query: START WITH .. CONNECT BY
+        let start_with = if self.parse_keywords(&[Keyword::START, Keyword::WITH]) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+
+        let connect_by = if self.parse_keywords(&[Keyword::CONNECT, Keyword::BY]) {
+            let nocycle = self.parse_keyword(Keyword::NOCYCLE);
+            let condition = self.parse_expr()?;
+            Some(ConnectBy { condition, nocycle })
+        } else {
+            None
+        };
+
         Ok(Select {
             distinct,
             top,
@@ -9785,6 +9813,8 @@ impl<'a> Parser<'a> {
             named_window: named_windows,
             qualify,
             value_table_mode,
+            start_with,
+            connect_by,
         })
     }
 
@@ -9851,6 +9881,8 @@ impl<'a> Parser<'a> {
             named_window: named_windows,
             qualify,
             value_table_mode: None,
+            start_with: None,
+            connect_by: None,
         })
     }
 
