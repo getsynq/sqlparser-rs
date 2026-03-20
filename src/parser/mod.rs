@@ -2419,6 +2419,11 @@ impl<'a> Parser<'a> {
             };
 
         let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
+        let not_null = if !trailing_bracket.0 {
+            self.parse_keywords(&[Keyword::NOT, Keyword::NULL])
+        } else {
+            false
+        };
         let options = self.parse_options(Keyword::OPTIONS)?;
 
         Ok((
@@ -2427,6 +2432,7 @@ impl<'a> Parser<'a> {
                 field_type,
                 colon: false,
                 options,
+                not_null,
             },
             trailing_bracket,
         ))
@@ -2445,6 +2451,11 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::Colon)?;
 
         let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
+        let not_null = if !trailing_bracket.0 {
+            self.parse_keywords(&[Keyword::NOT, Keyword::NULL])
+        } else {
+            false
+        };
         let options = self.parse_options(Keyword::OPTIONS)?;
 
         Ok((
@@ -2453,6 +2464,7 @@ impl<'a> Parser<'a> {
                 field_type,
                 colon: true,
                 options,
+                not_null,
             },
             trailing_bracket,
         ))

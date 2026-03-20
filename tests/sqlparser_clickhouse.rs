@@ -978,12 +978,14 @@ fn parse_create_table_with_nested_data_types() {
                                     field_type: DataType::FixedString(128),
                                     options: vec![],
                                     colon: false,
+                                    not_null: false,
                                 },
                                 StructField {
                                     field_name: None,
                                     field_type: DataType::Int128,
                                     options: vec![],
                                     colon: false,
+                                    not_null: false,
                                 }
                             ])
                         ))),
@@ -1003,6 +1005,7 @@ fn parse_create_table_with_nested_data_types() {
                                 field_type: DataType::Datetime64(9, None),
                                 options: vec![],
                                 colon: false,
+                                not_null: false,
                             },
                             StructField {
                                 field_name: Some(Ident::new("b").empty_span()),
@@ -1011,6 +1014,7 @@ fn parse_create_table_with_nested_data_types() {
                                 )),
                                 options: vec![],
                                 colon: false,
+                                not_null: false,
                             },
                         ]),
                         collation: None,
