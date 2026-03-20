@@ -2085,3 +2085,18 @@ fn test_grouping_sets_without_inner_parens() {
         "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), ())",
     );
 }
+
+#[test]
+fn test_alter_table_set_tag() {
+    // Snowflake: ALTER TABLE ... SET TAG schema.tag_name = 'value'
+    // The TAG keyword is consumed and the tag name is used as the option name
+    snowflake().one_statement_parses_to(
+        "ALTER TABLE tbl SET TAG STAGE.schema.tag_col = 'finance'",
+        "ALTER TABLE tbl SET (STAGE.schema.tag_col = 'finance')",
+    );
+    // Simple tag name without schema qualification
+    snowflake().one_statement_parses_to(
+        "ALTER TABLE tbl SET TAG my_tag = 'value'",
+        "ALTER TABLE tbl SET (my_tag = 'value')",
+    );
+}

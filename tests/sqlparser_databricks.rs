@@ -353,3 +353,24 @@ fn test_create_function_tagged_dollar_quoted() {
         "CREATE FUNCTION add_one(x INT) RETURNS INT LANGUAGE PYTHON AS $$def add_one(x):\n  return x+1$$",
     );
 }
+
+#[test]
+fn test_filter_during_aggregation_in_expressions() {
+    // FILTER (WHERE ...) used in arithmetic expressions (e.g. division)
+    // Parser accepts both FILTER( and FILTER (, Display normalizes to space before (
+    databricks().one_statement_parses_to(
+        "SELECT SUM(col1) FILTER(WHERE col2) / SUM(col1) AS pct FROM tbl",
+        "SELECT SUM(col1) FILTER (WHERE col2) / SUM(col1) AS pct FROM tbl",
+    );
+
+    // FILTER (WHERE ...) in a simple aggregate - roundtrips correctly
+    let sql = "SELECT COUNT(DISTINCT col1) FILTER (WHERE col2 AND col3) AS cnt FROM tbl";
+    databricks().verified_stmt(sql);
+}
+
+#[test]
+fn test_alter_table_add_column_after() {
+    // Databricks supports ADD COLUMN ... AFTER col_name
+    let sql = "ALTER TABLE db.schema.tbl ADD COLUMN new_col INT AFTER existing_col";
+    databricks().verified_stmt(sql);
+}
