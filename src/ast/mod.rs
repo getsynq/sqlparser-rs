@@ -5373,6 +5373,15 @@ pub enum MergeClause {
         columns: Vec<WithSpan<Ident>>,
         values: Values,
     },
+    /// `WHEN NOT MATCHED BY SOURCE THEN UPDATE SET ...`
+    /// BigQuery extension: applies to target rows not present in the source
+    NotMatchedBySourceUpdate {
+        predicate: Option<Expr>,
+        assignments: Vec<Assignment>,
+    },
+    /// `WHEN NOT MATCHED BY SOURCE THEN DELETE`
+    /// BigQuery extension: applies to target rows not present in the source
+    NotMatchedBySourceDelete(Option<Expr>),
 }
 
 impl fmt::Display for MergeClause {
@@ -5416,6 +5425,27 @@ impl fmt::Display for MergeClause {
                     display_comma_separated(columns),
                     values
                 )
+            }
+            NotMatchedBySourceUpdate {
+                predicate,
+                assignments,
+            } => {
+                write!(f, " NOT MATCHED BY SOURCE")?;
+                if let Some(pred) = predicate {
+                    write!(f, " AND {pred}")?;
+                }
+                write!(
+                    f,
+                    " THEN UPDATE SET {}",
+                    display_comma_separated(assignments)
+                )
+            }
+            NotMatchedBySourceDelete(predicate) => {
+                write!(f, " NOT MATCHED BY SOURCE")?;
+                if let Some(pred) = predicate {
+                    write!(f, " AND {pred}")?;
+                }
+                write!(f, " THEN DELETE")
             }
         }
     }

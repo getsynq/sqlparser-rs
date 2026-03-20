@@ -12522,6 +12522,23 @@ impl<'a> Parser<'a> {
             let is_not_matched = self.parse_keyword(Keyword::NOT);
             self.expect_keyword(Keyword::MATCHED)?;
 
+            // BigQuery: WHEN NOT MATCHED BY SOURCE / WHEN NOT MATCHED BY TARGET
+            let is_by_source = if is_not_matched && self.parse_keyword(Keyword::BY) {
+                let by_target = self.parse_identifier(false)?;
+                let by_name = by_target.unwrap().value.to_uppercase();
+                match by_name.as_str() {
+                    "SOURCE" => true,
+                    "TARGET" => false,
+                    _ => {
+                        return Err(ParserError::ParserError(
+                            format!("expected SOURCE or TARGET after BY in MERGE clause, found: {by_name}").into(),
+                        ));
+                    }
+                }
+            } else {
+                false
+            };
+
             let predicate = if self.parse_keyword(Keyword::AND) {
                 Some(self.parse_expr()?)
             } else {
@@ -12530,7 +12547,27 @@ impl<'a> Parser<'a> {
 
             self.expect_keyword(Keyword::THEN)?;
 
-            clauses.push(
+            clauses.push(if is_by_source {
+                // WHEN NOT MATCHED BY SOURCE THEN UPDATE|DELETE
+                match self.parse_one_of_keywords(&[Keyword::UPDATE, Keyword::DELETE]) {
+                    Some(Keyword::UPDATE) => {
+                        self.expect_keyword(Keyword::SET)?;
+                        let assignments = self.parse_comma_separated(Parser::parse_assignment)?;
+                        MergeClause::NotMatchedBySourceUpdate {
+                            predicate,
+                            assignments,
+                        }
+                    }
+                    Some(Keyword::DELETE) => MergeClause::NotMatchedBySourceDelete(predicate),
+                    _ => {
+                        return Err(ParserError::ParserError(
+                            "expected UPDATE or DELETE in NOT MATCHED BY SOURCE merge clause"
+                                .to_string()
+                                .into(),
+                        ));
+                    }
+                }
+            } else {
                 match self.parse_one_of_keywords(&[
                     Keyword::UPDATE,
                     Keyword::INSERT,
@@ -12587,8 +12624,8 @@ impl<'a> Parser<'a> {
                                 .into(),
                         ));
                     }
-                },
-            );
+                }
+            });
         }
         Ok(clauses)
     }
