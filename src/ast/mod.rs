@@ -387,6 +387,8 @@ pub struct StructField {
     pub field_type: DataType,
     pub options: Vec<SqlOption>,
     pub colon: bool,
+    /// Whether this field has a `NOT NULL` constraint (e.g. BigQuery STRUCT fields)
+    pub not_null: bool,
 }
 
 impl fmt::Display for StructField {
@@ -399,6 +401,10 @@ impl fmt::Display for StructField {
             }
         }
         write!(f, "{}", self.field_type)?;
+
+        if self.not_null {
+            write!(f, " NOT NULL")?;
+        }
 
         if !self.options.is_empty() {
             write!(f, " OPTIONS({})", display_comma_separated(&self.options))?;
