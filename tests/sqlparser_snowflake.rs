@@ -1635,6 +1635,16 @@ fn test_copy_grants() {
     snowflake().verified_stmt(
         "CREATE OR REPLACE VIEW v (EMPLOYEE_SK, EMPLOYEE_ID) COPY GRANTS AS SELECT * FROM tbl2",
     );
+    // COMMENT after COPY GRANTS (Snowflake)
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW v COPY GRANTS COMMENT = 'my view comment' AS SELECT * FROM tbl",
+        "CREATE OR REPLACE VIEW v COPY GRANTS COMMENT='my view comment' AS SELECT * FROM tbl",
+    );
+    // COMMENT with column list and COPY GRANTS
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW v (col1, col2) COPY GRANTS COMMENT = 'auto-generated view' AS SELECT col1, col2 FROM tbl",
+        "CREATE OR REPLACE VIEW v (col1, col2) COPY GRANTS COMMENT='auto-generated view' AS SELECT col1, col2 FROM tbl",
+    );
 }
 
 #[test]

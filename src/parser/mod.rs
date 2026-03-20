@@ -4701,6 +4701,16 @@ impl<'a> Parser<'a> {
 
         let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
 
+        // COMMENT may appear after COPY GRANTS (Snowflake: COPY GRANTS COMMENT = '...')
+        if comment.is_none() && self.parse_keyword(Keyword::COMMENT) {
+            let _ = self.consume_token(&Token::Eq);
+            let next_token = self.next_token();
+            comment = match next_token.token {
+                Token::SingleQuotedString(str) => Some(str),
+                _ => self.expected("comment", next_token)?,
+            };
+        }
+
         // BigQuery: PARTITION BY expr, CLUSTER BY cols before AS
         if materialized {
             if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
