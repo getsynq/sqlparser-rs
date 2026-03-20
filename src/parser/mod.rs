@@ -10544,9 +10544,24 @@ impl<'a> Parser<'a> {
         // Handle deferred ON clauses (BigQuery/Standard SQL nested join syntax).
         // e.g., FROM A INNER JOIN B LEFT JOIN C ON c_cond ON a_b_cond
         // The ON clauses are applied in order to the most recent unconstrained join.
-        while self.parse_keyword(Keyword::ON) {
+        // Only consume ON if there's actually an unconstrained join pending — otherwise
+        // the ON may belong to a higher-level clause (e.g., MySQL ON DUPLICATE KEY UPDATE).
+        while matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ON) {
+            let has_unconstrained_join = joins.iter().any(|j| {
+                matches!(
+                    &j.join_operator,
+                    JoinOperator::Inner(JoinConstraint::None)
+                        | JoinOperator::LeftOuter(JoinConstraint::None)
+                        | JoinOperator::RightOuter(JoinConstraint::None)
+                        | JoinOperator::FullOuter(JoinConstraint::None)
+                        | JoinOperator::CrossJoin(JoinConstraint::None)
+                )
+            });
+            if !has_unconstrained_join {
+                break;
+            }
+            self.next_token(); // consume ON
             let constraint = self.parse_expr()?;
-            let mut updated = false;
             for join in joins.iter_mut().rev() {
                 let needs_update = matches!(
                     &join.join_operator,
@@ -10566,14 +10581,8 @@ impl<'a> Parser<'a> {
                         JoinOperator::CrossJoin(_) => JoinOperator::CrossJoin(on),
                         _ => unreachable!(),
                     };
-                    updated = true;
                     break;
                 }
-            }
-            if !updated {
-                return Err(ParserError::ParserError(
-                    "Unexpected ON clause with no preceding JOIN to apply it to".into(),
-                ));
             }
         }
         Ok(TableWithJoins { relation, joins })

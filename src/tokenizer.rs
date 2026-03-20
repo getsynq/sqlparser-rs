@@ -545,6 +545,10 @@ struct State<'a> {
     peekable: Peekable<Chars<'a>>,
     pub line: u64,
     pub col: u64,
+    /// The last character consumed, used to disambiguate bracket-delimited
+    /// identifiers vs array subscripts. If the previous char is a word char
+    /// (no whitespace gap), `[` is a subscript; otherwise it's an identifier.
+    pub prev_char: Option<char>,
 }
 
 impl<'a> State<'a> {
@@ -559,6 +563,7 @@ impl<'a> State<'a> {
                 } else {
                     self.col += 1;
                 }
+                self.prev_char = Some(s);
                 Some(s)
             }
         }
@@ -664,6 +669,7 @@ impl<'a> Tokenizer<'a> {
             peekable: self.query.chars().peekable(),
             line: 1,
             col: 1,
+            prev_char: None,
         };
 
         let mut tokens: Vec<TokenWithLocation> = vec![];
@@ -694,6 +700,7 @@ impl<'a> Tokenizer<'a> {
                 peekable: word.chars().peekable(),
                 line: 0,
                 col: 0,
+                prev_char: None,
             };
             let mut s = peeking_take_while(&mut inner_state, |ch| matches!(ch, '0'..='9' | '.'));
             let s2 = peeking_take_while(chars, |ch| matches!(ch, '0'..='9' | '.'));
@@ -823,7 +830,13 @@ impl<'a> Tokenizer<'a> {
                     if self.dialect.is_delimited_identifier_start(ch)
                         && self
                             .dialect
-                            .is_proper_identifier_inside_quotes(chars.peekable.clone()) =>
+                            .is_proper_identifier_inside_quotes(chars.peekable.clone())
+                        // If '[' immediately follows a word character, ')', or ']',
+                        // treat it as a subscript/array access, not an identifier delimiter.
+                        // If '[' immediately follows a word character, ')' or ']' (no whitespace gap),
+                        // treat it as array subscript, not a bracket-delimited identifier.
+                        && !(ch == '['
+                            && matches!(chars.prev_char, Some(c) if c.is_alphanumeric() || c == '_' || c == ')' || c == ']')) =>
                 {
                     let error_loc = chars.location();
                     chars.next(); // consume the opening quote
