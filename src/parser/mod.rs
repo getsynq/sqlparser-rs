@@ -11421,7 +11421,22 @@ impl<'a> Parser<'a> {
                 Keyword::ROLE,
             ]);
             let objects = self.parse_comma_separated(|p| {
-                let name = p.parse_object_name(false)?;
+                // Support wildcard object names in GRANT/REVOKE: *.* or * or db.* (ClickHouse and others)
+                // Parse each part separated by `.`, allowing `*` as a wildcard in any position.
+                let name = {
+                    let mut parts: Vec<Ident> = vec![];
+                    loop {
+                        if p.consume_token(&Token::Mul) {
+                            parts.push(Ident::new("*"));
+                        } else {
+                            parts.push(p.parse_identifier(false)?.unwrap());
+                        }
+                        if !p.consume_token(&Token::Period) {
+                            break;
+                        }
+                    }
+                    ObjectName(parts)
+                };
                 // Skip optional function signature like (string, int)
                 if p.consume_token(&Token::LParen) {
                     let mut depth = 1i32;
