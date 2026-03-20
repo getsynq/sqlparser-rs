@@ -960,19 +960,23 @@ impl fmt::Display for UnpivotNullHandling {
 ///
 /// Examples:
 /// - `Q1` (single column, no alias)
-/// - `(Q1, Q2) AS 'semester_1'` (tuple with alias)
+/// - `jan AS january` (single column with identifier alias)
+/// - `(Q1, Q2) AS 'semester_1'` (tuple with string alias)
+/// - `(Q1, Q2) AS 1` (tuple with numeric alias)
 /// - `(col_9, col_30, col_31)` (tuple without alias)
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct UnpivotInValue {
     pub columns: Vec<WithSpan<Ident>>,
-    pub alias: Option<Value>,
+    /// Optional alias for the column or tuple. Accepts identifiers, quoted
+    /// strings, and numeric literals (all stored as `Ident`).
+    pub alias: Option<Ident>,
 }
 
 impl fmt::Display for UnpivotInValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.columns.len() == 1 && self.alias.is_none() {
+        if self.columns.len() == 1 {
             write!(f, "{}", self.columns[0])?;
         } else {
             write!(f, "({})", display_comma_separated(&self.columns))?;
