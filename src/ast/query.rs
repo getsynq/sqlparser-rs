@@ -958,6 +958,9 @@ pub enum PivotValueSource {
     List(Vec<PivotValue>),
     /// Dynamic: IN (ANY ORDER BY column)
     Any(Option<OrderBy>),
+    /// Subquery: IN (SELECT DISTINCT quarter FROM ...)
+    /// Supported by Snowflake and other dialects.
+    Subquery(Box<Query>),
 }
 
 impl fmt::Display for PivotValueSource {
@@ -971,6 +974,7 @@ impl fmt::Display for PivotValueSource {
                 }
                 Ok(())
             }
+            PivotValueSource::Subquery(query) => write!(f, "{query}"),
         }
     }
 }

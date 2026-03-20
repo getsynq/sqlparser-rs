@@ -11089,6 +11089,15 @@ impl<'a> Parser<'a> {
                 None
             };
             PivotValueSource::Any(order_by)
+        } else if matches!(
+            self.peek_token().token,
+            Token::Word(ref w) if matches!(
+                w.keyword,
+                Keyword::SELECT | Keyword::VALUES | Keyword::WITH | Keyword::TABLE
+            )
+        ) {
+            let query = self.parse_query()?;
+            PivotValueSource::Subquery(Box::new(query))
         } else {
             let pivot_values = self.parse_comma_separated(|p| {
                 let value = p.parse_value()?;
