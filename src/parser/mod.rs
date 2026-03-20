@@ -8634,6 +8634,21 @@ impl<'a> Parser<'a> {
                 let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
                 self.expect_token(&Token::RParen)?;
             }
+        } else {
+            // Optionally skip data type for PostgreSQL/Redshift table function column definitions.
+            // e.g. FROM func() alias(col_name data_type, ...) where data_type is `name`, `varchar`, `int`, etc.
+            // Do not attempt if next token is a column annotation keyword (COMMENT, TAG)
+            // since those serve a different purpose and are handled below.
+            let is_annotation_keyword = matches!(
+                self.peek_token_kind(),
+                Token::Word(Word {
+                    keyword: Keyword::COMMENT | Keyword::TAG,
+                    ..
+                })
+            );
+            if !is_annotation_keyword {
+                let _ = self.maybe_parse(|p| p.parse_data_type());
+            }
         }
         // Skip TAG clause if present
         self.parse_optional_tag_clause();
