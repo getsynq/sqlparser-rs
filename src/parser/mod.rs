@@ -2526,6 +2526,25 @@ impl<'a> Parser<'a> {
             return infix;
         }
 
+        // Handle FILTER (WHERE ...) as a postfix-like infix operator for aggregate functions.
+        // This allows expressions like: SUM(x) FILTER (WHERE cond) / COUNT(*)
+        if self.dialect.supports_filter_during_aggregation()
+            && matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::FILTER)
+            && matches!(self.peek_nth_token(1).token, Token::LParen)
+        {
+            self.next_token(); // consume FILTER
+            self.expect_token(&Token::LParen)?;
+            let _ = self.parse_keyword(Keyword::WHERE);
+            let filter = self.parse_expr()?;
+            self.expect_token(&Token::RParen)?;
+            let over = self.parse_over()?;
+            return Ok(Expr::AggregateExpressionWithFilter {
+                expr: Box::new(expr),
+                filter: Box::new(filter),
+                over,
+            });
+        }
+
         let tok = self.next_token();
 
         let regular_binary_operator = match &tok.token {
@@ -3114,6 +3133,16 @@ impl<'a> Parser<'a> {
             Token::Word(w) if w.keyword == Keyword::OR => Ok(Self::OR_PREC),
             Token::Word(w) if w.keyword == Keyword::AND => Ok(Self::AND_PREC),
             Token::Word(w) if w.keyword == Keyword::XOR => Ok(Self::XOR_PREC),
+
+            // FILTER (WHERE ...) after an aggregate function - high precedence so it
+            // binds tightly to the function before any arithmetic operators
+            Token::Word(w)
+                if w.keyword == Keyword::FILTER
+                    && self.dialect.supports_filter_during_aggregation()
+                    && matches!(token_1.token, Token::LParen) =>
+            {
+                Ok(50)
+            }
 
             Token::Word(w) if w.keyword == Keyword::AT => {
                 match (self.peek_nth_token(1).token, self.peek_nth_token(2).token) {
@@ -6117,7 +6146,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let column_location = if dialect_of!(self is ClickHouseDialect) {
+        let column_location = if dialect_of!(self is ClickHouseDialect | DatabricksDialect | MySqlDialect | GenericDialect) {
             if self.parse_keyword(Keyword::FIRST) {
                 Some(ColumnLocation::First)
             } else if self.parse_keyword(Keyword::AFTER) {
@@ -6945,7 +6974,9 @@ impl<'a> Parser<'a> {
                     has_options_keyword: false,
                 }
             } else {
-                // Snowflake: SET key = value, ...
+                // Snowflake: SET [TAG] key = value, ...
+                // The TAG keyword is optional (e.g., SET TAG db.schema.tag_name = 'value')
+                let _ = self.parse_keyword(Keyword::TAG);
                 let options = self.parse_comma_separated(Parser::parse_sql_option)?;
                 AlterTableOperation::SetOptions {
                     options,
