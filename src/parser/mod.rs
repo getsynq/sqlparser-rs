@@ -1962,6 +1962,33 @@ impl<'a> Parser<'a> {
         Ok(Expr::Value(Value::MapLiteral(fields)))
     }
 
+    /// Converts a string (typically from a string literal) to a `DateTimeField`.
+    /// Unrecognized strings become `DateTimeField::Custom` with a single-quoted ident.
+    fn date_time_field_from_str(s: &str) -> DateTimeField {
+        match s.to_uppercase().as_str() {
+            "YEAR" | "Y" | "YR" | "YRS" | "YEARS" => DateTimeField::Year,
+            "MONTH" | "MON" | "MONS" | "MONTHS" => DateTimeField::Month,
+            "WEEK" | "W" | "WEEKS" => DateTimeField::Week(None),
+            "DAY" | "D" | "DAYS" => DateTimeField::Day,
+            "HOUR" | "H" | "HRS" | "HOURS" => DateTimeField::Hour,
+            "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => DateTimeField::Minute,
+            "SECOND" | "S" | "SEC" | "SECS" | "SECONDS" => DateTimeField::Second,
+            "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS" | "MILLISECONDS" => DateTimeField::Millisecond,
+            "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS" | "MICROSECONDS" => DateTimeField::Microsecond,
+            "QUARTER" | "QTR" | "QTRS" | "QUARTERS" => DateTimeField::Quarter,
+            "DOW" => DateTimeField::Dow,
+            "DOY" => DateTimeField::Doy,
+            "EPOCH" => DateTimeField::Epoch,
+            "CENTURY" | "CENTURIES" => DateTimeField::Century,
+            "DECADE" | "DECADES" => DateTimeField::Decade,
+            "MILLENNIUM" | "MILLENNIUMS" | "MILLENIUM" => DateTimeField::Millennium,
+            "TIMEZONE" => DateTimeField::Timezone,
+            "TIMEZONE_HOUR" => DateTimeField::TimezoneHour,
+            "TIMEZONE_MINUTE" => DateTimeField::TimezoneMinute,
+            _ => DateTimeField::Custom(Ident::with_quote('\'', s)),
+        }
+    }
+
     // This function parses date/time fields for the EXTRACT function-like
     // operator, interval qualifiers, and the ceil/floor operations.
     // EXTRACT supports a wider set of date/time fields than interval qualifiers,
@@ -2022,7 +2049,19 @@ impl<'a> Parser<'a> {
                 Keyword::TIMEZONE_HOUR => Ok(DateTimeField::TimezoneHour),
                 Keyword::TIMEZONE_MINUTE => Ok(DateTimeField::TimezoneMinute),
                 Keyword::TIMEZONE_REGION => Ok(DateTimeField::TimezoneRegion),
-                _ if dialect_of!(self is SnowflakeDialect | GenericDialect) => {
+                // Redshift allows CAST(...) expression as date/time field
+                // e.g., EXTRACT(CAST('epoch' AS VARCHAR(MAX)) FROM ...)
+                Keyword::CAST if dialect_of!(self is RedshiftSqlDialect | GenericDialect) => {
+                    self.prev_token();
+                    let cast_expr = self.parse_expr()?;
+                    if let Expr::Cast { expr, .. } = cast_expr {
+                        if let Expr::Value(Value::SingleQuotedString(ref s)) = *expr {
+                            return Ok(Self::date_time_field_from_str(s));
+                        }
+                    }
+                    self.expected("string literal in CAST expression for date/time field", next_token)
+                }
+                _ if dialect_of!(self is SnowflakeDialect | GenericDialect | RedshiftSqlDialect) => {
                     self.prev_token();
                     let custom = self.parse_identifier_no_span()?;
                     Ok(DateTimeField::Custom(custom))
@@ -2031,42 +2070,16 @@ impl<'a> Parser<'a> {
             },
             // Redshift (and some other dialects) allow date parts as string literals
             Token::SingleQuotedString(s) => {
-                match s.to_uppercase().as_str() {
-                    "YEAR" | "Y" | "YR" | "YRS" | "YEARS" => Ok(DateTimeField::Year),
-                    "MONTH" | "MON" | "MONS" | "MONTHS" => Ok(DateTimeField::Month),
-                    "WEEK" | "W" | "WEEKS" => Ok(DateTimeField::Week(None)),
-                    "DAY" | "D" | "DAYS" => Ok(DateTimeField::Day),
-                    "HOUR" | "H" | "HRS" | "HOURS" => Ok(DateTimeField::Hour),
-                    "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Ok(DateTimeField::Minute),
-                    "SECOND" | "S" | "SEC" | "SECS" | "SECONDS" => Ok(DateTimeField::Second),
-                    "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS"
-                    | "MILLISECONDS" => Ok(DateTimeField::Millisecond),
-                    "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS"
-                    | "MICROSECONDS" => Ok(DateTimeField::Microsecond),
-                    "QUARTER" | "QTR" | "QTRS" | "QUARTERS" => Ok(DateTimeField::Quarter),
-                    "DOW" => Ok(DateTimeField::Dow),
-                    "DOY" => Ok(DateTimeField::Doy),
-                    "EPOCH" => Ok(DateTimeField::Epoch),
-                    "CENTURY" | "CENTURIES" => Ok(DateTimeField::Century),
-                    "DECADE" | "DECADES" => Ok(DateTimeField::Decade),
-                    "MILLENNIUM" | "MILLENNIUMS" | "MILLENIUM" => Ok(DateTimeField::Millennium),
-                    "TIMEZONE" | "TIMEZONE_HOUR" | "TIMEZONE_MINUTE" => {
-                        match s.to_uppercase().as_str() {
-                            "TIMEZONE" => Ok(DateTimeField::Timezone),
-                            "TIMEZONE_HOUR" => Ok(DateTimeField::TimezoneHour),
-                            "TIMEZONE_MINUTE" => Ok(DateTimeField::TimezoneMinute),
-                            _ => unreachable!(),
-                        }
+                let field = Self::date_time_field_from_str(s);
+                if matches!(field, DateTimeField::Custom(_)) {
+                    // Only allow custom fields in supported dialects
+                    if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect) {
+                        Ok(field)
+                    } else {
+                        self.expected("date/time field", next_token)
                     }
-                    _ => {
-                        // For dialects that support custom date parts
-                        if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect)
-                        {
-                            Ok(DateTimeField::Custom(Ident::with_quote('\'', s)))
-                        } else {
-                            self.expected("date/time field", next_token)
-                        }
-                    }
+                } else {
+                    Ok(field)
                 }
             }
             _ => self.expected("date/time field", next_token),

@@ -2336,7 +2336,9 @@ fn parse_extract() {
     verified_stmt("SELECT EXTRACT(TIMEZONE_HOUR FROM d)");
     verified_stmt("SELECT EXTRACT(TIMEZONE_MINUTE FROM d)");
 
-    let dialects = all_dialects_except(|d| d.is::<SnowflakeDialect>() || d.is::<GenericDialect>());
+    let dialects = all_dialects_except(|d| {
+        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+    });
     let res = dialects.parse_sql_statements("SELECT EXTRACT(JIFFY FROM d)");
     assert_eq!(
         ParserError::ParserError(
@@ -2379,7 +2381,9 @@ fn parse_ceil_datetime() {
     verified_stmt("SELECT CEIL(d TO SECOND) FROM df");
     verified_stmt("SELECT CEIL(d TO MILLISECOND) FROM df");
 
-    let dialects = all_dialects_except(|d| d.is::<SnowflakeDialect>() || d.is::<GenericDialect>());
+    let dialects = all_dialects_except(|d| {
+        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+    });
     let res = dialects.parse_sql_statements("SELECT CEIL(d TO JIFFY) FROM df");
     assert_eq!(
         ParserError::ParserError(
@@ -2410,7 +2414,9 @@ fn parse_floor_datetime() {
     verified_stmt("SELECT FLOOR(d TO SECOND) FROM df");
     verified_stmt("SELECT FLOOR(d TO MILLISECOND) FROM df");
 
-    let dialects = all_dialects_except(|d| d.is::<SnowflakeDialect>() || d.is::<GenericDialect>());
+    let dialects = all_dialects_except(|d| {
+        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+    });
     let res = dialects.parse_sql_statements("SELECT FLOOR(d TO JIFFY) FROM df");
     assert_eq!(
         ParserError::ParserError(
