@@ -7827,11 +7827,9 @@ impl<'a> Parser<'a> {
                 self.parse_function(ObjectName(vec![Ident::new(value)]))
             }
             Token::Word(Word { value, keyword, .. }) if (keyword == Keyword::NoKeyword) => {
-                if self.peek_token_is(&Token::LParen) {
-                    return self.parse_function(ObjectName(vec![Ident::new(value)]));
-                }
-                // If followed by a period, this is a compound identifier (e.g. tbl.col used as array index)
-                if self.peek_token_is(&Token::Period) {
+                // If followed by ( or ., parse as a full expression to handle cases like
+                // ARRAY_SIZE(col) - 1 or tbl.col used as array index
+                if self.peek_token_is(&Token::LParen) || self.peek_token_is(&Token::Period) {
                     self.prev_token();
                     return self.parse_expr();
                 }
