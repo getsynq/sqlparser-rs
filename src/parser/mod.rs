@@ -994,7 +994,8 @@ impl<'a> Parser<'a> {
                 }
                 Keyword::ARRAY
                     if self.peek_token_is(&Token::LParen)
-                        && !dialect_of!(self is ClickHouseDialect | DatabricksDialect) =>
+                        && !dialect_of!(self is ClickHouseDialect | DatabricksDialect)
+                        && self.peek_parenthesized_query_start() =>
                 {
                     self.expect_token(&Token::LParen)?;
                     self.parse_array_subquery()

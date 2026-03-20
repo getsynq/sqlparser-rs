@@ -576,3 +576,13 @@ fn test_table_function_with_column_definitions() {
         "SELECT DISTINCT view_schema, view_name FROM PG_GET_LATE_BINDING_VIEW_COLS() AS cols (view_schema, view_name, col_name, col_type, col_num) WHERE view_schema = 'myschema'",
     );
 }
+
+#[test]
+fn test_redshift_array_function_call() {
+    // Redshift ARRAY(expr, ...) is a function call, not an array subquery
+    redshift().verified_stmt("SELECT ARRAY(1, 2, 3)");
+    redshift().verified_stmt("SELECT ARRAY(JSON_PARSE('{\"key\": \"value\"}'))");
+    redshift().verified_stmt("SELECT ARRAY()");
+    // ARRAY(subquery) should still work as array subquery
+    redshift().verified_stmt("SELECT ARRAY(SELECT x FROM t)");
+}
