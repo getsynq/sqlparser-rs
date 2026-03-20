@@ -1379,6 +1379,18 @@ fn parse_array_index() {
 }
 
 #[test]
+fn parse_function_result_subscript() {
+    // Function call result with numeric index
+    snowflake().verified_only_select("SELECT SPLIT(col, '/')[0] FROM t");
+    // Function call result with expression index (ARRAY_SIZE(...) - 1)
+    snowflake().verified_only_select(
+        "SELECT SPLIT(col, '/')[ARRAY_SIZE(SPLIT(col, '/')) - 1] FROM t",
+    );
+    // Nested: function inside TRIM with subscript
+    snowflake().verified_only_select("SELECT TRIM(SPLIT(col, '/')[0]) FROM t");
+}
+
+#[test]
 fn parse_array_index_json_colon() {
     snowflake().verified_only_select("SELECT src[0]:order_number FROM car_sales");
 }
