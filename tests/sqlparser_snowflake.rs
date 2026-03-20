@@ -2051,3 +2051,27 @@ fn parse_positional_column_references() {
         "SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1",
     );
 }
+
+#[test]
+fn test_grouping_sets_without_inner_parens() {
+    // GROUPING SETS (a, b) without inner parens is valid SQL - treated as two single-column sets
+    // The parser normalizes to GROUPING SETS ((a), (b)) on output
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT a FROM t GROUP BY GROUPING SETS (a, b)",
+        "SELECT a FROM t GROUP BY GROUPING SETS ((a), (b))",
+    );
+    // GROUPING() function in CASE WHEN with GROUPING SETS
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT CASE WHEN GROUPING(a, b) = 1 THEN 1 ELSE 0 END FROM t GROUP BY GROUPING SETS (a, b)",
+        "SELECT CASE WHEN GROUPING(a, b) = 1 THEN 1 ELSE 0 END FROM t GROUP BY GROUPING SETS ((a), (b))",
+    );
+    // Mixed parens: one multi-column set (with parens) and one single (without)
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), c)",
+        "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), (c))",
+    );
+    // Empty set still works
+    snowflake_and_generic().verified_stmt(
+        "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), ())",
+    );
+}
