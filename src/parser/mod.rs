@@ -11077,7 +11077,7 @@ impl<'a> Parser<'a> {
                 let cols = p.parse_comma_separated(|pp| pp.parse_identifier(false))?;
                 p.expect_token(&Token::RParen)?;
                 let alias = if p.parse_keyword(Keyword::AS) {
-                    Some(p.parse_value()?)
+                    Some(p.parse_unpivot_alias()?)
                 } else {
                     None
                 };
@@ -11087,9 +11087,14 @@ impl<'a> Parser<'a> {
                 })
             } else {
                 let col = p.parse_identifier(false)?;
+                let alias = if p.parse_keyword(Keyword::AS) {
+                    Some(p.parse_unpivot_alias()?)
+                } else {
+                    None
+                };
                 Ok(UnpivotInValue {
                     columns: vec![col],
-                    alias: None,
+                    alias,
                 })
             }
         })?;
@@ -11105,6 +11110,22 @@ impl<'a> Parser<'a> {
             null_handling,
             alias,
         })
+    }
+
+    /// Parse an UNPIVOT alias: accepts an identifier (quoted or unquoted) or a
+    /// numeric literal. All forms are returned as an `Ident` for uniformity.
+    ///
+    /// Examples: `january`, `'semester_1'`, `"0"`, `1`
+    fn parse_unpivot_alias(&mut self) -> Result<Ident, ParserError> {
+        let next_token = self.peek_token();
+        match &next_token.token {
+            Token::Number(n, _) => {
+                let n = n.clone();
+                self.next_token();
+                Ok(Ident::new(n))
+            }
+            _ => Ok(self.parse_identifier(false)?.unwrap()),
+        }
     }
 
     pub fn parse_tablesample_table_factor(

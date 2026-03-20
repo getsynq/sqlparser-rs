@@ -2113,3 +2113,15 @@ fn test_snowflake_select_wildcard_replace() {
         "SELECT * FROM (SELECT * REPLACE (x + 1 AS x) FROM t) AS sub",
     );
 }
+
+#[test]
+fn test_snowflake_unpivot_column_alias() {
+    // Snowflake supports UNPIVOT with identifier aliases in the IN clause
+    snowflake().verified_stmt(
+        "SELECT * FROM monthly_sales UNPIVOT (sales FOR month IN (jan AS january, feb AS february, mar AS march, apr AS april)) ORDER BY empid",
+    );
+    // Quoted identifier aliases (e.g., numeric-looking names)
+    snowflake().verified_stmt(
+        "SELECT * FROM t UNPIVOT (val FOR col IN (col1 AS \"a\", col2 AS \"b\"))",
+    );
+}
