@@ -528,6 +528,13 @@ pub enum SelectItem {
         /// Optional chain of `APPLY(func)` transformers
         transformers: Vec<ColumnTransformer>,
     },
+    /// BigQuery struct wildcard: `expr.*`
+    /// Expands all fields of a struct expression as separate columns.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace>
+    ExprWildcard {
+        expr: WithSpan<Expr>,
+        options: WildcardAdditionalOptions,
+    },
 }
 
 /// ClickHouse column transformer applied to COLUMNS expression
@@ -807,6 +814,11 @@ impl fmt::Display for SelectItem {
                 for transformer in transformers {
                     write!(f, " {transformer}")?;
                 }
+                Ok(())
+            }
+            SelectItem::ExprWildcard { expr, options } => {
+                write!(f, "{expr}.*")?;
+                write!(f, "{options}")?;
                 Ok(())
             }
         }
