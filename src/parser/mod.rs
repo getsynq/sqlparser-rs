@@ -12562,6 +12562,22 @@ impl<'a> Parser<'a> {
             return Ok(Statement::ExecuteAs { user });
         }
 
+        // EXECUTE IMMEDIATE 'sql' [USING p1, p2] — Trino, Oracle, DB2, etc.
+        if self.parse_keyword(Keyword::IMMEDIATE) {
+            let immediate = self.parse_expr()?;
+            let using = if self.parse_keyword(Keyword::USING) {
+                self.parse_comma_separated(Parser::parse_expr)?
+            } else {
+                vec![]
+            };
+            return Ok(Statement::Execute {
+                name: Ident::new("").empty_span(),
+                parameters: vec![],
+                immediate: Some(immediate),
+                using,
+            });
+        }
+
         let name = self.parse_identifier(false)?;
 
         let mut parameters = vec![];
@@ -12570,7 +12586,12 @@ impl<'a> Parser<'a> {
             self.expect_token(&Token::RParen)?;
         }
 
-        Ok(Statement::Execute { name, parameters })
+        Ok(Statement::Execute {
+            name,
+            parameters,
+            immediate: None,
+            using: vec![],
+        })
     }
 
     pub fn parse_prepare(&mut self) -> Result<Statement, ParserError> {

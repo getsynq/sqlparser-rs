@@ -1474,6 +1474,8 @@ fn parse_execute() {
         Statement::Execute {
             name: Ident::new("a").empty_span(),
             parameters: vec![],
+            immediate: None,
+            using: vec![],
         }
     );
 
@@ -1485,6 +1487,35 @@ fn parse_execute() {
             parameters: vec![
                 Expr::Value(number("1")),
                 Expr::Value(Value::SingleQuotedString("t".to_string()))
+            ],
+            immediate: None,
+            using: vec![],
+        }
+    );
+
+    // EXECUTE IMMEDIATE 'sql' [USING p1, p2] — Trino, Oracle, DB2, etc.
+    let stmt = pg_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT 1'");
+    assert_eq!(
+        stmt,
+        Statement::Execute {
+            name: Ident::new("").empty_span(),
+            parameters: vec![],
+            immediate: Some(Expr::Value(Value::SingleQuotedString("SELECT 1".to_string()))),
+            using: vec![],
+        }
+    );
+
+    let stmt =
+        pg_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT ?' USING 'billing', 'payments'");
+    assert_eq!(
+        stmt,
+        Statement::Execute {
+            name: Ident::new("").empty_span(),
+            parameters: vec![],
+            immediate: Some(Expr::Value(Value::SingleQuotedString("SELECT ?".to_string()))),
+            using: vec![
+                Expr::Value(Value::SingleQuotedString("billing".to_string())),
+                Expr::Value(Value::SingleQuotedString("payments".to_string())),
             ],
         }
     );
