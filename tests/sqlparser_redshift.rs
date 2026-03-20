@@ -600,3 +600,23 @@ fn test_redshift_array_subscript_compound_index() {
         "SELECT a FROM t WHERE col1 = arr_col[tbl.idx]",
     );
 }
+
+#[test]
+fn test_redshift_extract_custom_date_parts() {
+    // Redshift supports abbreviated date/time parts as identifiers
+    // e.g. EXTRACT(d FROM ...) for day, EXTRACT(h FROM ...) for hour, etc.
+    redshift().verified_stmt("SELECT EXTRACT(d FROM col) FROM t");
+    redshift().verified_stmt("SELECT EXTRACT(h FROM col) FROM t");
+    redshift().verified_stmt("SELECT EXTRACT(m FROM col) FROM t");
+    redshift().verified_stmt("SELECT EXTRACT(qtr FROM col) FROM t");
+}
+
+#[test]
+fn test_redshift_extract_cast_field() {
+    // Redshift allows CAST(...) expression as the date/time field in EXTRACT
+    // e.g. EXTRACT(CAST('epoch' AS VARCHAR(MAX)) FROM ...)
+    redshift().one_statement_parses_to(
+        "SELECT EXTRACT(CAST('epoch' AS VARCHAR(MAX)) FROM (col1 - col2))",
+        "SELECT EXTRACT(EPOCH FROM (col1 - col2))",
+    );
+}
