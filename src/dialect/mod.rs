@@ -121,7 +121,7 @@ pub trait Dialect: Debug + Any {
     }
     /// Returns true if the dialects supports `group sets, roll up, or cube` expressions.
     fn supports_group_by_expr(&self) -> bool {
-        false
+        true
     }
     /// Returns true if the dialect supports `SUBSTRING(expr [FROM start] [FOR len])` expressions
     fn supports_substring_from_for_expr(&self) -> bool {
