@@ -11224,6 +11224,8 @@ impl<'a> Parser<'a> {
         let to_return = if self.parse_keyword(Keyword::ROWS) {
             SelectionCount::FixedSizeRows(num)
         } else {
+            // Consume optional PERCENT keyword: TABLESAMPLE SYSTEM (10 PERCENT)
+            let _ = self.parse_keyword(Keyword::PERCENT);
             SelectionCount::FractionBased(num)
         };
         self.expect_token(&Token::RParen)?;

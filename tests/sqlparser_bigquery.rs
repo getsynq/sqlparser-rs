@@ -1958,3 +1958,16 @@ fn parse_deferred_join_on_in_cte() {
         "WITH add_first AS (SELECT a.*, b.x, c.v FROM b JOIN a ON b.id = a.id LEFT JOIN c ON c.id = a.id WHERE c.v <= a.v), result AS (SELECT * FROM add_first) SELECT * FROM result",
     );
 }
+
+#[test]
+fn parse_tablesample_percent() {
+    // BigQuery TABLESAMPLE supports PERCENT keyword: TABLESAMPLE SYSTEM (10 PERCENT)
+    bigquery_and_generic().one_statement_parses_to(
+        "SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10 PERCENT)",
+        "SELECT * FROM dataset.my_table TABLESAMPLE SYSTEM (10)",
+    );
+    bigquery_and_generic().one_statement_parses_to(
+        "SELECT * FROM t TABLESAMPLE BERNOULLI (50 PERCENT)",
+        "SELECT * FROM t TABLESAMPLE BERNOULLI (50)",
+    );
+}
