@@ -1559,7 +1559,11 @@ impl<'a> Parser<'a> {
         };
 
         // Handle field access after CAST, e.g. CAST(col AS STRUCT<f1 INT64>).f1
-        while self.consume_token(&Token::Period) {
+        // Stop before `.*` so that parse_select_item can handle the wildcard expansion.
+        while matches!(self.peek_token_ref().token, Token::Period)
+            && !matches!(self.peek_nth_token_ref(1).token, Token::Mul)
+        {
+            self.next_token(); // consume `.`
             let tok = self.next_token();
             let key = match tok.token {
                 Token::Word(word) => word.to_ident(),
@@ -12058,6 +12062,21 @@ impl<'a> Parser<'a> {
                         }
                         .spanning(self.span_from_index(start_span)));
                     }
+                }
+
+                // BigQuery struct wildcard: `expr.*`
+                // e.g. `CAST(STRUCT(...) AS STRUCT<...>).*`
+                if self.consume_token(&Token::Period) {
+                    if self.consume_token(&Token::Mul) {
+                        let expr_with_location = expr.spanning(self.span_from_index(start_span));
+                        let options = self.parse_wildcard_additional_options()?;
+                        return Ok(SelectItem::ExprWildcard {
+                            expr: expr_with_location,
+                            options,
+                        }
+                        .spanning(self.span_from_index(start_span)));
+                    }
+                    self.prev_token(); // put back the `.`
                 }
 
                 let expr_with_location = expr.spanning(self.span_from_index(start_span));

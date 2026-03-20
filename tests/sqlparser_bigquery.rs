@@ -1747,6 +1747,21 @@ fn parse_cast_field_access() {
 }
 
 #[test]
+fn parse_expr_wildcard() {
+    // BigQuery struct wildcard expansion: CAST(expr AS STRUCT<...>).*
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace
+    bigquery().verified_stmt("SELECT CAST(STRUCT(col1) AS STRUCT<BOOL>).* FROM t");
+    bigquery().verified_stmt(
+        "SELECT CAST(STRUCT((SELECT ARRAY_AGG(col_1) AS emails FROM tbl_1 WHERE col_2 IS NULL)) AS STRUCT<ARRAY<STRING>>).* FROM t",
+    );
+    // EXISTS adds a space in output: `EXISTS (` instead of `EXISTS(`
+    bigquery().one_statement_parses_to(
+        "SELECT CAST(STRUCT(EXISTS(SELECT 1 FROM tbl_1 WHERE col_1 = 'val')) AS STRUCT<BOOL>).* FROM t",
+        "SELECT CAST(STRUCT(EXISTS (SELECT 1 FROM tbl_1 WHERE col_1 = 'val')) AS STRUCT<BOOL>).* FROM t",
+    );
+}
+
+#[test]
 fn parse_wildcard_table() {
     // BigQuery wildcard table syntax
     // https://cloud.google.com/bigquery/docs/querying-wildcard-tables
