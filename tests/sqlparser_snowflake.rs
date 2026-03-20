@@ -2100,3 +2100,16 @@ fn test_alter_table_set_tag() {
         "ALTER TABLE tbl SET (my_tag = 'value')",
     );
 }
+
+#[test]
+fn test_snowflake_select_wildcard_replace() {
+    // Snowflake supports SELECT * REPLACE (expr AS col_name, ...)
+    snowflake().verified_stmt("SELECT * REPLACE (col1 + 1 AS col1) FROM t");
+    snowflake().verified_stmt(
+        "SELECT t.* REPLACE (REGEXP_REPLACE(col1, 'a', 'b') AS col1, col2 * 2 AS col2) FROM t",
+    );
+    // Inside subquery
+    snowflake().verified_stmt(
+        "SELECT * FROM (SELECT * REPLACE (x + 1 AS x) FROM t) AS sub",
+    );
+}
