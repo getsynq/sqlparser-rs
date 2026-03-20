@@ -3063,10 +3063,6 @@ impl fmt::Display for Statement {
                         write!(f, " AUTO REFRESH NO")?;
                     }
                 }
-                if let Some(comment) = comment {
-                    write!(f, " COMMENT='{comment}'")?;
-                }
-
                 if !view_options.is_empty() {
                     write!(
                         f,
@@ -3077,6 +3073,10 @@ impl fmt::Display for Statement {
 
                 if *copy_grants {
                     write!(f, " COPY GRANTS")?;
+                }
+
+                if let Some(comment) = comment {
+                    write!(f, " COMMENT='{comment}'")?;
                 }
 
                 write!(f, " AS {query}")?;
