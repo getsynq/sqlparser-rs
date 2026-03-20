@@ -1584,6 +1584,8 @@ fn parse_tablesample() {
         named_window: vec![],
         qualify: None,
         value_table_mode: None,
+                            start_with: None,
+                            connect_by: None,
     };
     assert_eq!(actual_select_only, expected);
 }
@@ -2123,5 +2125,34 @@ fn test_snowflake_unpivot_column_alias() {
     // Quoted identifier aliases (e.g., numeric-looking names)
     snowflake().verified_stmt(
         "SELECT * FROM t UNPIVOT (val FOR col IN (col1 AS \"a\", col2 AS \"b\"))",
+    );
+}
+
+#[test]
+fn test_snowflake_connect_by() {
+    // Basic CONNECT BY hierarchical query
+    snowflake_and_generic().verified_stmt(
+        "SELECT col_id, col_parent_id FROM tbl CONNECT BY col_parent_id = PRIOR col_id",
+    );
+    // With START WITH
+    snowflake_and_generic().verified_stmt(
+        "SELECT col_id, col_parent_id FROM tbl START WITH col_parent_id IS NULL CONNECT BY col_parent_id = PRIOR col_id",
+    );
+    // With NOCYCLE
+    snowflake_and_generic().verified_stmt(
+        "SELECT col_id FROM tbl START WITH col_parent_id IS NULL CONNECT BY NOCYCLE col_parent_id = PRIOR col_id",
+    );
+    // CONNECT_BY_ROOT prefix operator
+    snowflake_and_generic().verified_stmt(
+        "SELECT CONNECT_BY_ROOT col_id AS root_id FROM tbl CONNECT BY col_parent_id = PRIOR col_id",
+    );
+    // SYS_CONNECT_BY_PATH usage (regular function call, non-roundtrip due to SUBSTRING special parsing)
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT LENGTH(SYS_CONNECT_BY_PATH(col_name, ' -> ')) AS path FROM tbl CONNECT BY col_parent_id = PRIOR col_id",
+        "SELECT LENGTH(SYS_CONNECT_BY_PATH(col_name, ' -> ')) AS path FROM tbl CONNECT BY col_parent_id = PRIOR col_id",
+    );
+    // In CTE context
+    snowflake_and_generic().verified_stmt(
+        "WITH hier AS (SELECT col_id, CONNECT_BY_ROOT col_id AS root_id FROM tbl START WITH col_parent_id IS NULL CONNECT BY col_parent_id = PRIOR col_id) SELECT * FROM hier",
     );
 }

@@ -285,6 +285,10 @@ pub struct Select {
     pub qualify: Option<Expr>,
     /// BigQuery syntax: `SELECT AS VALUE | SELECT AS STRUCT`
     pub value_table_mode: Option<ValueTableMode>,
+    /// Oracle/Snowflake hierarchical query: `START WITH <condition>`
+    pub start_with: Option<Expr>,
+    /// Oracle/Snowflake hierarchical query: `CONNECT BY [NOCYCLE] <condition>`
+    pub connect_by: Option<ConnectBy>,
 }
 
 impl fmt::Display for Select {
@@ -363,7 +367,32 @@ impl fmt::Display for Select {
         if let Some(ref qualify) = self.qualify {
             write!(f, " QUALIFY {qualify}")?;
         }
+        if let Some(ref start_with) = self.start_with {
+            write!(f, " START WITH {start_with}")?;
+        }
+        if let Some(ref connect_by) = self.connect_by {
+            write!(f, " {connect_by}")?;
+        }
         Ok(())
+    }
+}
+
+/// Oracle/Snowflake hierarchical query clause: `CONNECT BY [NOCYCLE] <condition>`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ConnectBy {
+    pub condition: Expr,
+    pub nocycle: bool,
+}
+
+impl fmt::Display for ConnectBy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CONNECT BY")?;
+        if self.nocycle {
+            write!(f, " NOCYCLE")?;
+        }
+        write!(f, " {}", self.condition)
     }
 }
 
