@@ -620,3 +620,21 @@ fn test_redshift_extract_cast_field() {
         "SELECT EXTRACT(EPOCH FROM (col1 - col2))",
     );
 }
+
+#[test]
+fn test_redshift_array_bracket_not_identifier() {
+    // ARRAY[col] inside a function call: the bracket should be parsed as an array
+    // literal, not as a bracket-quoted identifier. This tests that [col] immediately
+    // after a keyword (no whitespace) is treated as subscript/array syntax.
+    redshift().one_statement_parses_to(
+        "SELECT ABS(ARRAY[col]) FROM t",
+        "SELECT ABS(ARRAY[col]) FROM t",
+    );
+    // Multiple ARRAY[col] expressions in CASE WHEN
+    redshift().one_statement_parses_to(
+        "SELECT CASE WHEN ARRAY[x] <= 10 THEN 'a' ELSE 'b' END FROM t",
+        "SELECT CASE WHEN ARRAY[x] <= 10 THEN 'a' ELSE 'b' END FROM t",
+    );
+    // Bracket-quoted identifiers with a space before should still work
+    redshift().verified_only_select("SELECT [col1] FROM [test_schema].[test_table]");
+}

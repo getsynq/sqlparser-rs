@@ -1375,6 +1375,14 @@ fn parse_insert_with_on_duplicate_update() {
 }
 
 #[test]
+fn parse_insert_select_union_on_duplicate_key_update() {
+    // INSERT ... SELECT ... UNION SELECT ... ON DUPLICATE KEY UPDATE
+    // The ON keyword must not be consumed by the deferred join ON clause logic
+    let sql = "INSERT INTO t1 (a, b) SELECT c, d FROM t2 UNION SELECT e, f FROM t3 ON DUPLICATE KEY UPDATE b = b + c";
+    mysql().verified_stmt(sql);
+}
+
+#[test]
 fn parse_select_with_numeric_prefix_column_name() {
     let sql = "SELECT 123col_$@123abc FROM \"table\"";
     match mysql().verified_stmt(sql) {
