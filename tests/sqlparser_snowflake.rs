@@ -2030,3 +2030,24 @@ fn test_set_tuple_assignment() {
         "SET (min, max) = (50, 2 * $min)",
     );
 }
+
+#[test]
+fn parse_positional_column_references_after_dot() {
+    // Snowflake $N positional column references after dot (e.g., t.$1)
+    snowflake().verified_stmt("SELECT t.$1, t.$2 FROM @mystage1 AS t");
+    snowflake().verified_stmt(
+        "SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1",
+    );
+}
+
+#[test]
+fn parse_positional_column_references() {
+    // Snowflake $N positional column references after dot (e.g., t.$1)
+    snowflake().verified_stmt(
+        "SELECT t.$1, t.$2 FROM @mystage1 AS t",
+    );
+    // In WHERE clause
+    snowflake().verified_stmt(
+        "SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1",
+    );
+}

@@ -147,12 +147,20 @@ impl fmt::Display for SetExpr {
                 op,
                 set_quantifier,
             } => {
-                write!(f, "{left} {op}")?;
+                // FULL [OUTER] UNION variants need "FULL" prefix before the operator
+                match set_quantifier {
+                    SetQuantifier::FullByName | SetQuantifier::FullAllByName => {
+                        write!(f, "{left} FULL {op}")?
+                    }
+                    _ => write!(f, "{left} {op}")?,
+                }
                 match set_quantifier {
                     SetQuantifier::All
                     | SetQuantifier::Distinct
                     | SetQuantifier::ByName
-                    | SetQuantifier::AllByName => write!(f, " {set_quantifier}")?,
+                    | SetQuantifier::AllByName
+                    | SetQuantifier::FullByName
+                    | SetQuantifier::FullAllByName => write!(f, " {set_quantifier}")?,
                     SetQuantifier::None => write!(f, "{set_quantifier}")?,
                 }
                 write!(f, " {right}")?;
@@ -192,6 +200,10 @@ pub enum SetQuantifier {
     Distinct,
     ByName,
     AllByName,
+    /// FULL UNION BY NAME (BigQuery): union matching by column name with outer-join semantics
+    FullByName,
+    /// FULL UNION ALL BY NAME (BigQuery): union all matching by column name with outer-join semantics
+    FullAllByName,
     None,
 }
 
@@ -202,6 +214,9 @@ impl fmt::Display for SetQuantifier {
             SetQuantifier::Distinct => write!(f, "DISTINCT"),
             SetQuantifier::ByName => write!(f, "BY NAME"),
             SetQuantifier::AllByName => write!(f, "ALL BY NAME"),
+            // The FULL prefix is rendered by SetExpr::SetOperation, not here
+            SetQuantifier::FullByName => write!(f, "BY NAME"),
+            SetQuantifier::FullAllByName => write!(f, "ALL BY NAME"),
             SetQuantifier::None => write!(f, ""),
         }
     }

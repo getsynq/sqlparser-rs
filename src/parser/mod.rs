@@ -796,6 +796,10 @@ impl<'a> Parser<'a> {
                         Token::Mul => {
                             return Ok(WildcardExpr::QualifiedWildcard(ObjectName(id_parts)));
                         }
+                        // Snowflake $N positional column references (e.g., t.$1)
+                        Token::Placeholder(ref s) => {
+                            id_parts.push(Ident::new(s.clone()));
+                        }
                         _ => {
                             return self.expected("an identifier or a '*' after '.'", next_token);
                         }
@@ -1038,6 +1042,10 @@ impl<'a> Parser<'a> {
                             let next_token = self.next_token();
                             match next_token.token {
                                 Token::Word(w) => id_parts.push(w.to_ident()),
+                                // Snowflake $N positional column references (e.g., t.$1)
+                                Token::Placeholder(ref s) => {
+                                    id_parts.push(Ident::new(s.clone()));
+                                }
                                 _ => {
                                     return self
                                         .expected("an identifier or a '*' after '.'", next_token);
@@ -9425,8 +9433,28 @@ impl<'a> Parser<'a> {
         };
 
         loop {
+            // Check for FULL [OUTER] UNION (BigQuery set operation with FULL prefix,
+            // e.g., `SELECT ... FULL UNION ALL BY NAME SELECT ...`)
+            let full_prefix =
+                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::FULL) {
+                    let t1 = self.peek_nth_token(1).token;
+                    matches!(t1, Token::Word(ref w) if w.keyword == Keyword::UNION)
+                        || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                            && matches!(
+                                self.peek_nth_token(2).token,
+                                Token::Word(ref w) if w.keyword == Keyword::UNION
+                            ))
+                } else {
+                    false
+                };
+
             // The query can be optionally followed by a set operator:
-            let op = self.parse_set_operator(&self.peek_token_kind().clone());
+            let op = if full_prefix {
+                // FULL [OUTER] UNION is always a Union set operation
+                Some(SetOperator::Union)
+            } else {
+                self.parse_set_operator(&self.peek_token_kind().clone())
+            };
             let next_precedence = match op {
                 // UNION and EXCEPT have the same binding power and evaluate left-to-right
                 Some(SetOperator::Union) | Some(SetOperator::Except) => 10,
@@ -9438,8 +9466,33 @@ impl<'a> Parser<'a> {
             if precedence >= next_precedence {
                 break;
             }
-            self.next_token(); // skip past the set operator
-            let set_quantifier = self.parse_set_quantifier(&op);
+            // Consume the operator tokens
+            if full_prefix {
+                self.next_token(); // consume FULL
+                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::OUTER) {
+                    self.next_token(); // consume optional OUTER
+                }
+                self.next_token(); // consume UNION
+            } else {
+                self.next_token(); // skip past the set operator
+            }
+            let set_quantifier = if full_prefix {
+                if self.parse_keyword(Keyword::ALL) {
+                    if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
+                        SetQuantifier::FullAllByName
+                    } else {
+                        SetQuantifier::All
+                    }
+                } else if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
+                    SetQuantifier::FullByName
+                } else if self.parse_keyword(Keyword::DISTINCT) {
+                    SetQuantifier::Distinct
+                } else {
+                    SetQuantifier::None
+                }
+            } else {
+                self.parse_set_quantifier(&op)
+            };
             expr = SetExpr::SetOperation {
                 left: Box::new(expr),
                 op: op.unwrap(),
@@ -10331,6 +10384,20 @@ impl<'a> Parser<'a> {
                         }
                     }
                     Keyword::FULL => {
+                        // Check if this is FULL [OUTER] UNION (BigQuery set operation),
+                        // not a FULL [OUTER] JOIN. If so, break out of the join loop.
+                        let is_full_union = {
+                            let t1 = self.peek_nth_token(1).token;
+                            matches!(t1, Token::Word(ref w) if w.keyword == Keyword::UNION)
+                                || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                                    && matches!(
+                                        self.peek_nth_token(2).token,
+                                        Token::Word(ref w) if w.keyword == Keyword::UNION
+                                    ))
+                        };
+                        if is_full_union {
+                            break;
+                        }
                         let _ = self.next_token(); // consume FULL
                         let _ = self.parse_keyword(Keyword::OUTER); // [ OUTER ]
                         self.expect_keyword(Keyword::JOIN)?;

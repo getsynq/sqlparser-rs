@@ -1852,3 +1852,23 @@ fn test_bigquery_window_named_ref() {
     // Simple case: one window referencing another
     bigquery().verified_stmt("SELECT SUM(x) OVER (b) FROM t WINDOW a AS (ORDER BY x), b AS a");
 }
+
+#[test]
+fn parse_bigquery_full_union_by_name() {
+    // FULL UNION ALL BY NAME - BigQuery set operation matching columns by name with outer-join semantics
+    bigquery().verified_query("SELECT * FROM t1 FULL UNION ALL BY NAME SELECT * FROM t2");
+
+    // FULL OUTER UNION ALL BY NAME - OUTER is optional
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM t1 FULL OUTER UNION ALL BY NAME SELECT * FROM t2",
+        "SELECT * FROM t1 FULL UNION ALL BY NAME SELECT * FROM t2",
+    );
+
+    // FULL UNION BY NAME (without ALL)
+    bigquery().verified_query("SELECT * FROM t1 FULL UNION BY NAME SELECT * FROM t2");
+
+    // Inside a CTE
+    bigquery().verified_query(
+        "WITH cte AS (SELECT * FROM t1 FULL UNION ALL BY NAME SELECT * FROM t2) SELECT * FROM cte",
+    );
+}
