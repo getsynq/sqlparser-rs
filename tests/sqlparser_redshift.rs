@@ -566,3 +566,13 @@ fn test_redshift_bitwise_shift_operators() {
     redshift().verified_stmt("SELECT (col - 4) >> 16");
     redshift().verified_stmt("SELECT (col - 4) & 65535");
 }
+
+#[test]
+fn test_table_function_with_column_definitions() {
+    // PostgreSQL/Redshift: table function alias with column type definitions
+    // e.g. FROM func() alias(col_name type, ...)
+    redshift().one_statement_parses_to(
+        "SELECT DISTINCT view_schema, view_name FROM PG_GET_LATE_BINDING_VIEW_COLS() cols(view_schema name, view_name name, col_name name, col_type varchar, col_num int) WHERE view_schema = 'myschema'",
+        "SELECT DISTINCT view_schema, view_name FROM PG_GET_LATE_BINDING_VIEW_COLS() AS cols (view_schema, view_name, col_name, col_type, col_num) WHERE view_schema = 'myschema'",
+    );
+}
