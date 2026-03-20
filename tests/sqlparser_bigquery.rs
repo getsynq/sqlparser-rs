@@ -1872,3 +1872,30 @@ fn parse_bigquery_full_union_by_name() {
         "WITH cte AS (SELECT * FROM t1 FULL UNION ALL BY NAME SELECT * FROM t2) SELECT * FROM cte",
     );
 }
+
+#[test]
+fn parse_merge_not_matched_by_source() {
+    // BigQuery: WHEN NOT MATCHED BY SOURCE THEN DELETE
+    bigquery().one_statement_parses_to(
+        "MERGE dataset.Inventory T USING dataset.NewArrivals S ON FALSE \
+        WHEN NOT MATCHED AND product LIKE '%washer%' THEN INSERT (product, quantity) VALUES (product, quantity) \
+        WHEN NOT MATCHED BY SOURCE AND product LIKE '%washer%' THEN DELETE",
+        "MERGE dataset.Inventory AS T USING dataset.NewArrivals AS S ON false \
+        WHEN NOT MATCHED AND product LIKE '%washer%' THEN INSERT (product, quantity) VALUES (product, quantity) \
+        WHEN NOT MATCHED BY SOURCE AND product LIKE '%washer%' THEN DELETE",
+    );
+
+    // BigQuery: WHEN NOT MATCHED BY SOURCE THEN UPDATE SET ...
+    bigquery().verified_stmt(
+        "MERGE T USING S ON T.id = S.id \
+        WHEN NOT MATCHED BY SOURCE THEN UPDATE SET T.status = 'DELETED'",
+    );
+
+    // BigQuery: WHEN NOT MATCHED BY TARGET (same as NOT MATCHED)
+    bigquery().one_statement_parses_to(
+        "MERGE T USING S ON T.id = S.id \
+        WHEN NOT MATCHED BY TARGET THEN INSERT (id) VALUES (S.id)",
+        "MERGE T USING S ON T.id = S.id \
+        WHEN NOT MATCHED THEN INSERT (id) VALUES (S.id)",
+    );
+}
