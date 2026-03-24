@@ -874,6 +874,16 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     Keyword::MATCH_CONDITION,
     // for MySQL STRAIGHT_JOIN
     Keyword::STRAIGHT_JOIN,
+    // Statement-starting keywords must not be parsed as table aliases
+    Keyword::INSERT,
+    Keyword::CREATE,
+    Keyword::DELETE,
+    Keyword::UPDATE,
+    Keyword::ALTER,
+    Keyword::DROP,
+    Keyword::GRANT,
+    Keyword::REVOKE,
+    Keyword::MERGE,
 ];
 
 /// Can't be used as a column alias, so that `SELECT <expr> alias`
@@ -912,4 +922,14 @@ pub const RESERVED_FOR_COLUMN_ALIAS: &[Keyword] = &[
     // for Snowflake START WITH .. CONNECT BY hierarchical queries
     Keyword::START,
     Keyword::CONNECT,
+    // Statement-starting keywords must not be parsed as column aliases
+    Keyword::INSERT,
+    Keyword::CREATE,
+    Keyword::DELETE,
+    Keyword::UPDATE,
+    Keyword::ALTER,
+    Keyword::DROP,
+    Keyword::GRANT,
+    Keyword::REVOKE,
+    Keyword::MERGE,
 ];

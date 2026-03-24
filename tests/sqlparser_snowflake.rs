@@ -569,8 +569,14 @@ fn test_select_wildcard_with_exclude_and_rename() {
     assert_eq!(expected, select.projection[0]);
 
     // rename cannot precede exclude
+    // Only test with GenericDialect since Snowflake supports implicit statement
+    // boundaries and won't produce "Expected end of statement" errors.
+    let generic_only = TestedDialects {
+        dialects: vec![Box::new(GenericDialect {})],
+        options: None,
+    };
     assert_eq!(
-        snowflake_and_generic()
+        generic_only
             .parse_sql_statements("SELECT * RENAME col_a AS col_b EXCLUDE col_z FROM data")
             .unwrap_err()
             .to_string(),
@@ -2178,4 +2184,21 @@ fn test_snowflake_connect_by() {
     snowflake_and_generic().verified_stmt(
         "WITH hier AS (SELECT col_id, CONNECT_BY_ROOT col_id AS root_id FROM tbl START WITH col_parent_id IS NULL CONNECT BY col_parent_id = PRIOR col_id) SELECT * FROM hier",
     );
+}
+
+#[test]
+fn test_implicit_statement_boundaries() {
+    // Snowflake GET_DDL() can produce multi-statement SQL without semicolons.
+    // The parser should handle this by treating statement-starting keywords
+    // as implicit boundaries after a completed statement.
+    let sql = concat!(
+        "CREATE OR REPLACE VIEW db.sch.v1 AS ",
+        "SELECT a, b FROM db.sch.t1 ",
+        "UNION ALL ",
+        "SELECT a, b FROM db.sch.t2 ",
+        "INSERT INTO db.sch.t3 (a, b) ",
+        "SELECT a, b FROM db.sch.v1"
+    );
+    let stmts = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 2);
 }

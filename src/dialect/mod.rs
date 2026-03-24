@@ -144,6 +144,14 @@ pub trait Dialect: Debug + Any {
     fn supports_from_first_select(&self) -> bool {
         false
     }
+    /// Returns true if the dialect allows multiple statements without semicolons.
+    /// When enabled, the parser treats any valid statement-starting token after a
+    /// completed statement as an implicit boundary, rather than requiring `;`.
+    /// This handles real-world SQL from sources like Snowflake's GET_DDL() which
+    /// can concatenate statements without delimiters.
+    fn supports_implicit_statement_boundaries(&self) -> bool {
+        false
+    }
     /// Dialect-specific prefix parser override
     fn parse_prefix(&self, _parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
         // return None to fall back to the default behavior
@@ -329,6 +337,10 @@ mod tests {
 
             fn supports_prefix_alias_colon(&self) -> bool {
                 self.0.supports_prefix_alias_colon()
+            }
+
+            fn supports_implicit_statement_boundaries(&self) -> bool {
+                self.0.supports_implicit_statement_boundaries()
             }
 
             fn supports_from_first_select(&self) -> bool {

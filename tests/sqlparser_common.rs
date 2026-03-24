@@ -196,7 +196,10 @@ fn parse_update() {
     );
 
     let sql = "UPDATE t SET a = 1 extrabadstuff";
-    let res = parse_sql_statements(sql);
+    let no_implicit_boundaries = all_dialects_except(|d| {
+        d.supports_implicit_statement_boundaries()
+    });
+    let res = no_implicit_boundaries.parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: extrabadstuff\nNear ` t SET a = 1`"
@@ -824,7 +827,10 @@ fn parse_select_into() {
 
     // Do not allow aliases here
     let sql = "SELECT * INTO table0 asdf FROM table1";
-    let result = parse_sql_statements(sql);
+    let no_implicit_boundaries = all_dialects_except(|d| {
+        d.supports_implicit_statement_boundaries()
+    });
+    let result = no_implicit_boundaries.parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: asdf\nNear `SELECT * INTO table0`"
@@ -867,7 +873,10 @@ fn parse_select_wildcard() {
     );
 
     let sql = "SELECT * + * FROM foo;";
-    let result = parse_sql_statements(sql);
+    let no_implicit_boundaries = all_dialects_except(|d| {
+        d.supports_implicit_statement_boundaries()
+    });
+    let result = no_implicit_boundaries.parse_sql_statements(sql);
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: +\nNear `SELECT *`"
@@ -1016,7 +1025,8 @@ fn parse_not() {
 
 #[test]
 fn parse_invalid_infix_not() {
-    let res = parse_sql_statements("SELECT c FROM t WHERE c NOT (");
+    let res = all_dialects_except(|d| d.supports_implicit_statement_boundaries())
+        .parse_sql_statements("SELECT c FROM t WHERE c NOT (");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: NOT\nNear ` c FROM t WHERE c`"
@@ -3830,7 +3840,11 @@ fn parse_alter_table_drop_constraint() {
         _ => unreachable!(),
     }
 
-    let res = parse_sql_statements(&format!("{alter_stmt} DROP CONSTRAINT is_active TEXT"));
+    let no_implicit_boundaries = all_dialects_except(|d| {
+        d.supports_implicit_statement_boundaries()
+    });
+    let res = no_implicit_boundaries
+        .parse_sql_statements(&format!("{alter_stmt} DROP CONSTRAINT is_active TEXT"));
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: TEXT\nNear ` TABLE tab DROP CONSTRAINT is_active`"
@@ -4468,7 +4482,8 @@ fn parse_interval() {
         expr_from_projection(only(&select.projection)),
     );
 
-    let result = parse_sql_statements("SELECT INTERVAL '1' SECOND TO SECOND");
+    let no_implicit = all_dialects_except(|d| d.supports_implicit_statement_boundaries());
+    let result = no_implicit.parse_sql_statements("SELECT INTERVAL '1' SECOND TO SECOND");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: SECOND\nNear `SELECT INTERVAL '1' SECOND TO`"
@@ -4478,7 +4493,7 @@ fn parse_interval() {
         result.unwrap_err(),
     );
 
-    let result = parse_sql_statements("SELECT INTERVAL '10' HOUR (1) TO HOUR (2)");
+    let result = no_implicit.parse_sql_statements("SELECT INTERVAL '10' HOUR (1) TO HOUR (2)");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: (\nNear `HOUR (1) TO HOUR `"
@@ -5807,8 +5822,13 @@ fn parse_multiple_statements() {
         );
         // Check that extra semicolon at the end is stripped by normalization:
         one_statement_parses_to(&(sql1.to_owned() + ";"), sql1);
-        // Check that forgetting the semicolon results in an error:
-        let res = parse_sql_statements(&(sql1.to_owned() + " " + sql2_kw + sql2_rest));
+        // Check that forgetting the semicolon results in an error for dialects
+        // that don't support implicit statement boundaries:
+        let no_implicit_boundaries = all_dialects_except(|d| {
+            d.supports_implicit_statement_boundaries()
+        });
+        let res = no_implicit_boundaries
+            .parse_sql_statements(&(sql1.to_owned() + " " + sql2_kw + sql2_rest));
 
         let actual = format!("{}", res.unwrap_err());
         let expected = format!("Expected end of statement, found: {}", sql2_kw.to_string());
@@ -6569,7 +6589,8 @@ fn parse_drop_view() {
 
 #[test]
 fn parse_invalid_subquery_without_parens() {
-    let res = parse_sql_statements("SELECT SELECT 1 FROM bar WHERE 1=1 FROM baz");
+    let res = all_dialects_except(|d| d.supports_implicit_statement_boundaries())
+        .parse_sql_statements("SELECT SELECT 1 FROM bar WHERE 1=1 FROM baz");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: 1\nNear `SELECT SELECT `"
@@ -6860,7 +6881,10 @@ fn parse_start_transaction() {
         res.unwrap_err()
     );
 
-    let res = parse_sql_statements("START TRANSACTION BAD");
+    let no_implicit_boundaries = all_dialects_except(|d| {
+        d.supports_implicit_statement_boundaries()
+    });
+    let res = no_implicit_boundaries.parse_sql_statements("START TRANSACTION BAD");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: BAD\nNear `START TRANSACTION`"
@@ -7855,7 +7879,8 @@ fn parse_offset_and_limit() {
     );
 
     // Can't repeat OFFSET / LIMIT
-    let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 OFFSET 2");
+    let no_implicit = all_dialects_except(|d| d.supports_implicit_statement_boundaries());
+    let res = no_implicit.parse_sql_statements("SELECT foo FROM bar OFFSET 2 OFFSET 2");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: OFFSET\nNear ` foo FROM bar OFFSET 2`"
@@ -7865,7 +7890,7 @@ fn parse_offset_and_limit() {
         res.unwrap_err()
     );
 
-    let res = parse_sql_statements("SELECT foo FROM bar LIMIT 2 LIMIT 2");
+    let res = no_implicit.parse_sql_statements("SELECT foo FROM bar LIMIT 2 LIMIT 2");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: LIMIT\nNear ` foo FROM bar LIMIT 2`"
@@ -7875,7 +7900,7 @@ fn parse_offset_and_limit() {
         res.unwrap_err()
     );
 
-    let res = parse_sql_statements("SELECT foo FROM bar OFFSET 2 LIMIT 2 OFFSET 2");
+    let res = no_implicit.parse_sql_statements("SELECT foo FROM bar OFFSET 2 LIMIT 2 OFFSET 2");
     assert_eq!(
         ParserError::ParserError(
             "Expected end of statement, found: OFFSET\nNear ` bar OFFSET 2 LIMIT 2`"

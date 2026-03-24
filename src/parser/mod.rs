@@ -493,7 +493,11 @@ impl<'a> Parser<'a> {
             }
 
             if expecting_statement_delimiter {
-                return self.expected("end of statement", self.peek_token());
+                if self.dialect.supports_implicit_statement_boundaries() {
+                    expecting_statement_delimiter = false;
+                } else {
+                    return self.expected("end of statement", self.peek_token());
+                }
             }
 
             let statement = self.parse_statement()?;
