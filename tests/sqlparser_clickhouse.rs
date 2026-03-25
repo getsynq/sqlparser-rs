@@ -64,6 +64,7 @@ fn parse_array_access_expr() {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     })],
                 }
                 .empty_span()
@@ -115,6 +116,7 @@ fn parse_array_access_expr() {
                                 on_overflow: None,
                                 null_treatment: None,
                                 within_group: None,
+                                having_bound: None,
                             })],
                         }),
                         op: BinaryOperator::NotEq,
@@ -179,6 +181,7 @@ fn parse_array_fn() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(only(&select.projection))
     );
@@ -282,6 +285,7 @@ fn parse_delimited_identifiers() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(&select.projection[1]),
     );
@@ -717,6 +721,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 limit: None,
                                 within_group: None,
                                 on_overflow: None,
+                                having_bound: None,
                             }))
                         }],
                         column_options: vec![],
@@ -744,6 +749,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 limit: None,
                                 within_group: None,
                                 on_overflow: None,
+                                having_bound: None,
                             })))
                         }],
                         column_options: vec![],
@@ -787,6 +793,7 @@ fn parse_create_table_with_variant_default_expressions() {
                                 limit: None,
                                 within_group: None,
                                 on_overflow: None,
+                                having_bound: None,
                             }))
                         }],
                         column_options: vec![],

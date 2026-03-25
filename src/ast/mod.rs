@@ -4788,6 +4788,27 @@ pub struct Function {
     pub on_overflow: Option<OnOverflow>,
     // IGNORE NULLS or RESPECT NULLS
     pub null_treatment: Option<NullTreatment>,
+    /// BigQuery: `HAVING MAX expr` or `HAVING MIN expr` inside aggregate functions
+    pub having_bound: Option<HavingBound>,
+}
+
+/// BigQuery `HAVING MAX expr` or `HAVING MIN expr` inside aggregate functions.
+/// See <https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions#any_value>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum HavingBound {
+    Max(Box<Expr>),
+    Min(Box<Expr>),
+}
+
+impl fmt::Display for HavingBound {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HavingBound::Max(expr) => write!(f, "HAVING MAX {expr}"),
+            HavingBound::Min(expr) => write!(f, "HAVING MIN {expr}"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -4851,10 +4872,16 @@ impl fmt::Display for Function {
                 "".to_string()
             };
 
+            let having = if let Some(ref having_bound) = self.having_bound {
+                format!(" {having_bound}")
+            } else {
+                "".to_string()
+            };
+
             if let Some(ref parameters) = self.parameters {
                 write!(
                     f,
-                    "{approximate}{}({})({}{}{}{}{})",
+                    "{approximate}{}({})({}{}{}{}{}{})",
                     self.name,
                     display_comma_separated(parameters),
                     if self.distinct { "DISTINCT " } else { "" },
@@ -4862,12 +4889,13 @@ impl fmt::Display for Function {
                     order_by,
                     limit,
                     on_overflow,
+                    having,
                 )?;
                 write!(f, "{null_treatment}")?;
             } else {
                 write!(
                     f,
-                    "{approximate}{}({}{}{order_by}{limit}{on_overflow}){null_treatment}",
+                    "{approximate}{}({}{}{order_by}{limit}{on_overflow}{having}){null_treatment}",
                     self.name,
                     if self.distinct { "DISTINCT " } else { "" },
                     display_comma_separated(&self.args),

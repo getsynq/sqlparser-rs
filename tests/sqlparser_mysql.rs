@@ -1288,6 +1288,7 @@ fn parse_insert_with_on_duplicate_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })
                     },
                     Assignment {
@@ -1307,6 +1308,7 @@ fn parse_insert_with_on_duplicate_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })
                     },
                     Assignment {
@@ -1326,6 +1328,7 @@ fn parse_insert_with_on_duplicate_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })
                     },
                     Assignment {
@@ -1345,6 +1348,7 @@ fn parse_insert_with_on_duplicate_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })
                     },
                     Assignment {
@@ -1364,6 +1368,7 @@ fn parse_insert_with_on_duplicate_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })
                     },
                 ])),
@@ -1762,6 +1767,7 @@ fn parse_table_colum_option_on_update() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })),
                     },],
                     column_options: vec![],

@@ -964,6 +964,7 @@ fn parse_select_count_wildcard() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(only(&select.projection))
     );
@@ -990,6 +991,7 @@ fn parse_select_count_distinct() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(only(&select.projection))
     );
@@ -2085,6 +2087,7 @@ fn parse_select_having() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             })),
             op: BinaryOperator::Gt,
             right: Box::new(Expr::Value(number("1"))),
@@ -2126,6 +2129,7 @@ fn parse_select_qualify() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             })),
             op: BinaryOperator::Eq,
             right: Box::new(Expr::Value(number("1"))),
@@ -2494,6 +2498,7 @@ fn parse_listagg() {
             limit: None,
             on_overflow,
             null_treatment: None,
+            having_bound: None,
         }),
         expr_from_projection(only(&select.projection))
     );
@@ -3884,6 +3889,7 @@ fn parse_scalar_function_in_projection() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             }),
             expr_from_projection(only(&select.projection))
         );
@@ -4015,6 +4021,7 @@ fn parse_named_argument_function() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(only(&select.projection))
     );
@@ -4062,6 +4069,7 @@ fn parse_window_functions() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(&select.projection[0])
     );
@@ -4112,6 +4120,7 @@ fn test_parse_named_window() {
                     on_overflow: None,
                     null_treatment: None,
                     within_group: None,
+                    having_bound: None,
                 })
                 .empty_span(),
                 alias: Ident {
@@ -4152,6 +4161,7 @@ fn test_parse_named_window() {
                     on_overflow: None,
                     null_treatment: None,
                     within_group: None,
+                    having_bound: None,
                 })
                 .empty_span(),
                 alias: Ident {
@@ -4681,6 +4691,7 @@ fn parse_at_timezone() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             })),
             time_zone: "UTC-06:00".to_string(),
         },
@@ -4714,6 +4725,7 @@ fn parse_at_timezone() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         },)),
                         time_zone: "UTC-06:00".to_string(),
                     },),),
@@ -4731,6 +4743,7 @@ fn parse_at_timezone() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             },)
             .empty_span(),
             alias: Ident {
@@ -4898,6 +4911,7 @@ fn parse_table_function() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             });
             assert_eq!(expr, expected_expr);
             assert_eq!(alias, table_alias("a"))
@@ -5057,6 +5071,7 @@ fn parse_unnest_in_from_clause() {
                     on_overflow: None,
                     null_treatment: None,
                     within_group: None,
+                    having_bound: None,
                 })],
                 with_offset: false,
                 with_offset_alias: None,
@@ -5093,6 +5108,7 @@ fn parse_unnest_in_from_clause() {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     }),
                     Expr::Function(Function {
                         name: ObjectName(vec![Ident::new("make_array")]),
@@ -5110,6 +5126,7 @@ fn parse_unnest_in_from_clause() {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     }),
                 ],
                 with_offset: false,
@@ -7904,6 +7921,7 @@ fn parse_time_functions() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         };
         assert_eq!(
             &Expr::Function(select_localtime_func_call_ast.clone()),
@@ -8409,6 +8427,7 @@ fn parse_pivot_table() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             }))],
             value_column: vec![Ident::new("a"), Ident::new("MONTH")],
             value_source: PivotValueSource::List(vec![
@@ -8500,6 +8519,7 @@ fn parse_pivot_table_aliases() {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     }),
                     alias: Ident::new("number_of_sales"),
                 },
@@ -8521,6 +8541,7 @@ fn parse_pivot_table_aliases() {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     }),
                     alias: Ident::new("total"),
                 },
@@ -8602,6 +8623,7 @@ fn parse_within_group() {
                 nulls_first: None,
                 with_fill: None,
             }]),
+            having_bound: None,
         })
     );
 }
@@ -8745,6 +8767,7 @@ fn parse_pivot_unpivot_table() {
                 limit: None,
                 on_overflow: None,
                 null_treatment: None,
+                having_bound: None,
             }))],
             value_column: vec![Ident::new("year")],
             value_source: PivotValueSource::List(vec![
