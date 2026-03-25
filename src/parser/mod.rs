@@ -4609,7 +4609,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let (columns, columns_with_types) = if dialect_of!(self is ClickHouseDialect) {
+        let (mut columns, columns_with_types) = if dialect_of!(self is ClickHouseDialect) {
             let (cols, _, _) = self.parse_columns()?;
             (vec![], cols)
         } else {
@@ -4768,6 +4768,12 @@ impl<'a> Parser<'a> {
         let view_options = self.parse_options(Keyword::OPTIONS)?;
 
         let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+
+        // Snowflake: COPY GRANTS can be followed by a column list (e.g., MATERIALIZED VIEW name COPY GRANTS (col1, col2, ...) AS ...)
+        // If we have not yet parsed a column list, check for one here.
+        if copy_grants && columns.is_empty() && self.peek_token_is(&Token::LParen) {
+            columns = self.parse_parenthesized_column_list(Optional, false)?;
+        }
 
         // COMMENT may appear after COPY GRANTS (Snowflake: COPY GRANTS COMMENT = '...')
         if comment.is_none() && self.parse_keyword(Keyword::COMMENT) {
@@ -8145,7 +8151,14 @@ impl<'a> Parser<'a> {
                 Keyword::SET => Ok(DataType::Set(self.parse_string_values()?)),
                 Keyword::ARRAY => {
                     if dialect_of!(self is SnowflakeDialect) {
-                        Ok(DataType::Array(ArrayElemTypeDef::None))
+                        // Snowflake supports both ARRAY (no params) and ARRAY(element_type)
+                        if self.peek_token_is(&Token::LParen) {
+                            Ok(self.parse_sub_type(|internal_type| {
+                                DataType::Array(ArrayElemTypeDef::Parenthesis(internal_type))
+                            })?)
+                        } else {
+                            Ok(DataType::Array(ArrayElemTypeDef::None))
+                        }
                     } else if dialect_of!(self is ClickHouseDialect) {
                         Ok(self.parse_sub_type(|internal_type| {
                             DataType::Array(ArrayElemTypeDef::Parenthesis(internal_type))
