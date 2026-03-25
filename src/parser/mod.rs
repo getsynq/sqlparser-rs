@@ -5556,6 +5556,25 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Snowflake: CLONE ... AT (...) or BEFORE (...)
+        // Time travel clause — consume as balanced parens
+        if clone.is_some()
+            && self
+                .parse_one_of_keywords(&[Keyword::AT, Keyword::BEFORE])
+                .is_some()
+        {
+            self.expect_token(&Token::LParen)?;
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => break,
+                    _ => {}
+                }
+            }
+        }
+
         // BigQuery: CREATE TABLE t COPY source_table
         // Must not consume COPY if followed by GRANTS (Snowflake COPY GRANTS)
         let copy = if matches!(
