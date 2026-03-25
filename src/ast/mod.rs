@@ -38,7 +38,7 @@ pub use self::dcl::{
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
-    Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition, ProcedureParam,
+    CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition, ProcedureParam,
     ReferentialAction, TableConstraint, TableProjection, UserDefinedTypeCompositeAttributeDef,
     UserDefinedTypeRepresentation, ViewSecurity,
 };

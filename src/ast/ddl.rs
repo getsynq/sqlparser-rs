@@ -535,6 +535,30 @@ pub enum TableConstraint {
         /// Referred column identifier list.
         columns: Vec<WithSpan<Ident>>,
     },
+    /// `LIKE source_table [ { INCLUDING | EXCLUDING } option [, ...] ]`
+    ///
+    /// PostgreSQL/Redshift: CREATE TABLE new_table (LIKE old_table INCLUDING DEFAULTS)
+    Like {
+        table_name: ObjectName,
+        options: Vec<CreateTableLikeOption>,
+    },
+}
+
+/// A single INCLUDING or EXCLUDING clause in a `CREATE TABLE (LIKE ...)` statement.
+///
+/// Example: `INCLUDING DEFAULTS`, `EXCLUDING COMMENTS`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CreateTableLikeOption {
+    pub including: bool,
+    pub option: Ident,
+}
+
+impl fmt::Display for CreateTableLikeOption {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {}", if self.including { "INCLUDING" } else { "EXCLUDING" }, self.option)
+    }
 }
 
 impl fmt::Display for TableConstraint {
@@ -643,6 +667,13 @@ impl fmt::Display for TableConstraint {
 
                 write!(f, " ({})", display_comma_separated(columns))?;
 
+                Ok(())
+            }
+            Self::Like { table_name, options } => {
+                write!(f, "LIKE {table_name}")?;
+                for option in options {
+                    write!(f, " {option}")?;
+                }
                 Ok(())
             }
         }

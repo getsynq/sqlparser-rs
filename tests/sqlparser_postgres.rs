@@ -3984,6 +3984,20 @@ fn parse_table_inheritance_wildcard() {
 }
 
 #[test]
+fn parse_create_table_like() {
+    // Simple LIKE clause inside column list (Redshift/PostgreSQL syntax)
+    pg().verified_stmt("CREATE TABLE new_tbl (LIKE old_tbl)");
+    // LIKE with INCLUDING DEFAULTS
+    pg().verified_stmt("CREATE TEMPORARY TABLE tbl_1 (LIKE tbl_2 INCLUDING DEFAULTS)");
+    // LIKE with qualified table name
+    pg().verified_stmt("CREATE TEMPORARY TABLE tbl_1 (LIKE sch_1.tbl_2 INCLUDING DEFAULTS)");
+    // LIKE with multiple INCLUDING/EXCLUDING options
+    pg().verified_stmt(
+        "CREATE TABLE a (LIKE b INCLUDING CONSTRAINT INCLUDING COMPRESSION EXCLUDING COMMENTS)",
+    );
+}
+
+#[test]
 fn parse_filter_with_over() {
     // SQL standard: aggregate FILTER clause followed by OVER (window specification)
     pg().verified_stmt("SELECT CORR(a, b) FILTER (WHERE c > 0) OVER (PARTITION BY d)");

@@ -6651,6 +6651,23 @@ impl<'a> Parser<'a> {
                     columns,
                 }))
             }
+            Token::Word(w) if w.keyword == Keyword::LIKE && name.is_none() => {
+                // PostgreSQL/Redshift: CREATE TABLE new_table (LIKE source_table [INCLUDING|EXCLUDING option ...])
+                let table_name = self.parse_object_name(false)?;
+                let mut options = vec![];
+                loop {
+                    let including = if self.parse_keyword(Keyword::INCLUDING) {
+                        true
+                    } else if self.parse_keyword(Keyword::EXCLUDING) {
+                        false
+                    } else {
+                        break;
+                    };
+                    let option = self.parse_identifier(false)?.unwrap();
+                    options.push(CreateTableLikeOption { including, option });
+                }
+                Ok(Some(TableConstraint::Like { table_name, options }))
+            }
             _ => {
                 if name.is_some() {
                     self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", next_token)
