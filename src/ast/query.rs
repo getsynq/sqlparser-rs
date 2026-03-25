@@ -857,13 +857,20 @@ impl fmt::Display for TableWithJoins {
         write!(f, "{}", self.relation)?;
         let mut prev_was_array = false;
         for join in &self.joins {
-            if matches!(join.join_operator, JoinOperator::Array) && prev_was_array {
+            if matches!(
+                join.join_operator,
+                JoinOperator::Array | JoinOperator::LeftArray
+            ) && prev_was_array
+            {
                 // Consecutive ARRAY JOIN items are comma-separated
                 write!(f, ", {}", join.relation)?;
             } else {
                 write!(f, "{join}")?;
             }
-            prev_was_array = matches!(join.join_operator, JoinOperator::Array);
+            prev_was_array = matches!(
+                join.join_operator,
+                JoinOperator::Array | JoinOperator::LeftArray
+            );
         }
         Ok(())
     }
@@ -1578,6 +1585,7 @@ impl fmt::Display for Join {
             JoinOperator::CrossApply => write!(f, " CROSS APPLY {}", self.relation),
             JoinOperator::OuterApply => write!(f, " OUTER APPLY {}", self.relation),
             JoinOperator::Array => write!(f, " ARRAY JOIN {}", self.relation),
+            JoinOperator::LeftArray => write!(f, " LEFT ARRAY JOIN {}", self.relation),
             JoinOperator::AsOf {
                 match_condition,
                 constraint,
@@ -1618,6 +1626,8 @@ pub enum JoinOperator {
     OuterApply,
     /// ARRAY JOIN (ClickHouse)
     Array,
+    /// LEFT ARRAY JOIN (ClickHouse)
+    LeftArray,
     /// ASOF JOIN (Snowflake)
     AsOf {
         match_condition: Expr,
