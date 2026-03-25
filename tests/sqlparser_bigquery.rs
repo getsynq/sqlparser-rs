@@ -1650,6 +1650,31 @@ fn test_create_table_options_empty() {
 }
 
 #[test]
+fn test_create_schema_options() {
+    bigquery().one_statement_parses_to(
+        "CREATE SCHEMA mydataset OPTIONS(is_case_insensitive = TRUE)",
+        "CREATE SCHEMA mydataset OPTIONS(is_case_insensitive = true)",
+    );
+    bigquery().verified_stmt("CREATE SCHEMA mydataset DEFAULT COLLATE 'und:ci'");
+}
+
+#[test]
+fn test_create_table_default_collate() {
+    bigquery().verified_stmt(
+        "CREATE TABLE mydataset.mytable (number INT64, word STRING) DEFAULT COLLATE 'und:ci'",
+    );
+}
+
+#[test]
+fn test_alter_table_set_default_collate() {
+    bigquery().verified_stmt("ALTER TABLE mydataset.mytable SET DEFAULT COLLATE ''");
+    bigquery().one_statement_parses_to(
+        "ALTER TABLE table_name SET DEFAULT COLLATE collate_specification",
+        "ALTER TABLE table_name SET DEFAULT COLLATE 'collate_specification'",
+    );
+}
+
+#[test]
 fn test_table_cte() {
     bigquery().verified_only_select("WITH table AS (SELECT * FROM tbl) SELECT * FROM table");
 }

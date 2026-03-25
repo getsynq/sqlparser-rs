@@ -4103,6 +4103,16 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // BigQuery: DEFAULT COLLATE 'und:ci'
+        let default_collate = if self.parse_keywords(&[Keyword::DEFAULT, Keyword::COLLATE]) {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
+        // BigQuery: OPTIONS(key=value, ...)
+        let options = self.parse_options(Keyword::OPTIONS)?;
+
         // Trino: WITH (LOCATION='s3://bucket/foo')
         let with_properties = self.parse_options(Keyword::WITH)?;
 
@@ -4110,6 +4120,8 @@ impl<'a> Parser<'a> {
             schema_name,
             if_not_exists,
             comment,
+            default_collate,
+            options,
             with_properties,
         })
     }
@@ -5656,6 +5668,7 @@ impl<'a> Parser<'a> {
         let mut table_options = vec![];
         let mut copy_grants = false;
         let mut default_charset: Option<String> = None;
+        let mut default_collate: Option<String> = None;
         let mut collation: Option<String> = None;
         let mut on_commit: Option<OnCommit> = None;
         let mut strict = false;
@@ -5817,6 +5830,14 @@ impl<'a> Parser<'a> {
 
             // TAG (...) (Snowflake)
             if self.parse_optional_tag_clause() {
+                continue;
+            }
+
+            // DEFAULT COLLATE 'value' (BigQuery)
+            if default_collate.is_none()
+                && self.parse_keywords(&[Keyword::DEFAULT, Keyword::COLLATE])
+            {
+                default_collate = Some(self.parse_literal_string()?);
                 continue;
             }
 
@@ -6034,6 +6055,7 @@ impl<'a> Parser<'a> {
             .order_by(order_by)
             .cluster_by(cluster_by)
             .default_charset(default_charset)
+            .default_collate(default_collate)
             .collation(collation)
             .on_commit(on_commit)
             .partitioned_by(partitioned_by)
@@ -7041,7 +7063,17 @@ impl<'a> Parser<'a> {
             let table_name = self.parse_object_name(false)?;
             AlterTableOperation::SwapWith { table_name }
         } else if self.parse_keyword(Keyword::SET) {
-            if self.parse_keyword(Keyword::OPTIONS) {
+            if self.parse_keywords(&[Keyword::DEFAULT, Keyword::COLLATE]) {
+                // BigQuery: SET DEFAULT COLLATE 'collation' or SET DEFAULT COLLATE identifier
+                let collation = match self.peek_token().token {
+                    Token::SingleQuotedString(_) => self.parse_literal_string()?,
+                    _ => {
+                        let ident = self.parse_identifier(false)?.unwrap();
+                        ident.value
+                    }
+                };
+                AlterTableOperation::SetDefaultCollate { collation }
+            } else if self.parse_keyword(Keyword::OPTIONS) {
                 // BigQuery: SET OPTIONS(key = value, ...)
                 self.prev_token();
                 let options = self.parse_options(Keyword::OPTIONS)?;

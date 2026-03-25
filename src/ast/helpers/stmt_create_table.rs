@@ -76,6 +76,7 @@ pub struct CreateTableBuilder {
     pub comment: Option<String>,
     pub auto_increment_offset: Option<u32>,
     pub default_charset: Option<String>,
+    pub default_collate: Option<String>,
     pub collation: Option<String>,
     pub on_commit: Option<OnCommit>,
     pub partitioned_by: Option<Expr>,
@@ -123,6 +124,7 @@ impl CreateTableBuilder {
             comment: None,
             auto_increment_offset: None,
             default_charset: None,
+            default_collate: None,
             collation: None,
             on_commit: None,
             on_cluster: None,
@@ -276,6 +278,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn default_collate(mut self, default_collate: Option<String>) -> Self {
+        self.default_collate = default_collate;
+        self
+    }
+
     pub fn collation(mut self, collation: Option<String>) -> Self {
         self.collation = collation;
         self
@@ -372,6 +379,7 @@ impl CreateTableBuilder {
             comment: self.comment,
             auto_increment_offset: self.auto_increment_offset,
             default_charset: self.default_charset,
+            default_collate: self.default_collate,
             collation: self.collation,
             on_commit: self.on_commit,
             on_cluster: self.on_cluster,
@@ -426,6 +434,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 comment,
                 auto_increment_offset,
                 default_charset,
+                default_collate,
                 collation,
                 on_commit,
                 partitioned_by,
@@ -469,6 +478,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 comment,
                 auto_increment_offset,
                 default_charset,
+                default_collate,
                 collation,
                 on_commit,
                 partitioned_by,

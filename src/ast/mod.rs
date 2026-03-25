@@ -1828,6 +1828,8 @@ pub enum Statement {
         comment: Option<String>,
         auto_increment_offset: Option<u32>,
         default_charset: Option<String>,
+        /// BigQuery: `DEFAULT COLLATE 'und:ci'`
+        default_collate: Option<String>,
         collation: Option<String>,
         on_commit: Option<OnCommit>,
         partitioned_by: Option<Expr>,
@@ -2217,6 +2219,10 @@ pub enum Statement {
         schema_name: SchemaName,
         if_not_exists: bool,
         comment: Option<String>,
+        /// BigQuery: `DEFAULT COLLATE 'und:ci'`
+        default_collate: Option<String>,
+        /// BigQuery: `OPTIONS(key=value, ...)`
+        options: Vec<SqlOption>,
         /// Trino: `WITH (key = 'value', ...)`
         with_properties: Vec<SqlOption>,
     },
@@ -3128,6 +3134,7 @@ impl fmt::Display for Statement {
                 clone,
                 copy,
                 default_charset,
+                default_collate,
                 engine,
                 comment,
                 auto_increment_offset,
@@ -3372,6 +3379,9 @@ impl fmt::Display for Statement {
                 }
                 if let Some(default_charset) = default_charset {
                     write!(f, " DEFAULT CHARSET={default_charset}")?;
+                }
+                if let Some(c) = default_collate {
+                    write!(f, " DEFAULT COLLATE '{c}'")?;
                 }
                 if let Some(collation) = collation {
                     write!(f, " COLLATE={collation}")?;
@@ -3851,6 +3861,8 @@ impl fmt::Display for Statement {
                 schema_name,
                 if_not_exists,
                 comment,
+                default_collate,
+                options,
                 with_properties,
             } => {
                 write!(
@@ -3861,6 +3873,12 @@ impl fmt::Display for Statement {
                 )?;
                 if let Some(c) = comment {
                     write!(f, " COMMENT='{c}'")?;
+                }
+                if let Some(c) = default_collate {
+                    write!(f, " DEFAULT COLLATE '{c}'")?;
+                }
+                if !options.is_empty() {
+                    write!(f, " OPTIONS({})", display_comma_separated(options))?;
                 }
                 if !with_properties.is_empty() {
                     write!(f, " WITH ({})", display_comma_separated(with_properties))?;

@@ -40,6 +40,18 @@ if [ ! -f "$PROMPT_FILE" ]; then
   exit 1
 fi
 
+
+if [ -f target/corpus-report.json ]; then
+  echo "Starting corpus stats:"
+  python3 -c "
+import json
+data = json.load(open('target/corpus-report.json'))
+s = data['summary']
+print(f\"  Passed: {s['total_passed']}/{s['total_tests']} ({s['total_passed']/s['total_tests']*100:.1f}%)\")
+print(f\"  Failed: {s['total_failed']}\")
+"
+fi
+
 echo "Starting corpus fix loop (model: sonnet, max iterations: ${MAX_ITERATIONS:-unlimited})"
 if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
   echo "Extra claude flags: ${EXTRA_ARGS[*]}"
@@ -65,7 +77,7 @@ while true; do
     --verbose \
     --output-format stream-json \
     ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-    -p "$(cat "$PROMPT_FILE")"
+    -p "$(cat "$PROMPT_FILE")" | tee -a corpus-fix-loop-$(date +%Y-%m-%dT%T%z).log
 
   # Check if a commit was produced recently (within last 5 minutes)
   LAST_COMMIT=$(git log -1 --format=%ct 2>/dev/null || echo 0)
