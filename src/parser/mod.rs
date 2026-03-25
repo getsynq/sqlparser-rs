@@ -5544,6 +5544,21 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // BigQuery: CREATE TABLE t COPY source_table
+        // Must not consume COPY if followed by GRANTS (Snowflake COPY GRANTS)
+        let copy = if matches!(
+            self.peek_token().token,
+            Token::Word(ref w) if w.keyword == Keyword::COPY
+        ) && !matches!(
+            self.peek_nth_token(1).token,
+            Token::Word(ref w) if w.keyword == Keyword::GRANTS
+        ) {
+            self.next_token(); // consume COPY
+            self.parse_object_name(false).ok()
+        } else {
+            None
+        };
+
         // parse optional column list (schema)
         let (columns, constraints, projections) = self.parse_columns()?;
 
@@ -6011,6 +6026,7 @@ impl<'a> Parser<'a> {
             .without_rowid(without_rowid)
             .like(like)
             .clone_clause(clone)
+            .copy(copy)
             .engine(engine)
             .comment(comment)
             .auto_increment_offset(auto_increment_offset)

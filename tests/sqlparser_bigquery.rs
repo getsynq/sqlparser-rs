@@ -1633,6 +1633,15 @@ fn test_create_table_options_expression() {
 }
 
 #[test]
+fn test_create_table_copy() {
+    bigquery().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE `db_1.sch_1.tbl_1` COPY `db_1.sch_2.tbl_1`",
+        "CREATE OR REPLACE TABLE `db_1`.`sch_1`.`tbl_1` COPY `db_1`.`sch_2`.`tbl_1`",
+    );
+    bigquery().verified_stmt("CREATE TABLE t COPY src_table");
+}
+
+#[test]
 fn test_create_table_options_empty() {
     bigquery().one_statement_parses_to(
         "CREATE OR REPLACE TABLE `myproject`.`mydataset`.`mytable` OPTIONS () AS (SELECT * FROM `myproject`.`mydataset`.`othertable`)",

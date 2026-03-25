@@ -1823,6 +1823,7 @@ pub enum Statement {
         without_rowid: bool,
         like: Option<ObjectName>,
         clone: Option<ObjectName>,
+        copy: Option<ObjectName>,
         engine: Option<EngineSpec>,
         comment: Option<String>,
         auto_increment_offset: Option<u32>,
@@ -3125,6 +3126,7 @@ impl fmt::Display for Statement {
                 without_rowid,
                 like,
                 clone,
+                copy,
                 default_charset,
                 engine,
                 comment,
@@ -3190,6 +3192,7 @@ impl fmt::Display for Statement {
                 } else if query.is_none()
                     && like.is_none()
                     && clone.is_none()
+                    && copy.is_none()
                     && using_template.is_none()
                 {
                     // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
@@ -3232,6 +3235,10 @@ impl fmt::Display for Statement {
 
                 if let Some(c) = clone {
                     write!(f, " CLONE {c}")?;
+                }
+
+                if let Some(c) = copy {
+                    write!(f, " COPY {c}")?;
                 }
 
                 match hive_distribution {
