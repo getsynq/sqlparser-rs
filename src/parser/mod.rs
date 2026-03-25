@@ -6061,7 +6061,11 @@ impl<'a> Parser<'a> {
         }
 
         loop {
-            if let Some(projection) = self.parse_optional_table_projection()? {
+            if let Some(projection) = if dialect_of!(self is ClickHouseDialect) {
+                self.parse_optional_table_projection()?
+            } else {
+                None
+            } {
                 projections.push(projection);
             } else if let Some(constraint) = self.parse_optional_table_constraint()? {
                 constraints.push(constraint);
@@ -12200,7 +12204,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let opt_replace = if dialect_of!(self is GenericDialect | BigQueryDialect | ClickHouseDialect | SnowflakeDialect)
+        let opt_replace = if dialect_of!(self is GenericDialect | BigQueryDialect | ClickHouseDialect | SnowflakeDialect | DuckDbDialect)
         {
             self.parse_optional_select_item_replace()?
         } else {

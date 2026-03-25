@@ -2152,6 +2152,13 @@ fn test_snowflake_unpivot_column_alias() {
 }
 
 #[test]
+fn test_snowflake_projection_as_column_name() {
+    // PROJECTION should be usable as a column name in Snowflake (and generic) CREATE TABLE
+    // It is only a special table-level syntax in ClickHouse
+    snowflake_and_generic().verified_stmt("CREATE TABLE t (PROJECTION DECIMAL(38,0), score DECIMAL(38,0))");
+}
+
+#[test]
 fn test_snowflake_connect_by() {
     // Basic CONNECT BY hierarchical query
     snowflake_and_generic().verified_stmt(

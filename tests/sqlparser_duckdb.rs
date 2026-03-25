@@ -440,6 +440,12 @@ fn test_positional_reference() {
 }
 
 #[test]
+fn test_select_wildcard_with_replace() {
+    duckdb().verified_only_select("SELECT * REPLACE (col_a + 1 AS col_a) FROM data");
+    duckdb().verified_only_select("SELECT * REPLACE (col_a + 1 AS col_a, col_b * 2 AS col_b) FROM data");
+}
+
+#[test]
 fn test_escaped_string_literal() {
     // DuckDB supports e'...' escape string syntax
     let sql = r"SELECT E'Hello\nworld'";
