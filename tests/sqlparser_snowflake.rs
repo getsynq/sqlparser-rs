@@ -488,6 +488,15 @@ fn test_array_type_with_element_type() {
 }
 
 #[test]
+fn test_clone_before() {
+    // Snowflake CLONE with time travel BEFORE clause
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE orders_clone_restore CLONE orders BEFORE (STATEMENT => '8e5d0ca9-005e-44e6-b858-a8f5b37c5726')",
+        "CREATE TABLE orders_clone_restore CLONE orders",
+    );
+}
+
+#[test]
 fn test_match_recognize() {
     // MATCH_RECOGNIZE is consumed as opaque balanced parens
     snowflake().one_statement_parses_to(

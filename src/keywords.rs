@@ -112,6 +112,7 @@ define_keywords!(
     AVRO,
     BACKUP,
     BACKWARD,
+    BEFORE,
     BEGIN,
     BEGIN_FRAME,
     BEGIN_PARTITION,
