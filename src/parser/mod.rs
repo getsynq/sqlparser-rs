@@ -8323,6 +8323,13 @@ impl<'a> Parser<'a> {
                     let field_defs = self.parse_click_house_tuple_def()?;
                     Ok(DataType::Tuple(field_defs))
                 }
+                // BigQuery: ANY TYPE (templated UDF parameter type)
+                Keyword::ANY if self.parse_keyword(Keyword::TYPE) => {
+                    Ok(DataType::Custom(
+                        ObjectName(vec![Ident::new("ANY TYPE")]),
+                        vec![],
+                    ))
+                }
                 _ => {
                     self.prev_token();
                     let type_name = self.parse_object_name(false)?;
