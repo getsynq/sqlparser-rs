@@ -71,6 +71,7 @@ pub struct CreateTableBuilder {
     pub without_rowid: bool,
     pub like: Option<ObjectName>,
     pub clone: Option<ObjectName>,
+    pub copy: Option<ObjectName>,
     pub engine: Option<EngineSpec>,
     pub comment: Option<String>,
     pub auto_increment_offset: Option<u32>,
@@ -117,6 +118,7 @@ impl CreateTableBuilder {
             without_rowid: false,
             like: None,
             clone: None,
+            copy: None,
             engine: None,
             comment: None,
             auto_increment_offset: None,
@@ -249,6 +251,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn copy(mut self, copy: Option<ObjectName>) -> Self {
+        self.copy = copy;
+        self
+    }
+
     pub fn engine(mut self, engine: Option<EngineSpec>) -> Self {
         self.engine = engine;
         self
@@ -360,6 +367,7 @@ impl CreateTableBuilder {
             without_rowid: self.without_rowid,
             like: self.like,
             clone: self.clone,
+            copy: self.copy,
             engine: self.engine,
             comment: self.comment,
             auto_increment_offset: self.auto_increment_offset,
@@ -413,6 +421,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 without_rowid,
                 like,
                 clone,
+                copy,
                 engine,
                 comment,
                 auto_increment_offset,
@@ -455,6 +464,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 without_rowid,
                 like,
                 clone,
+                copy,
                 engine,
                 comment,
                 auto_increment_offset,
