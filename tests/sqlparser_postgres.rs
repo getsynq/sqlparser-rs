@@ -769,6 +769,8 @@ fn parse_create_schema_if_not_exists() {
             if_not_exists: true,
             schema_name,
             comment: _,
+            default_collate: _,
+            options: _,
             with_properties: _,
         } => assert_eq!("schema_name", schema_name.to_string()),
         _ => unreachable!(),

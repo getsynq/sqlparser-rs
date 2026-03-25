@@ -133,6 +133,8 @@ pub enum AlterTableOperation {
         /// Whether the `OPTIONS` keyword is used (BigQuery style)
         has_options_keyword: bool,
     },
+    /// BigQuery: `SET DEFAULT COLLATE 'collation'`
+    SetDefaultCollate { collation: String },
 
     /// `ADD ROW ACCESS POLICY <policy_name> ON (<col_name>, ...)`
     ///
@@ -331,6 +333,9 @@ impl fmt::Display for AlterTableOperation {
                 } else {
                     write!(f, "SET ({})", display_comma_separated(options))
                 }
+            }
+            AlterTableOperation::SetDefaultCollate { collation } => {
+                write!(f, "SET DEFAULT COLLATE '{collation}'")
             }
             AlterTableOperation::AddRowAccessPolicy { policy, on } => {
                 write!(
