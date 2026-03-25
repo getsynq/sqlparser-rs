@@ -1986,3 +1986,22 @@ fn parse_tablesample_percent() {
         "SELECT * FROM t TABLESAMPLE BERNOULLI (50)",
     );
 }
+
+#[test]
+fn parse_bigquery_json_path_function_call() {
+    // BigQuery: field access via subscript followed by .METHOD() call
+    // e.g., arr[SAFE_OFFSET(0)].CURRENT_TIME() - field named CURRENT_TIME called as function
+    bigquery().one_statement_parses_to(
+        "SELECT arr[SAFE_OFFSET(0)].CURRENT_TIME() FROM t",
+        "SELECT arr[SAFE_OFFSET(0)].CURRENT_TIME() FROM t",
+    );
+
+    // Also works for other keywords used as field names with function call syntax
+    bigquery().one_statement_parses_to(
+        "SELECT s[OFFSET(0)].DATE() FROM t",
+        "SELECT s[OFFSET(0)].DATE() FROM t",
+    );
+
+    // Regular field access (no parens) still works
+    bigquery().verified_stmt("SELECT arr[SAFE_OFFSET(0)].field_name FROM t");
+}

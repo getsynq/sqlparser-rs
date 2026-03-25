@@ -7730,6 +7730,26 @@ impl<'a> Parser<'a> {
                 Token::Colon => buf.push(':'),
                 Token::DoubleQuotedString(ref s) => write!(buf, "\"{}\"", s).unwrap(),
                 Token::SingleQuotedString(ref s) => write!(buf, "'{}'", s).unwrap(),
+                Token::LParen => {
+                    // Handle function calls in JSON path (e.g., .CURRENT_TIME())
+                    // Consume balanced parentheses and include in path string
+                    buf.push('(');
+                    let mut depth = 1;
+                    loop {
+                        match self.next_token().token {
+                            Token::EOF => break,
+                            Token::LParen => depth += 1,
+                            Token::RParen => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    buf.push(')');
+                }
                 Token::Whitespace(_) => {
                     break;
                 }
