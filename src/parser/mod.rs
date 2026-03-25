@@ -7121,6 +7121,12 @@ impl<'a> Parser<'a> {
                 assignments,
                 selection,
             }
+        } else if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {
+            // Snowflake: ALTER TABLE ... CLUSTER BY (expr [ASC|DESC] [, ...])
+            self.expect_token(&Token::LParen)?;
+            let exprs = self.parse_comma_separated(Parser::parse_order_by_expr)?;
+            self.expect_token(&Token::RParen)?;
+            AlterTableOperation::ClusterBy { exprs }
         } else {
             return self.expected(
                 "ADD, RENAME, PARTITION, SWAP or DROP after ALTER TABLE",

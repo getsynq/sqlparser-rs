@@ -579,6 +579,13 @@ fn test_select_wildcard_with_exclude_and_rename() {
 }
 
 #[test]
+fn test_alter_table_cluster_by() {
+    snowflake_and_generic().verified_stmt("ALTER TABLE t1 CLUSTER BY (col_1)");
+    snowflake_and_generic().verified_stmt("ALTER TABLE t1 CLUSTER BY (date, id)");
+    snowflake_and_generic().verified_stmt("ALTER TABLE table1 CLUSTER BY (name DESC)");
+}
+
+#[test]
 fn test_alter_table_swap_with() {
     let sql = "ALTER TABLE tab1 SWAP WITH tab2";
     match alter_table_op_with_name(snowflake_and_generic().verified_stmt(sql), "tab1") {

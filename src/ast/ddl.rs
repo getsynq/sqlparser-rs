@@ -27,7 +27,7 @@ use sqlparser_derive::{Visit, VisitMut};
 use crate::ast::value::escape_single_quote_string;
 use crate::ast::{
     display_comma_separated, display_separated, Assignment, DataType, Expr, Ident, ObjectName,
-    OrderBy, Select, SequenceOptions,
+    OrderBy, OrderByExpr, Select, SequenceOptions,
 };
 use crate::tokenizer::Token;
 
@@ -197,6 +197,12 @@ pub enum AlterTableOperation {
         assignments: Vec<Assignment>,
         selection: Option<Expr>,
     },
+
+    /// `CLUSTER BY (expr [ASC|DESC] [, ...])`
+    ///
+    /// Note: this is a Snowflake-specific operation
+    /// <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
+    ClusterBy { exprs: Vec<OrderByExpr> },
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -390,6 +396,10 @@ impl fmt::Display for AlterTableOperation {
                 }
                 Ok(())
             }
+            AlterTableOperation::ClusterBy { exprs } => {
+                write!(f, "CLUSTER BY ({})", display_comma_separated(exprs))
+            }
+
         }
     }
 }
