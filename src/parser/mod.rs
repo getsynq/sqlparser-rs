@@ -12164,6 +12164,25 @@ impl<'a> Parser<'a> {
                 }
 
                 let expr_with_location = expr.spanning(self.span_from_index(start_span));
+
+                // Spark/Databricks generator function multi-column alias: `EXPLODE(col) AS (col1, col2)`
+                if self.parse_keyword(Keyword::AS) {
+                    if self.peek_token_is(&Token::LParen) {
+                        self.expect_token(&Token::LParen)?;
+                        let aliases = self.parse_comma_separated(|p| {
+                            p.parse_identifier(false).map(WithSpan::unwrap)
+                        })?;
+                        self.expect_token(&Token::RParen)?;
+                        return Ok(SelectItem::ExprWithMultipleAliases {
+                            expr: expr_with_location,
+                            aliases,
+                        }
+                        .spanning(self.span_from_index(start_span)));
+                    } else {
+                        self.prev_token(); // put back the AS keyword
+                    }
+                }
+
                 self.parse_optional_alias(keywords::RESERVED_FOR_COLUMN_ALIAS)
                     .map(|alias| match alias {
                         Some(alias) => SelectItem::ExprWithAlias {

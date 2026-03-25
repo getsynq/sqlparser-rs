@@ -535,6 +535,13 @@ pub enum SelectItem {
         expr: WithSpan<Expr>,
         options: WildcardAdditionalOptions,
     },
+    /// `expr AS (alias1, alias2, ...)`
+    /// Used in Spark/Databricks for generator functions like EXPLODE that return multiple columns.
+    /// <https://docs.databricks.com/en/sql/language-manual/functions/explode.html>
+    ExprWithMultipleAliases {
+        expr: WithSpan<Expr>,
+        aliases: Vec<Ident>,
+    },
 }
 
 /// ClickHouse column transformer applied to COLUMNS expression
@@ -820,6 +827,9 @@ impl fmt::Display for SelectItem {
                 write!(f, "{expr}.*")?;
                 write!(f, "{options}")?;
                 Ok(())
+            }
+            SelectItem::ExprWithMultipleAliases { expr, aliases } => {
+                write!(f, "{expr} AS ({})", display_comma_separated(aliases))
             }
         }
     }

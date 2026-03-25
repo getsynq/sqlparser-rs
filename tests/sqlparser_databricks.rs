@@ -374,3 +374,15 @@ fn test_alter_table_add_column_after() {
     let sql = "ALTER TABLE db.schema.tbl ADD COLUMN new_col INT AFTER existing_col";
     databricks().verified_stmt(sql);
 }
+
+#[test]
+fn test_explode_multi_alias() {
+    // Databricks/Spark generator function with multiple column aliases
+    // EXPLODE(col) AS (key, value) - returns multiple columns
+    let sql = "SELECT EXPLODE_OUTER(col_6) AS (season, balance) FROM tbl";
+    databricks().verified_stmt(sql);
+
+    // Also works with EXPLODE
+    let sql2 = "SELECT col_1, EXPLODE(map_col) AS (k, v), col_2 FROM tbl";
+    databricks().verified_stmt(sql2);
+}
