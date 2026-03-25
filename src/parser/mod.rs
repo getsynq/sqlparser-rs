@@ -10586,6 +10586,7 @@ impl<'a> Parser<'a> {
                             Keyword::OUTER,
                             Keyword::SEMI,
                             Keyword::ANTI,
+                            Keyword::ARRAY,
                             Keyword::JOIN,
                         ]);
                         match join_type {
@@ -10612,6 +10613,22 @@ impl<'a> Parser<'a> {
                                 } else {
                                     JoinOperator::RightAnti
                                 }
+                            }
+                            Some(Keyword::ARRAY) if is_left => {
+                                // ClickHouse: LEFT ARRAY JOIN
+                                self.expect_keyword(Keyword::JOIN)?;
+                                let first = Join {
+                                    relation: self.parse_array_join_table_factor()?,
+                                    join_operator: JoinOperator::LeftArray,
+                                };
+                                joins.push(first);
+                                while self.consume_token(&Token::Comma) {
+                                    joins.push(Join {
+                                        relation: self.parse_array_join_table_factor()?,
+                                        join_operator: JoinOperator::LeftArray,
+                                    });
+                                }
+                                continue;
                             }
                             Some(Keyword::JOIN) => {
                                 if is_left {
