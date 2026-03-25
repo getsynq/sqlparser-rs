@@ -361,6 +361,7 @@ fn parse_delimited_identifiers() {
             on_overflow: None,
             null_treatment: None,
             within_group: None,
+            having_bound: None,
         }),
         expr_from_projection(&select.projection[1]),
     );

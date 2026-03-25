@@ -957,6 +957,7 @@ impl<'a> Parser<'a> {
                         on_overflow: None,
                         null_treatment: None,
                         within_group: None,
+                        having_bound: None,
                     }))
                 }
                 Keyword::CURRENT_TIMESTAMP
@@ -1252,18 +1253,18 @@ impl<'a> Parser<'a> {
     pub fn parse_function(&mut self, name: ObjectName) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
         let distinct = self.parse_all_or_distinct()?.is_some();
-        let (args, on_overflow, order_by, limit, mut null_treatment) =
+        let (args, on_overflow, order_by, limit, mut null_treatment, having_bound) =
             self.parse_optional_args_with_orderby()?;
 
         // ClickHouse parametric aggregate functions: func(params)(args)
-        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment) = if self
+        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment, having_bound) = if self
             .peek_token_is(&Token::LParen)
             && dialect_of!(self is ClickHouseDialect | GenericDialect)
         {
             let parameters = Some(args);
             self.expect_token(&Token::LParen)?;
             let distinct2 = self.parse_all_or_distinct()?.is_some();
-            let (args2, on_overflow2, order_by2, limit2, mut null_treatment2) =
+            let (args2, on_overflow2, order_by2, limit2, mut null_treatment2, _having_bound2) =
                 self.parse_optional_args_with_orderby()?;
             if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
                 null_treatment2 = Some(NullTreatment::IGNORE);
@@ -1278,6 +1279,7 @@ impl<'a> Parser<'a> {
                 order_by2,
                 limit2,
                 null_treatment2,
+                None,
             )
         } else {
             if self.parse_keywords(&[Keyword::IGNORE, Keyword::NULLS]) {
@@ -1293,6 +1295,7 @@ impl<'a> Parser<'a> {
                 order_by,
                 limit,
                 null_treatment,
+                having_bound,
             )
         };
 
@@ -1321,17 +1324,18 @@ impl<'a> Parser<'a> {
             on_overflow,
             null_treatment,
             within_group,
+            having_bound,
         }))
     }
 
     pub fn parse_time_functions(&mut self, name: ObjectName) -> Result<Expr, ParserError> {
-        let (args, on_overflow, order_by, limit, special, null_treatment) =
+        let (args, on_overflow, order_by, limit, special, null_treatment, having_bound) =
             if self.consume_token(&Token::LParen) {
-                let (args, on_overflow, order_by, limit, null_treatment) =
+                let (args, on_overflow, order_by, limit, null_treatment, having_bound) =
                     self.parse_optional_args_with_orderby()?;
-                (args, on_overflow, order_by, limit, false, null_treatment)
+                (args, on_overflow, order_by, limit, false, null_treatment, having_bound)
             } else {
-                (vec![], None, vec![], None, true, None)
+                (vec![], None, vec![], None, true, None, None)
             };
 
         Ok(Expr::Function(Function {
@@ -1347,6 +1351,7 @@ impl<'a> Parser<'a> {
             on_overflow,
             null_treatment,
             within_group: None,
+            having_bound,
         }))
     }
 
@@ -1692,6 +1697,7 @@ impl<'a> Parser<'a> {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             }))
         } else {
             // Parse `CEIL/FLOOR(expr)`
@@ -1819,6 +1825,7 @@ impl<'a> Parser<'a> {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             }))
         } else {
             self.expected("PLACING or comma-separated arguments", self.peek_token())
@@ -7322,6 +7329,7 @@ impl<'a> Parser<'a> {
                 order_by: vec![],
                 limit: None,
                 on_overflow: None,
+                having_bound: None,
             }))
         }
     }
@@ -12140,11 +12148,12 @@ impl<'a> Parser<'a> {
             Vec<OrderByExpr>,
             Option<Box<Expr>>,
             Option<NullTreatment>,
+            Option<HavingBound>,
         ),
         ParserError,
     > {
         if self.consume_token(&Token::RParen) {
-            Ok((vec![], None, vec![], None, None))
+            Ok((vec![], None, vec![], None, None, None))
         } else {
             // Snowflake permits a subquery to be passed as an argument without
             // an enclosing set of parens if it's the only argument.
@@ -12162,6 +12171,7 @@ impl<'a> Parser<'a> {
                     ))],
                     None,
                     vec![],
+                    None,
                     None,
                     None,
                 ));
@@ -12223,8 +12233,21 @@ impl<'a> Parser<'a> {
                 None
             };
 
+            // BigQuery: HAVING MAX expr or HAVING MIN expr
+            let having_bound = if self.parse_keyword(Keyword::HAVING) {
+                if self.parse_keyword(Keyword::MAX) {
+                    Some(HavingBound::Max(Box::new(self.parse_expr()?)))
+                } else if self.parse_keyword(Keyword::MIN) {
+                    Some(HavingBound::Min(Box::new(self.parse_expr()?)))
+                } else {
+                    self.expected("MAX or MIN after HAVING", self.peek_token())?
+                }
+            } else {
+                None
+            };
+
             self.expect_token(&Token::RParen)?;
-            Ok((args, on_overflow, order_by, limit, null_treatment))
+            Ok((args, on_overflow, order_by, limit, null_treatment, having_bound))
         }
     }
 

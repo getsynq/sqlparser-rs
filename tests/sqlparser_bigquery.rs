@@ -1321,6 +1321,7 @@ fn parse_map_access_offset() {
                     on_overflow: None,
                     null_treatment: None,
                     within_group: None,
+                    having_bound: None,
                 })],
             }
             .empty_span()
@@ -1462,6 +1463,7 @@ fn test_select_json_field() {
                             on_overflow: None,
                             null_treatment: None,
                             within_group: None,
+                            having_bound: None,
                         })),
                         operator: JsonOperator::Period,
                         right: Box::new(Expr::Value(Value::UnQuotedString(
@@ -1479,6 +1481,7 @@ fn test_select_json_field() {
                 on_overflow: None,
                 null_treatment: None,
                 within_group: None,
+                having_bound: None,
             })
             .empty_span(),
             alias: Ident::new("arr_id").empty_span(),
@@ -1662,6 +1665,19 @@ fn test_create_schema_options() {
 fn test_create_table_default_collate() {
     bigquery().verified_stmt(
         "CREATE TABLE mydataset.mytable (number INT64, word STRING) DEFAULT COLLATE 'und:ci'",
+    );
+}
+
+#[test]
+fn test_aggregate_having_bound() {
+    bigquery().verified_stmt(
+        "SELECT ANY_VALUE(fruit HAVING MAX sold) FROM fruits",
+    );
+    bigquery().verified_stmt(
+        "SELECT ANY_VALUE(fruit HAVING MIN sold) FROM fruits",
+    );
+    bigquery().verified_stmt(
+        "SELECT category, ANY_VALUE(product HAVING MAX price), ANY_VALUE(product HAVING MIN cost) FROM products GROUP BY category",
     );
 }
 
