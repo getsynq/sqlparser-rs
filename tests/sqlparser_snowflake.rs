@@ -1391,6 +1391,20 @@ fn parse_function_result_subscript() {
 }
 
 #[test]
+fn parse_array_subscript_expr() {
+    // Simple column reference as index
+    snowflake().verified_only_select("SELECT arr[idx] FROM t");
+    // Arithmetic expression as index: col - 1
+    snowflake().verified_only_select("SELECT arr[idx - 1] FROM t");
+    // Compound identifier as index
+    snowflake().verified_only_select("SELECT arr[t.idx] FROM t");
+    // Real-world pattern: GET_PATH with arithmetic subscript
+    snowflake().verified_only_select(
+        "SELECT CAST(GET_PATH(col[n - 1], 'id') AS VARCHAR) FROM t",
+    );
+}
+
+#[test]
 fn parse_array_index_json_colon() {
     snowflake().verified_only_select("SELECT src[0]:order_number FROM car_sales");
 }

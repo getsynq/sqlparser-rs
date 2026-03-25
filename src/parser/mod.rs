@@ -7880,14 +7880,11 @@ impl<'a> Parser<'a> {
             {
                 self.parse_function(ObjectName(vec![Ident::new(value)]))
             }
-            Token::Word(Word { value, keyword, .. }) if (keyword == Keyword::NoKeyword) => {
-                // If followed by ( or ., parse as a full expression to handle cases like
-                // ARRAY_SIZE(col) - 1 or tbl.col used as array index
-                if self.peek_token_is(&Token::LParen) || self.peek_token_is(&Token::Period) {
-                    self.prev_token();
-                    return self.parse_expr();
-                }
-                Ok(Expr::Value(Value::SingleQuotedString(value)))
+            Token::Word(Word { keyword, .. }) if (keyword == Keyword::NoKeyword) => {
+                // Always parse as a full expression to handle arithmetic like col[idx - 1],
+                // function calls like col[ARRAY_SIZE(x) - 1], and compound identifiers like col[tbl.col]
+                self.prev_token();
+                self.parse_expr()
             }
             // Handle SQL keywords used as functions inside brackets (e.g., [CAST(x AS INTEGER) - 1])
             Token::Word(Word { keyword, .. }) if keyword != Keyword::NoKeyword => {
