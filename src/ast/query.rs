@@ -1187,6 +1187,17 @@ pub enum TableFactor {
         to_return: SelectionCount,
         seed: Option<TableSampleSeed>,
     },
+    /// Snowflake's MATCH_RECOGNIZE clause for pattern matching on rows.
+    ///
+    /// Syntax:
+    /// ```sql
+    /// table MATCH_RECOGNIZE ( ... ) [ alias ]
+    /// ```
+    MatchRecognize {
+        #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
+        table: Box<TableFactor>,
+        alias: Option<TableAlias>,
+    },
     /// Redshift's UNPIVOT syntax for iterating over SUPER type objects.
     ///
     /// Syntax:
@@ -1411,6 +1422,13 @@ impl fmt::Display for TableFactor {
                 write!(f, " ({})", to_return)?;
                 if let Some(seed) = seed {
                     write!(f, " {}", seed)?;
+                }
+                Ok(())
+            }
+            TableFactor::MatchRecognize { table, alias } => {
+                write!(f, "{table} MATCH_RECOGNIZE (...)")?;
+                if let Some(alias) = alias {
+                    write!(f, " AS {alias}")?;
                 }
                 Ok(())
             }

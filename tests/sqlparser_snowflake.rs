@@ -487,6 +487,20 @@ fn test_array_type_with_element_type() {
     );
 }
 
+#[test]
+fn test_match_recognize() {
+    // MATCH_RECOGNIZE is consumed as opaque balanced parens
+    snowflake().one_statement_parses_to(
+        "SELECT * FROM t MATCH_RECOGNIZE (PARTITION BY col ORDER BY col2 MEASURES col3 AS m ONE ROW PER MATCH PATTERN (a+) DEFINE a AS col > 0)",
+        "SELECT * FROM t MATCH_RECOGNIZE (...)",
+    );
+    // With alias
+    snowflake().one_statement_parses_to(
+        "SELECT * FROM t MATCH_RECOGNIZE (PARTITION BY col MEASURES col2 AS m ONE ROW PER MATCH PATTERN (a) DEFINE a AS col > 0) AS mr",
+        "SELECT * FROM t MATCH_RECOGNIZE (...) AS mr",
+    );
+}
+
 fn snowflake() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(SnowflakeDialect {})],

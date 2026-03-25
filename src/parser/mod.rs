@@ -10799,6 +10799,7 @@ impl<'a> Parser<'a> {
                         Keyword::UNPIVOT,
                         Keyword::TABLESAMPLE,
                         Keyword::SAMPLE,
+                        Keyword::MATCH_RECOGNIZE,
                     ][..]
                 };
                 while let Some(kw) = self.parse_one_of_keywords(sample_keywords) {
@@ -10809,6 +10810,9 @@ impl<'a> Parser<'a> {
                             self.parse_tablesample_table_factor(table, false)?
                         }
                         Keyword::SAMPLE => self.parse_tablesample_table_factor(table, true)?,
+                        Keyword::MATCH_RECOGNIZE => {
+                            self.parse_match_recognize_table_factor(table)?
+                        }
                         _ => unreachable!(),
                     }
                 }
@@ -10882,6 +10886,14 @@ impl<'a> Parser<'a> {
                         TableFactor::TableSample { .. } => {}
                         TableFactor::ExternalQuery { .. } => {}
                         TableFactor::RedshiftUnpivot { .. } => {}
+                        TableFactor::MatchRecognize { alias, .. } => {
+                            if let Some(inner_alias) = alias {
+                                return Err(ParserError::ParserError(
+                                    format!("duplicate alias {inner_alias}").into(),
+                                ));
+                            }
+                            alias.replace(outer_alias);
+                        }
                     };
                 }
                 // Do not store the extra set of parens in the AST
@@ -11000,7 +11012,8 @@ impl<'a> Parser<'a> {
                     }
                     TableFactor::TableSample { .. }
                     | TableFactor::ExternalQuery { .. }
-                    | TableFactor::RedshiftUnpivot { .. } => {}
+                    | TableFactor::RedshiftUnpivot { .. }
+                    | TableFactor::MatchRecognize { .. } => {}
                 }
                 return Ok(table);
             }
@@ -11065,6 +11078,7 @@ impl<'a> Parser<'a> {
                     Keyword::UNPIVOT,
                     Keyword::TABLESAMPLE,
                     Keyword::SAMPLE,
+                    Keyword::MATCH_RECOGNIZE,
                 ][..]
             };
             while let Some(kw) = self.parse_one_of_keywords(sample_keywords) {
@@ -11073,6 +11087,9 @@ impl<'a> Parser<'a> {
                     Keyword::UNPIVOT => self.parse_unpivot_table_factor(table)?,
                     Keyword::TABLESAMPLE => self.parse_tablesample_table_factor(table, false)?,
                     Keyword::SAMPLE => self.parse_tablesample_table_factor(table, true)?,
+                    Keyword::MATCH_RECOGNIZE => {
+                        self.parse_match_recognize_table_factor(table)?
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -11405,6 +11422,32 @@ impl<'a> Parser<'a> {
             sampling_method,
             to_return,
             seed,
+        })
+    }
+
+    /// Parse MATCH_RECOGNIZE (...) clause after a table factor.
+    /// Consumes the balanced parenthesized content without deep parsing.
+    pub fn parse_match_recognize_table_factor(
+        &mut self,
+        table: TableFactor,
+    ) -> Result<TableFactor, ParserError> {
+        // Consume balanced parentheses
+        self.expect_token(&Token::LParen)?;
+        let mut depth = 1i32;
+        while depth > 0 {
+            match self.next_token().token {
+                Token::LParen => depth += 1,
+                Token::RParen => depth -= 1,
+                Token::EOF => {
+                    return self.expected("closing )", self.peek_token())?;
+                }
+                _ => {}
+            }
+        }
+        let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+        Ok(TableFactor::MatchRecognize {
+            table: Box::new(table),
+            alias,
         })
     }
 
