@@ -467,6 +467,26 @@ fn test_array_agg_func() {
     }
 }
 
+#[test]
+fn test_array_type_with_element_type() {
+    // Snowflake supports ARRAY without element type
+    snowflake().verified_stmt("SELECT CAST(x AS ARRAY) FROM t");
+    // Snowflake also supports ARRAY(element_type) with parenthesized element type
+    // Display uses ClickHouse-style "Array(type)" casing
+    snowflake().one_statement_parses_to(
+        "SELECT CAST([1, 2, 3] AS ARRAY(INT)) FROM t",
+        "SELECT CAST([1, 2, 3] AS Array(INT)) FROM t",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT CAST(col AS ARRAY(DECIMAL(38, 0))) FROM t",
+        "SELECT CAST(col AS Array(DECIMAL(38,0))) FROM t",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT CAST(NULL AS ARRAY(VARCHAR(30))) FROM t",
+        "SELECT CAST(NULL AS Array(VARCHAR(30))) FROM t",
+    );
+}
+
 fn snowflake() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(SnowflakeDialect {})],
@@ -1702,6 +1722,11 @@ fn test_copy_grants() {
     snowflake().one_statement_parses_to(
         "CREATE OR REPLACE VIEW v (col1, col2) COPY GRANTS COMMENT = 'auto-generated view' AS SELECT col1, col2 FROM tbl",
         "CREATE OR REPLACE VIEW v (col1, col2) COPY GRANTS COMMENT='auto-generated view' AS SELECT col1, col2 FROM tbl",
+    );
+    // COPY GRANTS followed by column list (Snowflake MATERIALIZED VIEW syntax)
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE MATERIALIZED VIEW v COPY GRANTS (col1, col2) AS SELECT col1, col2 FROM tbl",
+        "CREATE OR REPLACE MATERIALIZED VIEW v (col1, col2) COPY GRANTS AS SELECT col1, col2 FROM tbl",
     );
 }
 
