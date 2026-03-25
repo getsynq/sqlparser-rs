@@ -8429,6 +8429,7 @@ fn parse_pivot_table() {
                     alias: None
                 },
             ]),
+            default_on_null: None,
             alias: Some(TableAlias {
                 name: Ident {
                     value: "p".to_string(),
@@ -8543,6 +8544,7 @@ fn parse_pivot_table_aliases() {
                     alias: None
                 },
             ]),
+            default_on_null: None,
             alias: Some(TableAlias {
                 name: Ident {
                     value: "p".to_string(),
@@ -8755,6 +8757,7 @@ fn parse_pivot_unpivot_table() {
                     alias: None
                 },
             ]),
+            default_on_null: None,
             alias: Some(TableAlias {
                 name: Ident::new("p").empty_span(),
                 columns: vec![],

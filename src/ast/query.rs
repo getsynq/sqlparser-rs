@@ -1132,6 +1132,8 @@ pub enum TableFactor {
         aggregates: Vec<AggregateItem>,
         value_column: Vec<Ident>,
         value_source: PivotValueSource,
+        /// Optional `DEFAULT ON NULL (value)` clause (Snowflake)
+        default_on_null: Option<Expr>,
         alias: Option<TableAlias>,
     },
     /// An UNPIVOT operation on a table.
@@ -1330,16 +1332,21 @@ impl fmt::Display for TableFactor {
                 aggregates: aggregate_projections,
                 value_column,
                 value_source,
+                default_on_null,
                 alias,
             } => {
                 write!(
                     f,
-                    "{} PIVOT({} FOR {} IN ({}))",
+                    "{} PIVOT({} FOR {} IN ({})",
                     table,
                     display_comma_separated(aggregate_projections),
                     Expr::CompoundIdentifier(value_column.to_vec().empty_span()),
                     value_source
                 )?;
+                if let Some(default) = default_on_null {
+                    write!(f, " DEFAULT ON NULL ({default})")?;
+                }
+                write!(f, ")")?;
                 if alias.is_some() {
                     write!(f, " AS {}", alias.as_ref().unwrap())?;
                 }

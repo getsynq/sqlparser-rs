@@ -1460,6 +1460,18 @@ fn parse_pivot_with_subquery_in_clause() {
 }
 
 #[test]
+fn parse_pivot_default_on_null() {
+    // Snowflake supports DEFAULT ON NULL clause in PIVOT
+    snowflake().verified_stmt(
+        "SELECT * FROM quarterly_sales PIVOT(SUM(amount) FOR quarter IN ('2023_Q1', '2023_Q2') DEFAULT ON NULL (0)) ORDER BY empid",
+    );
+    // DEFAULT ON NULL with ANY ORDER BY
+    snowflake().verified_stmt(
+        "SELECT * FROM quarterly_sales PIVOT(SUM(amount) FOR quarter IN (ANY ORDER BY quarter) DEFAULT ON NULL (0)) ORDER BY empid",
+    );
+}
+
+#[test]
 fn parse_create_table_column_comment() {
     snowflake()
         .verified_stmt("CREATE TABLE my_table (my_column STRING COMMENT 'this is comment3')");

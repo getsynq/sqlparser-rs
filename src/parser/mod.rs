@@ -11158,6 +11158,17 @@ impl<'a> Parser<'a> {
         };
 
         self.expect_token(&Token::RParen)?;
+
+        // Snowflake: optional DEFAULT ON NULL (value) clause
+        let default_on_null = if self.parse_keywords(&[Keyword::DEFAULT, Keyword::ON, Keyword::NULL]) {
+            self.expect_token(&Token::LParen)?;
+            let expr = self.parse_expr()?;
+            self.expect_token(&Token::RParen)?;
+            Some(expr)
+        } else {
+            None
+        };
+
         self.expect_token(&Token::RParen)?;
         let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
         Ok(TableFactor::Pivot {
@@ -11165,6 +11176,7 @@ impl<'a> Parser<'a> {
             aggregates,
             value_column,
             value_source,
+            default_on_null,
             alias,
         })
     }
