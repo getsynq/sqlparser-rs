@@ -4186,6 +4186,27 @@ impl<'a> Parser<'a> {
         let ine = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
         let db_name = self.parse_object_name(false)?;
 
+        // Snowflake: CREATE DATABASE db CLONE source [BEFORE/AT (...)]
+        if self.parse_keyword(Keyword::CLONE) {
+            let _ = self.parse_object_name(false);
+            // Time travel: BEFORE/AT (...)
+            if self
+                .parse_one_of_keywords(&[Keyword::AT, Keyword::BEFORE])
+                .is_some()
+            {
+                self.expect_token(&Token::LParen)?;
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         // Redshift: FROM INTEGRATION 'integration_id'
         let from_integration = if self.parse_keywords(&[Keyword::FROM, Keyword::INTEGRATION]) {
             Some(self.parse_literal_string()?)
@@ -5951,6 +5972,12 @@ impl<'a> Parser<'a> {
             // STRICT (SQLite)
             if !strict && self.parse_keyword(Keyword::STRICT) {
                 strict = true;
+                continue;
+            }
+
+            // Redshift: BACKUP YES/NO, ENCODE type
+            if self.parse_keyword(Keyword::BACKUP) {
+                let _ = self.parse_one_of_keywords(&[Keyword::YES, Keyword::NO]);
                 continue;
             }
 
