@@ -12835,7 +12835,12 @@ impl<'a> Parser<'a> {
             _ => unreachable!(),
         };
         let of = if self.parse_keyword(Keyword::OF) {
-            Some(self.parse_object_name(false)?)
+            let first = self.parse_object_name(false)?;
+            // Consume additional comma-separated table names (MySQL: FOR SHARE OF t1, t2)
+            while self.consume_token(&Token::Comma) {
+                let _ = self.parse_object_name(false)?;
+            }
+            Some(first)
         } else {
             None
         };
