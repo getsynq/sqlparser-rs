@@ -4334,7 +4334,7 @@ impl<'a> Parser<'a> {
                 comment: None,
                 params,
             })
-        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | GenericDialect)
+        } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | AnsiDialect | RedshiftSqlDialect | MsSqlDialect | MySqlDialect | SQLiteDialect | GenericDialect)
         {
             let name = self.parse_object_name(false)?;
 
