@@ -3783,11 +3783,10 @@ fn parse_alter_table_alter_column_type() {
         options: None,
     };
 
-    let res =
-        dialect.parse_sql_statements(&format!("{alter_stmt} ALTER COLUMN is_active TYPE TEXT"));
-    assert_eq!(
-        ParserError::ParserError("Expected SET/DROP NOT NULL, SET DEFAULT, SET DATA TYPE, SET OPTIONS after ALTER COLUMN, found: TYPE\nNear ` TABLE tab ALTER COLUMN is_active`".to_string().into()),
-        res.unwrap_err()
+    // TYPE shorthand (without SET DATA) is now supported for all dialects
+    dialect.one_statement_parses_to(
+        &format!("{alter_stmt} ALTER COLUMN is_active TYPE TEXT"),
+        &format!("{alter_stmt} ALTER COLUMN is_active SET DATA TYPE TEXT"),
     );
 
     let res = dialect.parse_sql_statements(&format!(
