@@ -604,6 +604,7 @@ define_keywords!(
     RELATIVE,
     RELEASE,
     RELY,
+    REMOTE,
     REMOVE,
     RENAME,
     REORG,
