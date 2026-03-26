@@ -586,6 +586,48 @@ impl<'a> Parser<'a> {
                         }],
                     })
                 }
+                Keyword::COMMENT => {
+                    // COMMENT ON TABLE/COLUMN/DATABASE/... name IS 'comment'
+                    self.expect_keyword(Keyword::ON)?;
+                    // Skip object type keyword(s)
+                    let _ = self.parse_one_of_keywords(&[
+                        Keyword::TABLE,
+                        Keyword::COLUMN,
+                        Keyword::DATABASE,
+                        Keyword::SCHEMA,
+                        Keyword::FUNCTION,
+                        Keyword::PROCEDURE,
+                        Keyword::VIEW,
+                        Keyword::INDEX,
+                        Keyword::TYPE,
+                        Keyword::ROLE,
+                    ]);
+                    let name = self.parse_object_name(false)?;
+                    // Consume optional function params
+                    if self.consume_token(&Token::LParen) {
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => break,
+                                _ => {}
+                            }
+                        }
+                    }
+                    self.expect_keyword(Keyword::IS)?;
+                    let comment = if self.parse_keyword(Keyword::NULL) {
+                        None
+                    } else {
+                        Some(self.parse_literal_string()?)
+                    };
+                    Ok(Statement::Comment {
+                        object_type: CommentObject::Table,
+                        object_name: name,
+                        comment,
+                        if_exists: false,
+                    })
+                }
                 Keyword::SET => Ok(self.parse_set()?),
                 Keyword::SHOW => Ok(self.parse_show()?),
                 Keyword::USE => Ok(self.parse_use()?),
