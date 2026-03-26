@@ -10367,11 +10367,25 @@ impl<'a> Parser<'a> {
         extended: bool,
         full: bool,
     ) -> Result<Statement, ParserError> {
-        let db_name = match self.parse_one_of_keywords(&[Keyword::FROM, Keyword::IN]) {
-            Some(_) => Some(self.parse_identifier(false)?.unwrap()),
+        let mut db_name = match self.parse_one_of_keywords(&[Keyword::FROM, Keyword::IN]) {
+            Some(_) => {
+                // Skip optional SCHEMA/DATABASE keyword
+                let _ = self.parse_one_of_keywords(&[Keyword::SCHEMA, Keyword::DATABASE]);
+                Some(self.parse_identifier(false)?.unwrap())
+            }
             None => None,
         };
         let filter = self.parse_show_statement_filter()?;
+        // Snowflake: SHOW TABLES LIKE 'pattern' IN [SCHEMA] db.schema
+        if db_name.is_none() {
+            if self
+                .parse_one_of_keywords(&[Keyword::FROM, Keyword::IN])
+                .is_some()
+            {
+                let _ = self.parse_one_of_keywords(&[Keyword::SCHEMA, Keyword::DATABASE]);
+                db_name = Some(self.parse_identifier(false)?.unwrap());
+            }
+        }
         Ok(Statement::ShowTables {
             extended,
             full,
@@ -10382,6 +10396,14 @@ impl<'a> Parser<'a> {
 
     pub fn parse_show_functions(&mut self) -> Result<Statement, ParserError> {
         let filter = self.parse_show_statement_filter()?;
+        // Snowflake: SHOW FUNCTIONS LIKE 'pattern' IN CLASS name
+        if self.parse_keyword(Keyword::IN) {
+            // Skip optional object type keyword and name
+            let _ = self.parse_identifier(false); // CLASS or schema name
+            if !self.peek_token_is(&Token::SemiColon) && !self.peek_token_is(&Token::EOF) {
+                let _ = self.parse_identifier(false); // name after CLASS
+            }
+        }
         Ok(Statement::ShowFunctions { filter })
     }
 
