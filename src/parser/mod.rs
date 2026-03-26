@@ -571,6 +571,21 @@ impl<'a> Parser<'a> {
                 Keyword::CALL => Ok(self.parse_call()?),
                 Keyword::COPY => Ok(self.parse_copy()?),
                 Keyword::CLOSE => Ok(self.parse_close()?),
+                Keyword::RENAME => {
+                    // RENAME TABLE old TO new (ClickHouse/MySQL)
+                    self.expect_keyword(Keyword::TABLE)?;
+                    let old_name = self.parse_object_name(false)?;
+                    self.expect_keyword(Keyword::TO)?;
+                    let new_name = self.parse_object_name(false)?;
+                    Ok(Statement::AlterTable {
+                        name: old_name,
+                        if_exists: false,
+                        only: false,
+                        operations: vec![AlterTableOperation::RenameTable {
+                            table_name: new_name,
+                        }],
+                    })
+                }
                 Keyword::SET => Ok(self.parse_set()?),
                 Keyword::SHOW => Ok(self.parse_show()?),
                 Keyword::USE => Ok(self.parse_use()?),
