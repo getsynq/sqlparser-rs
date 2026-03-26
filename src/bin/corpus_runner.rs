@@ -107,7 +107,7 @@ fn collect_sql_files(dir: &Path) -> Vec<PathBuf> {
 type Stats = BTreeMap<String, [usize; 2]>;
 
 /// Individual test results by test path
-/// Value is "pass" or an error message (when --errors flag is used) or "fail"
+/// Value is "pass", "fail: <error message>", or "panic: <message>"
 type TestResults = BTreeMap<String, String>;
 
 /// Escape a string for JSON output
@@ -186,9 +186,6 @@ fn write_report(stats: &Stats, test_results: &TestResults) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    // Parse flags
-    let include_errors = args.iter().any(|a| a == "--errors");
-
     // Get corpus root (first non-flag argument, or default)
     let corpus_root = args
         .iter()
@@ -207,9 +204,6 @@ fn main() {
     }
 
     eprintln!("Scanning corpus directory: {}", corpus_path.display());
-    if include_errors {
-        eprintln!("Including error messages in report (--errors)");
-    }
 
     let sql_files = collect_sql_files(corpus_path);
     if sql_files.is_empty() {
@@ -277,32 +271,24 @@ fn main() {
                 }
                 Ok(Err(e)) => {
                     entry[1] += 1;
-                    if include_errors {
-                        // Take first line of error, truncate to 200 chars
-                        let first_line = e.lines().next().unwrap_or(&e);
-                        if first_line.len() > 200 {
-                            format!("fail: {}...", &first_line[..200])
-                        } else {
-                            format!("fail: {}", first_line)
-                        }
+                    // Take first line of error, truncate to 200 chars
+                    let first_line = e.lines().next().unwrap_or(&e);
+                    if first_line.len() > 200 {
+                        format!("fail: {}...", &first_line[..200])
                     } else {
-                        "fail".to_string()
+                        format!("fail: {}", first_line)
                     }
                 }
                 Err(panic) => {
                     entry[1] += 1;
-                    if include_errors {
-                        let msg = if let Some(s) = panic.downcast_ref::<String>() {
-                            s.clone()
-                        } else if let Some(s) = panic.downcast_ref::<&str>() {
-                            s.to_string()
-                        } else {
-                            "unknown panic".to_string()
-                        };
-                        format!("panic: {}", msg)
+                    let msg = if let Some(s) = panic.downcast_ref::<String>() {
+                        s.clone()
+                    } else if let Some(s) = panic.downcast_ref::<&str>() {
+                        s.to_string()
                     } else {
-                        "fail".to_string()
-                    }
+                        "unknown panic".to_string()
+                    };
+                    format!("panic: {}", msg)
                 }
             };
 
