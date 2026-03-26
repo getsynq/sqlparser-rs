@@ -6440,6 +6440,23 @@ impl<'a> Parser<'a> {
             }
         } else if self.parse_keyword(Keyword::GENERATED) {
             self.parse_optional_column_option_generated()
+        } else if dialect_of!(self is ClickHouseDialect | GenericDialect)
+            && self.parse_keyword(Keyword::CODEC)
+        {
+            // ClickHouse: CODEC(codec_name[, ...])
+            self.expect_token(&Token::LParen)?;
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => break,
+                    _ => {}
+                }
+            }
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("CODEC"),
+            ])))
         } else {
             Ok(None)
         }
@@ -9032,8 +9049,44 @@ impl<'a> Parser<'a> {
                     Token::Comma => {
                         continue;
                     }
+                    Token::Eq => {
+                        modifiers.push("=".to_string());
+                        continue;
+                    }
                     Token::RParen => {
                         break;
+                    }
+                    Token::LParen => {
+                        // Handle nested parens like Variant(UInt64, Array(UInt64))
+                        modifiers.push("(".to_string());
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            let inner = self.next_token();
+                            match inner.token {
+                                Token::LParen => {
+                                    depth += 1;
+                                    modifiers.push("(".to_string());
+                                }
+                                Token::RParen => {
+                                    depth -= 1;
+                                    if depth > 0 {
+                                        modifiers.push(")".to_string());
+                                    }
+                                }
+                                Token::Comma if depth == 1 => {
+                                    modifiers.push(",".to_string());
+                                }
+                                Token::Comma => {
+                                    modifiers.push(",".to_string());
+                                }
+                                Token::Word(w) => modifiers.push(w.to_string()),
+                                Token::Number(n, _) => modifiers.push(n.to_string()),
+                                Token::EOF => break,
+                                _ => modifiers.push(inner.token.to_string()),
+                            }
+                        }
+                        modifiers.push(")".to_string());
+                        continue;
                     }
                     _ => self.expected("type modifiers", next_token)?,
                 }
