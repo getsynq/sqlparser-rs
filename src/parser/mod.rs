@@ -7099,6 +7099,25 @@ impl<'a> Parser<'a> {
                 options,
             }
         } else if self.parse_keyword(Keyword::ALTER) {
+            // Redshift: ALTER DISTSTYLE KEY DISTKEY col / ALTER DISTSTYLE ALL/AUTO/EVEN
+            // ALTER SORTKEY (cols) / ALTER COMPOUND SORTKEY (cols)
+            if self.parse_keyword(Keyword::DISTSTYLE)
+                || self.parse_keyword(Keyword::SORTKEY)
+                || self.parse_keyword(Keyword::COMPOUND)
+            {
+                // Consume remaining tokens until end of statement or next comma
+                while !matches!(
+                    self.peek_token().token,
+                    Token::SemiColon | Token::EOF | Token::Comma
+                ) {
+                    self.next_token();
+                }
+                return Ok(AlterTableOperation::SetOptions {
+                    options: vec![],
+                    has_options_keyword: false,
+                });
+            }
+
             let _ = self.parse_keyword(Keyword::COLUMN); // [ COLUMN ]
             let column_name = self.parse_identifier(false)?.unwrap();
             let is_postgresql = dialect_of!(self is PostgreSqlDialect);
