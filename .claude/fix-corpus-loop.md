@@ -41,7 +41,7 @@ When implementing a fix, ask: "Does the AST preserve enough information for a li
 Run the corpus runner and analyze failures:
 ```bash
 cargo build --release --bin corpus-runner 2>&1 | tail -5
-RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus --errors 2>&1 | tail -20
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus 2>&1 | tail -20
 ```
 
 Save the baseline report for regression checking:

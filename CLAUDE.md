@@ -85,11 +85,9 @@ cargo build --release --bin corpus-runner
 
 # Run all corpus tests (completes in ~7 seconds for 100k files)
 # Use RUST_BACKTRACE=1 to get parser call chain in error messages for easier debugging
-RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus --errors
-
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus
 # Run specific dialect directory
-RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus/bigquery --errors
-
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 target/release/corpus-runner tests/corpus/bigquery
 # Compare reports
 node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-results/corpus-report-*.json
 ```
@@ -111,6 +109,7 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - **Cannot run corpus-runner on subdirectories** — dialect is extracted from first path component relative to corpus root
 - **Corpus files are symlinked** from `kernel-cll-corpus` repo — commit corpus changes there, not in sqlparser-rs
 - Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
+- **Always rebuild before corpus run**: `cargo build --release --bin corpus-runner` — stale binary produces stale reports
 
 **Development workflow:**
 - Use corpus-runner for fast feedback (6.7s vs 2+ hours)
@@ -230,6 +229,27 @@ ParserError::ParserError("literal message".into())
 ```
 This applies to test assertions too. The `parser_err!` macro handles conversion automatically.
 
+**Balanced paren consumption** (opaque clause parsing):
+```rust
+// Consume MATCH_RECOGNIZE(...), CODEC(...), BEFORE(...), etc. without deep AST support
+self.expect_token(&Token::LParen)?;
+let mut depth = 1i32;
+while depth > 0 {
+    match self.next_token().token {
+        Token::LParen => depth += 1,
+        Token::RParen => depth -= 1,
+        Token::EOF => break,
+        _ => {}
+    }
+}
+```
+Use this pattern for dialect-specific clauses that don't need AST representation.
+
+**Dialect struct names** (for `dialect_of!` macro):
+- `RedshiftSqlDialect` (NOT `RedshiftDialect`), `AnsiDialect`, `DuckDbDialect`
+- `ClickHouseDialect`, `SnowflakeDialect`, `BigQueryDialect`, `PostgreSqlDialect`
+- `MySqlDialect`, `MsSqlDialect`, `SQLiteDialect`
+
 ## Development Guidelines
 
 ### Syntax vs Semantics
@@ -260,6 +280,12 @@ When adding fields to AST structs, you must update ALL pattern matches:
 3. Update parser to initialize new field
 4. Fix all test files - add `new_field: _` to pattern matches (Rust errors E0027, E0063 guide you)
 5. Use `cargo check` to find all locations requiring updates
+
+**High-churn structs**: `Function` struct is constructed in ~30+ places across parser and test files. Adding a field requires updating all of them — use `replace_all` or agent assistance.
+
+**Recursive AST types**: New fields containing `Expr` inside `Function`/`Expr` cycle need `Box<Expr>` to break infinite size (e.g., `HavingBound(Box<Expr>)`).
+
+**`ObjectName` uses `Vec<Ident>`** not `Vec<WithSpan<Ident>>` — don't wrap idents in `WithSpan` when constructing manually.
 
 #### Upstream Compatibility
 Since this is a fork of apache/datafusion-sqlparser-rs:
