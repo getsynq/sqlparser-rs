@@ -987,7 +987,22 @@ impl<'a> Parser<'a> {
                 Keyword::TRY_CAST => self.parse_try_cast_expr(),
                 Keyword::SAFE_CAST => self.parse_safe_cast_expr(),
                 Keyword::EXISTS => self.parse_exists_expr(false),
-                Keyword::EXTRACT => self.parse_extract_expr(),
+                Keyword::EXTRACT => {
+                    // ClickHouse uses EXTRACT as a regex function: extract(str, pattern)
+                    // Detect by checking if first arg after ( is a string literal
+                    if dialect_of!(self is ClickHouseDialect)
+                        && self.peek_token_is(&Token::LParen)
+                        && matches!(
+                            self.peek_nth_token(1).token,
+                            Token::SingleQuotedString(_)
+                        )
+                    {
+                        let name = ObjectName(vec![Ident::new("extract")]);
+                        self.parse_function(name)
+                    } else {
+                        self.parse_extract_expr()
+                    }
+                }
                 Keyword::CEIL if self.peek_token_is(&Token::LParen) => {
                     self.parse_ceil_floor_expr(true)
                 }
