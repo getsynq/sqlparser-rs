@@ -11945,6 +11945,12 @@ impl<'a> Parser<'a> {
                 vec![]
             };
 
+            // ClickHouse: INSERT INTO table FORMAT Values (...), (...)
+            // Treat "FORMAT Values" as equivalent to VALUES
+            if self.parse_keywords(&[Keyword::FORMAT, Keyword::VALUES]) {
+                self.prev_token(); // put back VALUES so parse_query sees it
+            }
+
             let source = Box::new(self.parse_query()?);
             let on = if self.parse_keyword(Keyword::ON) {
                 if self.parse_keyword(Keyword::CONFLICT) {
