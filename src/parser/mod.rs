@@ -10412,6 +10412,9 @@ impl<'a> Parser<'a> {
         extended: bool,
         full: bool,
     ) -> Result<Statement, ParserError> {
+        // Snowflake: SHOW COLUMNS LIKE 'pattern' IN TABLE name
+        // Parse filter first if present, then expect FROM/IN
+        let early_filter = self.parse_show_statement_filter()?;
         let show_in = self.expect_one_of_keywords(&[Keyword::FROM, Keyword::IN])? == Keyword::IN;
         // Optionally consume TABLE or VIEW keyword (Snowflake: SHOW COLUMNS IN TABLE <name>)
         // Only if followed by an identifier (the table name), otherwise it IS the table name
@@ -10439,7 +10442,11 @@ impl<'a> Parser<'a> {
             }
             None => object_name,
         };
-        let filter = self.parse_show_statement_filter()?;
+        let filter = if early_filter.is_some() {
+            early_filter
+        } else {
+            self.parse_show_statement_filter()?
+        };
         Ok(Statement::ShowColumns {
             extended,
             full,
