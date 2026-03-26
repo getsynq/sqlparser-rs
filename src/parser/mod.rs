@@ -7388,9 +7388,30 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let set_options = if self.parse_keywords(&[Keyword::SET, Keyword::OPTIONS]) {
-            self.prev_token();
-            self.parse_options(Keyword::OPTIONS)?
+        let set_options = if self.parse_keyword(Keyword::SET) {
+            if self.parse_keyword(Keyword::OPTIONS) {
+                self.prev_token();
+                self.parse_options(Keyword::OPTIONS)?
+            } else {
+                // Snowflake: SET SECURE, SET COMMENT = '...', etc.
+                // Hive: SET TBLPROPERTIES (...)
+                while !matches!(
+                    self.peek_token().token,
+                    Token::SemiColon | Token::EOF
+                ) {
+                    self.next_token();
+                }
+                vec![]
+            }
+        } else if self.parse_keyword(Keyword::UNSET) {
+            // Snowflake: UNSET SECURE, UNSET COMMENT, etc.
+            while !matches!(
+                self.peek_token().token,
+                Token::SemiColon | Token::EOF
+            ) {
+                self.next_token();
+            }
+            vec![]
         } else {
             vec![]
         };
