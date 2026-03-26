@@ -27,7 +27,7 @@ use sqlparser_derive::{Visit, VisitMut};
 use crate::ast::value::escape_single_quote_string;
 use crate::ast::{
     display_comma_separated, display_separated, Assignment, DataType, Expr, Ident, ObjectName,
-    OrderBy, OrderByExpr, Select, SequenceOptions,
+    OrderBy, OrderByExpr, Query, Select, SequenceOptions,
 };
 use crate::tokenizer::Token;
 
@@ -135,6 +135,8 @@ pub enum AlterTableOperation {
     },
     /// BigQuery: `SET DEFAULT COLLATE 'collation'`
     SetDefaultCollate { collation: String },
+    /// ClickHouse: `MODIFY QUERY SELECT ...` (materialized views)
+    ModifyQuery { query: Query },
 
     /// `ADD ROW ACCESS POLICY <policy_name> ON (<col_name>, ...)`
     ///
@@ -336,6 +338,9 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::SetDefaultCollate { collation } => {
                 write!(f, "SET DEFAULT COLLATE '{collation}'")
+            }
+            AlterTableOperation::ModifyQuery { query } => {
+                write!(f, "MODIFY QUERY {query}")
             }
             AlterTableOperation::AddRowAccessPolicy { policy, on } => {
                 write!(

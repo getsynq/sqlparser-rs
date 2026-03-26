@@ -7143,6 +7143,11 @@ impl<'a> Parser<'a> {
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::MODIFY)
         {
+            // ClickHouse: MODIFY QUERY SELECT ... (materialized views)
+            if self.parse_keyword(Keyword::QUERY) {
+                let query = self.parse_query()?;
+                return Ok(AlterTableOperation::ModifyQuery { query });
+            }
             // ClickHouse: MODIFY COLUMN <name> [<type>] [REMOVE DEFAULT | ...]
             self.expect_keyword(Keyword::COLUMN)?;
             let column_name = self.parse_identifier(false)?.unwrap();
