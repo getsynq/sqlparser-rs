@@ -7067,7 +7067,7 @@ impl<'a> Parser<'a> {
             } else if self.parse_keywords(&[Keyword::DROP, Keyword::DEFAULT]) {
                 AlterColumnOperation::DropDefault {}
             } else if self.parse_keywords(&[Keyword::SET, Keyword::DATA, Keyword::TYPE])
-                || (is_postgresql && self.parse_keyword(Keyword::TYPE))
+                || self.parse_keyword(Keyword::TYPE)
             {
                 let data_type = self.parse_data_type()?;
                 let using = if is_postgresql && self.parse_keyword(Keyword::USING) {
