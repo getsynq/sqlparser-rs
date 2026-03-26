@@ -12593,9 +12593,8 @@ impl<'a> Parser<'a> {
                 if self.parse_keyword(Keyword::AS) {
                     if self.peek_token_is(&Token::LParen) {
                         self.expect_token(&Token::LParen)?;
-                        let aliases = self.parse_comma_separated(|p| {
-                            p.parse_identifier(false).map(WithSpan::unwrap)
-                        })?;
+                        let aliases =
+                            self.parse_comma_separated(|p| p.parse_identifier(false))?;
                         self.expect_token(&Token::RParen)?;
                         return Ok(SelectItem::ExprWithMultipleAliases {
                             expr: expr_with_location,

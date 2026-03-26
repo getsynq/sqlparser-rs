@@ -540,7 +540,7 @@ pub enum SelectItem {
     /// <https://docs.databricks.com/en/sql/language-manual/functions/explode.html>
     ExprWithMultipleAliases {
         expr: WithSpan<Expr>,
-        aliases: Vec<Ident>,
+        aliases: Vec<WithSpan<Ident>>,
     },
 }
 
