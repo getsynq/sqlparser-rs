@@ -4450,6 +4450,9 @@ impl<'a> Parser<'a> {
                     Keyword::ARCHIVE => CreateFunctionUsing::Archive(uri),
                     _ => unreachable!(),
                 });
+            } else if self.parse_keywords(&[Keyword::REMOTE, Keyword::WITH, Keyword::CONNECTION]) {
+                // BigQuery: REMOTE WITH CONNECTION connection_name
+                let _ = self.parse_object_name(false);
             } else if dialect_of!(self is SnowflakeDialect | BigQueryDialect | GenericDialect) {
                 // Generic fallback for dialect-specific CREATE FUNCTION clauses:
                 // Pattern 1: WORD = value_or_parens (e.g. RUNTIME_VERSION = '3.10')
