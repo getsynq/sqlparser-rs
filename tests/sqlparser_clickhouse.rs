@@ -325,11 +325,13 @@ fn parse_like() {
         );
 
         // Test with escape char
+        // Note: ClickHouse supports backslash escapes, so '\\' is unescaped to '\'.
+        // Roundtrip is not possible because Display writes ESCAPE '\' which is unterminated.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::Like {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -383,11 +385,13 @@ fn parse_similar_to() {
         );
 
         // Test with escape char
+        // Note: ClickHouse supports backslash escapes, so '\\' is unescaped to '\'.
+        // Roundtrip is not possible because Display writes ESCAPE '\' which is unterminated.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -401,10 +405,10 @@ fn parse_similar_to() {
 
         // This statement tests that SIMILAR TO and NOT SIMILAR TO have the same precedence.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\' IS NULL",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\' IS NULL",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::IsNull(Box::new(Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -1407,6 +1411,21 @@ fn parse_create_view_comment() {
         "CREATE VIEW foo (col STRING) AS (SELECT * FROM bar) COMMENT 'Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n'",
         "CREATE VIEW foo (col STRING) COMMENT='Information about all entity controls by type.\nThe table contains one row for every entity control by type.\n' AS (SELECT * FROM bar)"
     );
+}
+
+#[test]
+fn parse_create_view_comment_with_backslash_escaped_quotes() {
+    let sql = r"CREATE VIEW foo (col STRING) AS (SELECT * FROM bar) COMMENT 'This aggregates data from the \'i_daily_users\' model.'";
+    let stmt = clickhouse().one_statement_parses_to(sql, "");
+    match stmt {
+        Statement::CreateView { comment, .. } => {
+            assert_eq!(
+                comment,
+                Some("This aggregates data from the 'i_daily_users' model.".to_string())
+            );
+        }
+        _ => unreachable!(),
+    }
 }
 
 #[test]
