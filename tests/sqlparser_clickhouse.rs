@@ -1410,6 +1410,21 @@ fn parse_create_view_comment() {
 }
 
 #[test]
+fn parse_create_view_comment_with_backslash_escaped_quotes() {
+    let sql = r"CREATE VIEW foo (col STRING) AS (SELECT * FROM bar) COMMENT 'This aggregates data from the \'i_daily_users\' model.'";
+    let stmt = clickhouse().one_statement_parses_to(sql, "");
+    match stmt {
+        Statement::CreateView { comment, .. } => {
+            assert_eq!(
+                comment,
+                Some("This aggregates data from the 'i_daily_users' model.".to_string())
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_in_with_dangling_comma() {
     clickhouse().one_statement_parses_to(
         "SELECT * FROM latest_schemas WHERE workspace IN ('synq-ops', 'test',)",

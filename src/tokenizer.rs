@@ -38,8 +38,8 @@ use sqlparser_derive::{Visit, VisitMut};
 
 use crate::ast::DollarQuotedString;
 use crate::dialect::{
-    BigQueryDialect, DatabricksDialect, DuckDbDialect, GenericDialect, HiveDialect,
-    RedshiftSqlDialect, SnowflakeDialect,
+    BigQueryDialect, ClickHouseDialect, DatabricksDialect, DuckDbDialect, GenericDialect,
+    HiveDialect, RedshiftSqlDialect, SnowflakeDialect,
 };
 use crate::dialect::{Dialect, MySqlDialect};
 use crate::keywords::{Keyword, ALL_KEYWORDS, ALL_KEYWORDS_INDEX};
@@ -1436,7 +1436,7 @@ impl<'a> Tokenizer<'a> {
                     // consume
                     chars.next();
                     // slash escaping is specific to MySQL / BigQuery dialect.
-                    if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect)
+                    if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect | ClickHouseDialect)
                     {
                         if let Some(next) = chars.peek() {
                             if !self.unescape {
