@@ -325,11 +325,13 @@ fn parse_like() {
         );
 
         // Test with escape char
+        // Note: ClickHouse supports backslash escapes, so '\\' is unescaped to '\'.
+        // Roundtrip is not possible because Display writes ESCAPE '\' which is unterminated.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}LIKE '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::Like {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -383,11 +385,13 @@ fn parse_similar_to() {
         );
 
         // Test with escape char
+        // Note: ClickHouse supports backslash escapes, so '\\' is unescaped to '\'.
+        // Roundtrip is not possible because Display writes ESCAPE '\' which is unterminated.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\'",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\'",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
@@ -401,10 +405,10 @@ fn parse_similar_to() {
 
         // This statement tests that SIMILAR TO and NOT SIMILAR TO have the same precedence.
         let sql = &format!(
-            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\' IS NULL",
+            "SELECT * FROM customers WHERE name {}SIMILAR TO '%a' ESCAPE '\\\\' IS NULL",
             if negated { "NOT " } else { "" }
         );
-        let select = clickhouse().verified_only_select(sql);
+        let select = clickhouse().verified_only_select_with_canonical(sql, "");
         assert_eq!(
             Expr::IsNull(Box::new(Expr::SimilarTo {
                 expr: Box::new(Expr::Identifier(Ident::new("name").empty_span())),
