@@ -126,6 +126,7 @@ fn parse_create_procedure() {
             }))],
             params: Some(vec![
                 ProcedureParam {
+                    mode: None,
                     name: Ident {
                         value: "@foo".into(),
                         quote_style: None
@@ -133,6 +134,7 @@ fn parse_create_procedure() {
                     data_type: DataType::Int(None)
                 },
                 ProcedureParam {
+                    mode: None,
                     name: Ident {
                         value: "@bar".into(),
                         quote_style: None

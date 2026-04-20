@@ -26,8 +26,8 @@ use sqlparser_derive::{Visit, VisitMut};
 
 use crate::ast::value::escape_single_quote_string;
 use crate::ast::{
-    display_comma_separated, display_separated, Assignment, DataType, Expr, Ident, ObjectName,
-    OrderBy, OrderByExpr, Query, Select, SequenceOptions,
+    display_comma_separated, display_separated, ArgMode, Assignment, DataType, Expr, Ident,
+    ObjectName, OrderBy, OrderByExpr, Query, Select, SequenceOptions,
 };
 use crate::tokenizer::Token;
 
@@ -764,12 +764,16 @@ impl fmt::Display for IndexType {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct ProcedureParam {
+    pub mode: Option<ArgMode>,
     pub name: Ident,
     pub data_type: DataType,
 }
 
 impl fmt::Display for ProcedureParam {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(mode) = &self.mode {
+            write!(f, "{mode} ")?;
+        }
         write!(f, "{} {}", self.name, self.data_type)
     }
 }

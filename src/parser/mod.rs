@@ -6259,9 +6259,31 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_procedure_param(&mut self) -> Result<ProcedureParam, ParserError> {
+        // Redshift / Postgres-style procedures accept an optional IN/OUT/INOUT mode
+        // before the parameter name. MSSQL doesn't use these keywords here, but
+        // accepting them is harmless — `IN`/`OUT`/`INOUT` are not valid identifier
+        // starts for a parameter definition.
+        let mode = self.parse_arg_mode();
         let name = self.parse_identifier(false)?.unwrap();
         let data_type = self.parse_data_type()?;
-        Ok(ProcedureParam { name, data_type })
+        Ok(ProcedureParam {
+            mode,
+            name,
+            data_type,
+        })
+    }
+
+    /// Parse an optional `IN` / `OUT` / `INOUT` argument mode.
+    fn parse_arg_mode(&mut self) -> Option<ArgMode> {
+        if self.parse_keyword(Keyword::IN) {
+            Some(ArgMode::In)
+        } else if self.parse_keyword(Keyword::OUT) {
+            Some(ArgMode::Out)
+        } else if self.parse_keyword(Keyword::INOUT) {
+            Some(ArgMode::InOut)
+        } else {
+            None
+        }
     }
 
     pub fn parse_column_def(&mut self) -> Result<ColumnDef, ParserError> {
@@ -9113,6 +9135,13 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<Option<CharacterLength>, ParserError> {
         if self.consume_token(&Token::LParen) {
+            // Snowflake accepts empty parens (e.g. `VARCHAR()`) as a synonym for
+            // the default max length — emit as `None` so we don't invent a length.
+            if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                && self.consume_token(&Token::RParen)
+            {
+                return Ok(None);
+            }
             let character_length = self.parse_character_length()?;
             self.expect_token(&Token::RParen)?;
             Ok(Some(character_length))
