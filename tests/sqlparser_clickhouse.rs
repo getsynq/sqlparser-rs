@@ -690,6 +690,20 @@ fn parse_limit_by() {
 }
 
 #[test]
+fn parse_limit_by_with_union() {
+    // `LIMIT <n> BY <exprs>` is a per-SELECT clause in ClickHouse and must not
+    // block a following set operator.
+    clickhouse().one_statement_parses_to(
+        "SELECT a FROM t LIMIT 1 BY a UNION ALL SELECT a FROM t",
+        "(SELECT a FROM t LIMIT 1 BY a) UNION ALL SELECT a FROM t",
+    );
+    clickhouse().one_statement_parses_to(
+        "SELECT * FROM (SELECT a FROM t LIMIT 1 BY a UNION ALL SELECT a FROM t)",
+        "SELECT * FROM ((SELECT a FROM t LIMIT 1 BY a) UNION ALL SELECT a FROM t)",
+    );
+}
+
+#[test]
 fn parse_create_table_with_variant_default_expressions() {
     let sql = concat!(
         "CREATE TABLE table (",
