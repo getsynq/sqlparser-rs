@@ -9005,8 +9005,8 @@ impl<'a> Parser<'a> {
         let ident = self.parse_identifier(false)?;
         // Skip MASKING POLICY clause if present
         if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
-            // Consume policy name
-            let _ = self.parse_identifier(false)?;
+            // Consume policy name (may be a qualified name like db.schema.policy)
+            let _ = self.parse_object_name(false)?;
             // Skip optional USING (col, ...)
             if self.parse_keyword(Keyword::USING) {
                 self.expect_token(&Token::LParen)?;
@@ -11199,7 +11199,8 @@ impl<'a> Parser<'a> {
                     table_with_joins: Box::new(table_and_joins),
                     alias,
                 })
-            } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | BigQueryDialect | DuckDbDialect | AnsiDialect | GenericDialect) {
+            } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | BigQueryDialect | DuckDbDialect | AnsiDialect | GenericDialect)
+            {
                 // Dialect-specific behavior: several dialects diverge from the
                 // standard and from most of the other implementations by
                 // allowing extra parentheses not only around a join (B), but
@@ -13908,7 +13909,7 @@ fn parse_column_policy_property(
     parser: &mut Parser,
     with: bool,
 ) -> Result<ColumnPolicyProperty, ParserError> {
-    let policy_name = parser.parse_identifier(false)?;
+    let policy_name = parser.parse_object_name(false)?;
     let using_columns = if parser.parse_keyword(Keyword::USING) {
         parser.expect_token(&Token::LParen)?;
         let columns = parser.parse_comma_separated(|p| p.parse_identifier(false))?;
