@@ -535,6 +535,10 @@ pub enum Expr {
     IsNotUnknown(Box<Expr>),
     /// `IS DISTINCT FROM` operator
     IsDistinctFrom(Box<Expr>, Box<Expr>),
+    /// Oracle / Snowflake legacy outer-join marker: `expr (+)` — used in WHERE
+    /// clauses to mark the outer-joined side of a comparison in the old-style
+    /// comma-join syntax.
+    OuterJoin(Box<Expr>),
     /// `IS NOT DISTINCT FROM` operator
     IsNotDistinctFrom(Box<Expr>, Box<Expr>),
     /// `[ NOT ] IN (val1, val2, ...)`
@@ -851,6 +855,7 @@ impl fmt::Display for Expr {
             Expr::IsNotNull(ast) => write!(f, "{ast} IS NOT NULL"),
             Expr::IsUnknown(ast) => write!(f, "{ast} IS UNKNOWN"),
             Expr::IsNotUnknown(ast) => write!(f, "{ast} IS NOT UNKNOWN"),
+            Expr::OuterJoin(ast) => write!(f, "{ast} (+)"),
             Expr::InList {
                 expr,
                 list,
