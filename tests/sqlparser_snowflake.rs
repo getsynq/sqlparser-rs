@@ -2323,6 +2323,21 @@ fn test_snowflake_connect_by() {
 }
 
 #[test]
+fn test_snowflake_oracle_outer_join_marker() {
+    // Snowflake / Oracle legacy (+) outer-join marker in WHERE clauses.
+    snowflake_and_generic()
+        .verified_stmt("SELECT t1.c1, t2.c2 FROM t1, t2 WHERE t1.c1 = t2.c2 (+)");
+    snowflake_and_generic().verified_stmt(
+        "SELECT t1.c1 FROM t1, t2, t3 WHERE t1.c1 = t2.c2 (+) AND t2.c2 = t3.c3 (+)",
+    );
+    // No space between column and `(+)` should also parse.
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT t1.c1 FROM t1, t2 WHERE t1.c1 = t2.c2(+)",
+        "SELECT t1.c1 FROM t1, t2 WHERE t1.c1 = t2.c2 (+)",
+    );
+}
+
+#[test]
 fn test_snowflake_double_with_precision() {
     // Snowflake query logs emit DOUBLE(p) as a synonym for DOUBLE; accept and preserve it.
     snowflake_and_generic().verified_stmt("SELECT CAST(x AS DOUBLE(6)) FROM t");

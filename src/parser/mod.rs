@@ -885,6 +885,20 @@ impl<'a> Parser<'a> {
         debug!("parsing expr");
         let mut expr = self.parse_prefix()?;
         debug!("prefix: {:?}", expr);
+        // Oracle/Snowflake legacy outer-join marker: `expr (+)`. Only valid in
+        // WHERE clauses of the old-style comma-join syntax, but we recognize
+        // the suffix anywhere to keep parsing simple; the AST node preserves
+        // the inner expression so column-level lineage is unaffected.
+        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && matches!(self.peek_token().token, Token::LParen)
+            && matches!(self.peek_nth_token(1).token, Token::Plus)
+            && matches!(self.peek_nth_token(2).token, Token::RParen)
+        {
+            self.next_token();
+            self.next_token();
+            self.next_token();
+            expr = Expr::OuterJoin(Box::new(expr));
+        }
         loop {
             let next_precedence = self.get_next_precedence()?;
             debug!("next precedence: {:?}", next_precedence);
@@ -1140,6 +1154,20 @@ impl<'a> Parser<'a> {
                             }
                         }
 
+                        // Oracle/Snowflake legacy outer-join marker on a
+                        // qualified column reference: `tbl.col (+)`.
+                        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                            && matches!(self.peek_token().token, Token::LParen)
+                            && matches!(self.peek_nth_token(1).token, Token::Plus)
+                            && matches!(self.peek_nth_token(2).token, Token::RParen)
+                        {
+                            self.next_token();
+                            self.next_token();
+                            self.next_token();
+                            return Ok(Expr::OuterJoin(Box::new(Expr::CompoundIdentifier(
+                                id_parts.empty_span(),
+                            ))));
+                        }
                         if self.consume_token(&Token::LParen) {
                             self.prev_token();
                             let function = self.parse_function(ObjectName(id_parts))?;
