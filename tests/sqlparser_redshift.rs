@@ -639,3 +639,14 @@ fn test_redshift_array_bracket_not_identifier() {
     // Bracket-quoted identifiers with a space before should still work
     redshift().verified_only_select("SELECT [col1] FROM [test_schema].[test_table]");
 }
+
+#[test]
+fn test_redshift_create_procedure_trailing_clauses() {
+    // Redshift CREATE PROCEDURE accepts trailing clauses after the dollar-quoted
+    // body: LANGUAGE <lang> and SECURITY INVOKER/DEFINER.
+    let sql = "CREATE OR REPLACE PROCEDURE sp_invoker() AS $$ BEGIN SELECT 1; END; $$ LANGUAGE plpgsql SECURITY INVOKER";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "CREATE OR REPLACE PROCEDURE sp_definer() AS $$ BEGIN SELECT 1; END; $$ LANGUAGE plpgsql SECURITY DEFINER";
+    redshift().parse_sql_statements(sql).unwrap();
+}
