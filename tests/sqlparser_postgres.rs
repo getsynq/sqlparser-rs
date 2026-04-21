@@ -3631,6 +3631,17 @@ fn parse_create_function_strict() {
 }
 
 #[test]
+fn parse_create_function_returns_setof() {
+    // PostgreSQL set-returning functions: `RETURNS SETOF <type>` is accepted and
+    // parsed as the inner type.
+    let sql = "CREATE FUNCTION get_all_foo() RETURNS SETOF foo AS 'select * from foo' LANGUAGE SQL";
+    let _ = pg().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION get_all_foo RETURNS foo LANGUAGE SQL AS 'select * from foo'",
+    );
+}
+
+#[test]
 fn parse_create_function_arg_name_matches_data_type_keyword() {
     // Parameter names that happen to collide with data-type keywords
     // (e.g. `bytes`, `date`) must be parsed as names, not as anonymous types.
