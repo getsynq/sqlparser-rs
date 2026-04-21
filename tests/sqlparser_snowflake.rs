@@ -2115,9 +2115,8 @@ fn test_snowflake_model_method_syntax() {
     snowflake().verified_stmt("SELECT m!PREDICT(INPUT_DATA => {tbl.*}) AS p FROM tbl");
 
     // Model method call on a function-result receiver, e.g. MODEL(...)!PREDICT(...)
-    snowflake().verified_stmt(
-        "SELECT MODEL(schema.classifier, 'DEFAULT')!PREDICT(col_1, col_2) FROM tbl",
-    );
+    snowflake()
+        .verified_stmt("SELECT MODEL(schema.classifier, 'DEFAULT')!PREDICT(col_1, col_2) FROM tbl");
 }
 
 #[test]
@@ -2141,6 +2140,19 @@ fn test_create_function_dollar_quoted() {
     snowflake().one_statement_parses_to(
         "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
         "CREATE FUNCTION echo_varchar(x VARCHAR) RETURNS VARCHAR LANGUAGE SCALA AS $$\n  class Echo {\n    def echoVarchar(x : String): String = {\n      return x\n    }\n  }\n  $$",
+    );
+}
+
+#[test]
+fn test_create_external_function() {
+    // Snowflake CREATE EXTERNAL FUNCTION — API_INTEGRATION clause consumed by the generic fallback
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE EXTERNAL FUNCTION local_echo(string_col VARCHAR) RETURNS VARIANT API_INTEGRATION = demo_api AS 'https://xyz.example.com/echo'",
+        "CREATE OR REPLACE FUNCTION local_echo(string_col VARCHAR) RETURNS VARIANT AS 'https://xyz.example.com/echo'",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE EXTERNAL FUNCTION db.sch.fn(INPUT VARCHAR) RETURNS VARIANT COMMENT='External fn' API_INTEGRATION=API_INT AS 'https://x'",
+        "CREATE OR REPLACE FUNCTION db.sch.fn(INPUT VARCHAR) RETURNS VARIANT COMMENT 'External fn' AS 'https://x'",
     );
 }
 

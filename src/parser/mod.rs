@@ -4000,7 +4000,12 @@ impl<'a> Parser<'a> {
             self.prev_token();
             self.parse_create_view(or_replace)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
-            self.parse_create_external_table(or_replace)
+            if self.parse_keyword(Keyword::FUNCTION) {
+                // Snowflake: CREATE EXTERNAL FUNCTION
+                self.parse_create_function(or_replace, temporary, false)
+            } else {
+                self.parse_create_external_table(or_replace)
+            }
         } else if self.parse_keyword(Keyword::FUNCTION) {
             self.parse_create_function(or_replace, temporary, false)
         } else if self.parse_keyword(Keyword::MACRO) {
