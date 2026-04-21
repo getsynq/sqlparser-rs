@@ -6389,6 +6389,7 @@ impl<'a> Parser<'a> {
         let data_type = if self.peek_token_is(&Token::SemiColon)
             || self.peek_token_is(&Token::EOF)
             || self.peek_token().token == Token::Comma
+            || self.peek_token().token == Token::RParen
         {
             DataType::Unspecified
         } else {
