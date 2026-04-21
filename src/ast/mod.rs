@@ -1885,6 +1885,11 @@ pub enum Statement {
         /// PostgreSQL `INHERITS (parent_table [, ...])`
         /// <https://www.postgresql.org/docs/current/ddl-inherit.html>
         inherits: Option<Vec<ObjectName>>,
+        /// PostgreSQL partition inheritance parent for
+        /// `CREATE TABLE child PARTITION OF parent ...`.
+        partition_of: Option<ObjectName>,
+        /// PostgreSQL partition bound specification (`FOR VALUES ...` or `DEFAULT`).
+        partition_bound: Option<PartitionBoundSpec>,
     },
     /// ```sql
     /// CREATE VIRTUAL TABLE .. USING <module_name> (<module_args>)`
@@ -3192,6 +3197,8 @@ impl fmt::Display for Statement {
                 using_template,
                 copy_grants,
                 inherits,
+                partition_of,
+                partition_bound,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3226,6 +3233,9 @@ impl fmt::Display for Statement {
                         on_cluster.replace('{', "'{").replace('}', "}'")
                     )?;
                 }
+                if let Some(parent) = partition_of {
+                    write!(f, " PARTITION OF {parent}")?;
+                }
                 if !columns.is_empty() || !constraints.is_empty() || !projections.is_empty() {
                     write!(f, " ({}", display_comma_separated(columns))?;
                     if !columns.is_empty() && !constraints.is_empty() {
@@ -3242,9 +3252,14 @@ impl fmt::Display for Statement {
                     && clone.is_none()
                     && copy.is_none()
                     && using_template.is_none()
+                    && partition_of.is_none()
                 {
                     // PostgreSQL allows `CREATE TABLE t ();`, but requires empty parens
                     write!(f, " ()")?;
+                }
+
+                if let Some(bound) = partition_bound {
+                    write!(f, " {bound}")?;
                 }
 
                 if let Some(dist_style) = dist_style {
@@ -5386,6 +5401,48 @@ pub enum OnCommit {
     DeleteRows,
     PreserveRows,
     Drop,
+}
+
+/// PostgreSQL partition bound specification used by
+/// `CREATE TABLE child PARTITION OF parent <bound>`.
+/// <https://www.postgresql.org/docs/current/sql-createtable.html>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum PartitionBoundSpec {
+    /// `FOR VALUES IN (expr, ...)`
+    In(Vec<Expr>),
+    /// `FOR VALUES FROM (...) TO (...)`
+    FromTo { from: Vec<Expr>, to: Vec<Expr> },
+    /// `FOR VALUES WITH (MODULUS n, REMAINDER n)`
+    WithModulus { modulus: u64, remainder: u64 },
+    /// `DEFAULT`
+    Default,
+}
+
+impl fmt::Display for PartitionBoundSpec {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PartitionBoundSpec::In(exprs) => {
+                write!(f, "FOR VALUES IN ({})", display_comma_separated(exprs))
+            }
+            PartitionBoundSpec::FromTo { from, to } => {
+                write!(
+                    f,
+                    "FOR VALUES FROM ({}) TO ({})",
+                    display_comma_separated(from),
+                    display_comma_separated(to)
+                )
+            }
+            PartitionBoundSpec::WithModulus { modulus, remainder } => {
+                write!(
+                    f,
+                    "FOR VALUES WITH (MODULUS {modulus}, REMAINDER {remainder})"
+                )
+            }
+            PartitionBoundSpec::Default => write!(f, "DEFAULT"),
+        }
+    }
 }
 
 /// An option in `COPY` statement.

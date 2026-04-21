@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ast::{
     ColumnDef, DistributionStyle, EngineSpec, Expr, FileFormat, HiveDistributionStyle, HiveFormat,
-    Ident, ObjectName, OnCommit, Query, SqlOption, Statement, TableConstraint,
+    Ident, ObjectName, OnCommit, PartitionBoundSpec, Query, SqlOption, Statement, TableConstraint,
 };
 use crate::parser::ParserError;
 use sqlparser::ast::TableProjection;
@@ -91,6 +91,8 @@ pub struct CreateTableBuilder {
     pub using_template: Option<Box<Expr>>,
     pub copy_grants: bool,
     pub inherits: Option<Vec<ObjectName>>,
+    pub partition_of: Option<ObjectName>,
+    pub partition_bound: Option<PartitionBoundSpec>,
 }
 
 impl CreateTableBuilder {
@@ -140,6 +142,8 @@ impl CreateTableBuilder {
             using_template: None,
             copy_grants: false,
             inherits: None,
+            partition_of: None,
+            partition_bound: None,
         }
     }
     pub fn or_replace(mut self, or_replace: bool) -> Self {
@@ -355,6 +359,16 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn partition_of(mut self, partition_of: Option<ObjectName>) -> Self {
+        self.partition_of = partition_of;
+        self
+    }
+
+    pub fn partition_bound(mut self, partition_bound: Option<PartitionBoundSpec>) -> Self {
+        self.partition_bound = partition_bound;
+        self
+    }
+
     pub fn build(self) -> Statement {
         Statement::CreateTable {
             or_replace: self.or_replace,
@@ -401,6 +415,8 @@ impl CreateTableBuilder {
             using_template: self.using_template,
             copy_grants: self.copy_grants,
             inherits: self.inherits,
+            partition_of: self.partition_of,
+            partition_bound: self.partition_bound,
         }
     }
 }
@@ -457,6 +473,8 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 using_template,
                 copy_grants,
                 inherits,
+                partition_of,
+                partition_bound,
             } => Ok(Self {
                 or_replace,
                 temporary,
@@ -502,6 +520,8 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 using_template,
                 copy_grants,
                 inherits,
+                partition_of,
+                partition_bound,
             }),
             _ => Err(ParserError::ParserError(
                 format!("Expected create table statement, but received: {stmt}").into(),

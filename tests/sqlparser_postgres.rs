@@ -4081,6 +4081,49 @@ fn parse_create_table_inherits() {
 }
 
 #[test]
+fn parse_create_table_partition_of() {
+    // PostgreSQL declarative partitioning:
+    // https://www.postgresql.org/docs/current/sql-createtable.html
+    pg_and_generic().verified_stmt(
+        "CREATE TABLE orders_p1 PARTITION OF orders FOR VALUES WITH (MODULUS 4, REMAINDER 0)",
+    );
+    pg_and_generic().verified_stmt(
+        "CREATE TABLE cities_ab PARTITION OF cities FOR VALUES IN ('a', 'b') PARTITION BY RANGE(population)",
+    );
+    pg_and_generic().verified_stmt(
+        "CREATE TABLE cities_ab_10000_to_100000 PARTITION OF cities_ab FOR VALUES FROM (10000) TO (100000)",
+    );
+    pg_and_generic()
+        .verified_stmt("CREATE TABLE measurement_default PARTITION OF measurement DEFAULT");
+    // With additional column constraints
+    pg_and_generic().verified_stmt(
+        "CREATE TABLE cities_ab PARTITION OF cities (CONSTRAINT city_id_nonzero CHECK (city_id <> 0)) FOR VALUES IN ('a', 'b')",
+    );
+
+    // Verify AST preserves the parent table reference for lineage
+    match pg().verified_stmt(
+        "CREATE TABLE orders_p1 PARTITION OF orders FOR VALUES WITH (MODULUS 4, REMAINDER 0)",
+    ) {
+        Statement::CreateTable {
+            partition_of,
+            partition_bound,
+            ..
+        } => {
+            let parent = partition_of.expect("PARTITION OF parent");
+            assert_eq!(parent.to_string(), "orders");
+            assert!(matches!(
+                partition_bound,
+                Some(sqlparser::ast::PartitionBoundSpec::WithModulus {
+                    modulus: 4,
+                    remainder: 0
+                })
+            ));
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_create_table_like() {
     // Simple LIKE clause inside column list (Redshift/PostgreSQL syntax)
     pg().verified_stmt("CREATE TABLE new_tbl (LIKE old_tbl)");
