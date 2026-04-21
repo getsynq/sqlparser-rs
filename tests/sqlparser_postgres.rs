@@ -3595,6 +3595,20 @@ fn parse_create_function_strict() {
         sql,
         "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE plpgsql IMMUTABLE STRICT AS $$ BEGIN RETURN $1 + $2; END; $$",
     );
+
+    // RETURNS NULL ON NULL INPUT is an alias for STRICT.
+    let sql = "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER AS 'select $1 + $2;' LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT";
+    pg().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE SQL IMMUTABLE STRICT AS 'select $1 + $2;'",
+    );
+
+    // CALLED ON NULL INPUT is the default (non-strict) behavior.
+    let sql = "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER AS 'select $1 + $2;' LANGUAGE SQL IMMUTABLE CALLED ON NULL INPUT";
+    pg().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS 'select $1 + $2;'",
+    );
 }
 
 #[test]
