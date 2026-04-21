@@ -5746,8 +5746,25 @@ fn parse_recursive_cte() {
         },
         query: Box::new(cte_query),
         from: None,
+        search: None,
+        cycle: None,
     };
     assert_eq!(with.cte_tables.first().unwrap(), &expected);
+}
+
+#[test]
+fn parse_recursive_cte_search_and_cycle() {
+    let sql = "WITH RECURSIVE search_tree AS (SELECT 1) SEARCH DEPTH FIRST BY id SET ordercol SELECT * FROM search_tree";
+    verified_stmt(sql);
+
+    let sql = "WITH RECURSIVE search_tree AS (SELECT 1) SEARCH BREADTH FIRST BY id, name SET ordercol SELECT * FROM search_tree";
+    verified_stmt(sql);
+
+    let sql = "WITH RECURSIVE search_graph AS (SELECT 1) CYCLE id SET is_cycle USING path SELECT * FROM search_graph";
+    verified_stmt(sql);
+
+    let sql = "WITH RECURSIVE search_graph AS (SELECT 1) CYCLE id SET is_cycle TO true DEFAULT false USING path SELECT * FROM search_graph";
+    verified_stmt(sql);
 }
 
 #[test]

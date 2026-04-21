@@ -10142,6 +10142,8 @@ impl<'a> Parser<'a> {
                 alias,
                 query,
                 from: None,
+                search: None,
+                cycle: None,
             }
         } else {
             let next_keyword = self.peek_next_keyword();
@@ -10163,10 +10165,56 @@ impl<'a> Parser<'a> {
                 alias,
                 query,
                 from: None,
+                search: None,
+                cycle: None,
             }
         };
         if self.parse_keyword(Keyword::FROM) {
             cte.from = Some(self.parse_identifier(false)?.unwrap());
+        }
+        if self.parse_keyword(Keyword::SEARCH) {
+            let kind = if self.parse_keyword(Keyword::BREADTH) {
+                CteSearchKind::Breadth
+            } else {
+                self.expect_keyword(Keyword::DEPTH)?;
+                CteSearchKind::Depth
+            };
+            self.expect_keyword(Keyword::FIRST)?;
+            self.expect_keyword(Keyword::BY)?;
+            let by_columns =
+                self.parse_comma_separated(|p| Ok(p.parse_identifier(false)?.unwrap()))?;
+            self.expect_keyword(Keyword::SET)?;
+            let set_column = self.parse_identifier(false)?.unwrap();
+            cte.search = Some(CteSearch {
+                kind,
+                by_columns,
+                set_column,
+            });
+        }
+        if self.parse_keyword(Keyword::CYCLE) {
+            let columns =
+                self.parse_comma_separated(|p| Ok(p.parse_identifier(false)?.unwrap()))?;
+            self.expect_keyword(Keyword::SET)?;
+            let mark_column = self.parse_identifier(false)?.unwrap();
+            let mark_values = if self.parse_keyword(Keyword::TO) {
+                let mark_value = self.parse_expr()?;
+                self.expect_keyword(Keyword::DEFAULT)?;
+                let default_value = self.parse_expr()?;
+                Some(CteCycleMarkValues {
+                    mark_value,
+                    default_value,
+                })
+            } else {
+                None
+            };
+            self.expect_keyword(Keyword::USING)?;
+            let using_column = self.parse_identifier(false)?.unwrap();
+            cte.cycle = Some(CteCycle {
+                columns,
+                mark_column,
+                mark_values,
+                using_column,
+            });
         }
         Ok(cte)
     }
@@ -10219,6 +10267,8 @@ impl<'a> Parser<'a> {
             },
             query,
             from: None,
+            search: None,
+            cycle: None,
         })
     }
 

@@ -492,6 +492,8 @@ pub struct Cte {
     pub alias: TableAlias,
     pub query: Box<Query>,
     pub from: Option<Ident>,
+    pub search: Option<CteSearch>,
+    pub cycle: Option<CteCycle>,
 }
 
 impl fmt::Display for Cte {
@@ -500,7 +502,88 @@ impl fmt::Display for Cte {
         if let Some(ref fr) = self.from {
             write!(f, " FROM {fr}")?;
         }
+        if let Some(ref s) = self.search {
+            write!(f, " {s}")?;
+        }
+        if let Some(ref c) = self.cycle {
+            write!(f, " {c}")?;
+        }
         Ok(())
+    }
+}
+
+/// PostgreSQL `SEARCH { BREADTH | DEPTH } FIRST BY col [, ...] SET col` clause on a recursive CTE.
+/// <https://www.postgresql.org/docs/current/queries-with.html>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CteSearch {
+    pub kind: CteSearchKind,
+    pub by_columns: Vec<Ident>,
+    pub set_column: Ident,
+}
+
+impl fmt::Display for CteSearch {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "SEARCH {} FIRST BY {} SET {}",
+            self.kind,
+            display_comma_separated(&self.by_columns),
+            self.set_column
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum CteSearchKind {
+    Breadth,
+    Depth,
+}
+
+impl fmt::Display for CteSearchKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            CteSearchKind::Breadth => "BREADTH",
+            CteSearchKind::Depth => "DEPTH",
+        })
+    }
+}
+
+/// PostgreSQL `CYCLE col [, ...] SET mark [ TO value DEFAULT default ] USING path` clause on a recursive CTE.
+/// <https://www.postgresql.org/docs/current/queries-with.html>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CteCycle {
+    pub columns: Vec<Ident>,
+    pub mark_column: Ident,
+    pub mark_values: Option<CteCycleMarkValues>,
+    pub using_column: Ident,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct CteCycleMarkValues {
+    pub mark_value: Expr,
+    pub default_value: Expr,
+}
+
+impl fmt::Display for CteCycle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "CYCLE {} SET {}",
+            display_comma_separated(&self.columns),
+            self.mark_column
+        )?;
+        if let Some(mv) = &self.mark_values {
+            write!(f, " TO {} DEFAULT {}", mv.mark_value, mv.default_value)?;
+        }
+        write!(f, " USING {}", self.using_column)
     }
 }
 
