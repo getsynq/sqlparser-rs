@@ -7125,6 +7125,7 @@ fn test_create_index_with_using_function() {
             if_not_exists,
             include,
             nulls_distinct: None,
+            with: _,
             predicate: None,
         } => {
             assert_eq!("idx_name", name.to_string());

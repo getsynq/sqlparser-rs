@@ -1907,6 +1907,8 @@ pub enum Statement {
         if_not_exists: bool,
         include: Vec<Ident>,
         nulls_distinct: Option<bool>,
+        /// PostgreSQL `WITH ( storage_parameter = value [, ...] )`
+        with: Vec<SqlOption>,
         predicate: Option<Expr>,
     },
     /// ```sql
@@ -3471,6 +3473,7 @@ impl fmt::Display for Statement {
                 if_not_exists,
                 include,
                 nulls_distinct,
+                with,
                 predicate,
             } => {
                 write!(
@@ -3497,6 +3500,9 @@ impl fmt::Display for Statement {
                     } else {
                         write!(f, " NULLS NOT DISTINCT")?;
                     }
+                }
+                if !with.is_empty() {
+                    write!(f, " WITH ({})", display_comma_separated(with))?;
                 }
                 if let Some(predicate) = predicate {
                     write!(f, " WHERE {predicate}")?;

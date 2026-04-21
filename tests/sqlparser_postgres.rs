@@ -2051,6 +2051,7 @@ fn parse_create_index() {
             if_not_exists,
             nulls_distinct: None,
             include,
+            with: _,
             predicate: None,
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2080,6 +2081,7 @@ fn parse_create_anonymous_index() {
             if_not_exists,
             include,
             nulls_distinct: None,
+            with: _,
             predicate: None,
         } => {
             assert_eq!(None, name);
@@ -2109,6 +2111,7 @@ fn parse_create_index_concurrently() {
             if_not_exists,
             include,
             nulls_distinct: None,
+            with: _,
             predicate: None,
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2164,6 +2167,7 @@ fn parse_create_index_with_predicate() {
             if_not_exists,
             include,
             nulls_distinct: None,
+            with: _,
             predicate: Some(_),
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2193,6 +2197,7 @@ fn parse_create_index_with_include() {
             if_not_exists,
             include,
             nulls_distinct: None,
+            with: _,
             predicate: None,
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2222,6 +2227,7 @@ fn parse_create_index_with_nulls_distinct() {
             if_not_exists,
             include,
             nulls_distinct: Some(nulls_distinct),
+            with: _,
             predicate: None,
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2249,6 +2255,7 @@ fn parse_create_index_with_nulls_distinct() {
             if_not_exists,
             include,
             nulls_distinct: Some(nulls_distinct),
+            with: _,
             predicate: None,
         } => {
             assert_eq_vec(&["my_index"], &name);
@@ -2263,6 +2270,24 @@ fn parse_create_index_with_nulls_distinct() {
         }
         _ => unreachable!(),
     }
+}
+
+#[test]
+fn parse_create_index_with_storage_parameters() {
+    let sql = "CREATE INDEX title_idx ON films(title) WITH (fillfactor = 70)";
+    match pg().verified_stmt(sql) {
+        Statement::CreateIndex { with, .. } => {
+            assert_eq!(1, with.len());
+        }
+        _ => unreachable!(),
+    }
+
+    let sql = "CREATE UNIQUE INDEX title_idx ON films(title) WITH (deduplicate_items = off)";
+    pg().verified_stmt(sql);
+
+    let sql =
+        "CREATE INDEX gin_idx ON documents_table USING GIN (locations) WITH (fastupdate = off)";
+    pg().verified_stmt(sql);
 }
 
 #[test]

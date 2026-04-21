@@ -5727,6 +5727,8 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let with = self.parse_options(Keyword::WITH)?;
+
         let predicate = if self.parse_keyword(Keyword::WHERE) {
             Some(self.parse_expr()?)
         } else {
@@ -5743,6 +5745,7 @@ impl<'a> Parser<'a> {
             if_not_exists,
             include,
             nulls_distinct,
+            with,
             predicate,
         })
     }
