@@ -4715,6 +4715,8 @@ impl<'a> Parser<'a> {
             } else if self.parse_keyword(Keyword::VOLATILE) {
                 ensure_not_set(&body.behavior, "IMMUTABLE | STABLE | VOLATILE")?;
                 body.behavior = Some(FunctionBehavior::Volatile);
+            } else if self.parse_keyword(Keyword::STRICT) {
+                body.strict = true;
             } else if self.parse_keyword(Keyword::RETURN) {
                 if self
                     .parse_one_of_keywords(&[Keyword::SELECT, Keyword::WITH])

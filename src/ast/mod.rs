@@ -5872,6 +5872,9 @@ pub struct CreateFunctionBody {
     pub return_select_: Option<Query>,
     /// USING ... (Hive only)
     pub using: Option<CreateFunctionUsing>,
+    /// STRICT (PostgreSQL/Snowflake): function returns NULL if any input is NULL.
+    /// Also a PostgreSQL alias for `RETURNS NULL ON NULL INPUT`.
+    pub strict: bool,
 }
 
 impl fmt::Display for CreateFunctionBody {
@@ -5881,6 +5884,9 @@ impl fmt::Display for CreateFunctionBody {
         }
         if let Some(behavior) = &self.behavior {
             write!(f, " {behavior}")?;
+        }
+        if self.strict {
+            write!(f, " STRICT")?;
         }
         if let Some(definition) = &self.as_ {
             write!(f, " AS {definition}")?;
