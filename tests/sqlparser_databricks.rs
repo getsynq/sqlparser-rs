@@ -63,6 +63,13 @@ fn test_identifiers() {
 }
 
 #[test]
+fn test_div_operator() {
+    databricks().verified_stmt("SELECT 5 DIV 2");
+    databricks().verified_stmt("SELECT -5.9 DIV 1");
+    databricks().verified_stmt("SELECT INTERVAL '100' HOUR DIV INTERVAL '1' DAY");
+}
+
+#[test]
 fn test_string_escape() {
     databricks().one_statement_parses_to(r#"SELECT 'O\'Connell'"#, r#"SELECT 'O''Connell'"#);
 }
