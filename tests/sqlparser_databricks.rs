@@ -425,3 +425,15 @@ fn test_extract_custom_date_part() {
     // that are not reserved keywords. Parse them as custom date/time fields.
     databricks().verified_stmt("SELECT EXTRACT(YEAROFWEEK FROM col) FROM tbl");
 }
+
+#[test]
+fn test_exists_higher_order_function() {
+    // Spark/Databricks overload EXISTS as a higher-order function that takes
+    // an array and a lambda predicate. When the parenthesised body does not
+    // start a subquery, parse it as a regular function call.
+    databricks().verified_stmt("SELECT EXISTS(arr, x -> x > 0) FROM tbl");
+    databricks().verified_stmt("SELECT NOT EXISTS(arr, x -> x > 0) FROM tbl");
+    // Subquery form still works.
+    databricks().verified_stmt("SELECT 1 FROM tbl WHERE EXISTS (SELECT 1 FROM u)");
+    databricks().verified_stmt("SELECT 1 FROM tbl WHERE NOT EXISTS (SELECT 1 FROM u)");
+}

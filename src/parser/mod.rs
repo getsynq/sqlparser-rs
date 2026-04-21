@@ -1043,7 +1043,24 @@ impl<'a> Parser<'a> {
                 Keyword::CAST => self.parse_cast_expr(),
                 Keyword::TRY_CAST => self.parse_try_cast_expr(),
                 Keyword::SAFE_CAST => self.parse_safe_cast_expr(),
-                Keyword::EXISTS => self.parse_exists_expr(false),
+                Keyword::EXISTS => {
+                    // Spark/Databricks overload EXISTS as a higher-order function:
+                    // `exists(array, predicate)`. Detect this form by looking for
+                    // a non-keyword identifier right after `(`, which distinguishes
+                    // it from the subquery form.
+                    if dialect_of!(self is DatabricksDialect)
+                        && self.peek_token_is(&Token::LParen)
+                        && matches!(
+                            &self.peek_nth_token(1).token,
+                            Token::Word(w) if w.keyword == Keyword::NoKeyword,
+                        )
+                    {
+                        let name = ObjectName(vec![w.to_ident()]);
+                        self.parse_function(name)
+                    } else {
+                        self.parse_exists_expr(false)
+                    }
+                }
                 Keyword::EXTRACT => {
                     // ClickHouse uses EXTRACT as a regex function: extract(str, pattern)
                     // Detect by checking if first arg after ( is a string literal
@@ -2229,7 +2246,25 @@ impl<'a> Parser<'a> {
                 Keyword::EXISTS => {
                     let negated = true;
                     let _ = self.parse_keyword(Keyword::EXISTS);
-                    self.parse_exists_expr(negated)
+                    // Fall back to treating EXISTS as a higher-order function call
+                    // (Spark/Databricks `exists(array, predicate)`) when followed
+                    // by a non-keyword identifier inside the parentheses.
+                    if dialect_of!(self is DatabricksDialect)
+                        && self.peek_token_is(&Token::LParen)
+                        && matches!(
+                            &self.peek_nth_token(1).token,
+                            Token::Word(w) if w.keyword == Keyword::NoKeyword,
+                        )
+                    {
+                        let name = ObjectName(vec![Ident::new("EXISTS")]);
+                        let func = self.parse_function(name)?;
+                        Ok(Expr::UnaryOp {
+                            op: UnaryOperator::Not,
+                            expr: Box::new(func),
+                        })
+                    } else {
+                        self.parse_exists_expr(negated)
+                    }
                 }
                 _ => Ok(Expr::UnaryOp {
                     op: UnaryOperator::Not,
