@@ -1434,9 +1434,8 @@ fn parse_function_result_subscript() {
     // Function call result with numeric index
     snowflake().verified_only_select("SELECT SPLIT(col, '/')[0] FROM t");
     // Function call result with expression index (ARRAY_SIZE(...) - 1)
-    snowflake().verified_only_select(
-        "SELECT SPLIT(col, '/')[ARRAY_SIZE(SPLIT(col, '/')) - 1] FROM t",
-    );
+    snowflake()
+        .verified_only_select("SELECT SPLIT(col, '/')[ARRAY_SIZE(SPLIT(col, '/')) - 1] FROM t");
     // Nested: function inside TRIM with subscript
     snowflake().verified_only_select("SELECT TRIM(SPLIT(col, '/')[0]) FROM t");
 }
@@ -1450,9 +1449,7 @@ fn parse_array_subscript_expr() {
     // Compound identifier as index
     snowflake().verified_only_select("SELECT arr[t.idx] FROM t");
     // Real-world pattern: GET_PATH with arithmetic subscript
-    snowflake().verified_only_select(
-        "SELECT CAST(GET_PATH(col[n - 1], 'id') AS VARCHAR) FROM t",
-    );
+    snowflake().verified_only_select("SELECT CAST(GET_PATH(col[n - 1], 'id') AS VARCHAR) FROM t");
 }
 
 #[test]
@@ -1684,8 +1681,8 @@ fn parse_tablesample() {
         named_window: vec![],
         qualify: None,
         value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+        start_with: None,
+        connect_by: None,
     };
     assert_eq!(actual_select_only, expected);
 }
@@ -1757,6 +1754,10 @@ fn test_copy_grants() {
 #[test]
 fn test_column_with_masking() {
     snowflake().verified_stmt("CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32) WITH MASKING POLICY unknown_policy, EMPLOYEE_ID VARCHAR(16777216) WITH MASKING POLICY unknown_policy)");
+    // Qualified (multi-part) policy name
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE tbl (EMPLOYEE_SK VARCHAR(32) WITH MASKING POLICY db1.sch1.unknown_policy)",
+    );
 }
 
 #[test]
@@ -1971,6 +1972,12 @@ fn parse_create_view_with_masking_policy() {
         "CREATE VIEW v1 (col1 MASKING POLICY p1 TAG (t1 = 'v1') COMMENT 'test') AS SELECT * FROM t1",
         "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
     );
+
+    // Qualified policy name (db.schema.policy)
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1 MASKING POLICY db1.sch1.pol1) AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
+    );
 }
 
 #[test]
@@ -2152,21 +2159,15 @@ fn test_set_tuple_assignment() {
 fn parse_positional_column_references_after_dot() {
     // Snowflake $N positional column references after dot (e.g., t.$1)
     snowflake().verified_stmt("SELECT t.$1, t.$2 FROM @mystage1 AS t");
-    snowflake().verified_stmt(
-        "SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1",
-    );
+    snowflake().verified_stmt("SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1");
 }
 
 #[test]
 fn parse_positional_column_references() {
     // Snowflake $N positional column references after dot (e.g., t.$1)
-    snowflake().verified_stmt(
-        "SELECT t.$1, t.$2 FROM @mystage1 AS t",
-    );
+    snowflake().verified_stmt("SELECT t.$1, t.$2 FROM @mystage1 AS t");
     // In WHERE clause
-    snowflake().verified_stmt(
-        "SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1",
-    );
+    snowflake().verified_stmt("SELECT v1.$2 FROM (VALUES (1, 'one')) AS v1 WHERE v1.$1 = 1");
 }
 
 #[test]
@@ -2188,9 +2189,7 @@ fn test_grouping_sets_without_inner_parens() {
         "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), (c))",
     );
     // Empty set still works
-    snowflake_and_generic().verified_stmt(
-        "SELECT a FROM t GROUP BY GROUPING SETS ((a, b), ())",
-    );
+    snowflake_and_generic().verified_stmt("SELECT a FROM t GROUP BY GROUPING SETS ((a, b), ())");
 }
 
 #[test]
@@ -2216,9 +2215,7 @@ fn test_snowflake_select_wildcard_replace() {
         "SELECT t.* REPLACE (REGEXP_REPLACE(col1, 'a', 'b') AS col1, col2 * 2 AS col2) FROM t",
     );
     // Inside subquery
-    snowflake().verified_stmt(
-        "SELECT * FROM (SELECT * REPLACE (x + 1 AS x) FROM t) AS sub",
-    );
+    snowflake().verified_stmt("SELECT * FROM (SELECT * REPLACE (x + 1 AS x) FROM t) AS sub");
 }
 
 #[test]
@@ -2228,16 +2225,16 @@ fn test_snowflake_unpivot_column_alias() {
         "SELECT * FROM monthly_sales UNPIVOT (sales FOR month IN (jan AS january, feb AS february, mar AS march, apr AS april)) ORDER BY empid",
     );
     // Quoted identifier aliases (e.g., numeric-looking names)
-    snowflake().verified_stmt(
-        "SELECT * FROM t UNPIVOT (val FOR col IN (col1 AS \"a\", col2 AS \"b\"))",
-    );
+    snowflake()
+        .verified_stmt("SELECT * FROM t UNPIVOT (val FOR col IN (col1 AS \"a\", col2 AS \"b\"))");
 }
 
 #[test]
 fn test_snowflake_projection_as_column_name() {
     // PROJECTION should be usable as a column name in Snowflake (and generic) CREATE TABLE
     // It is only a special table-level syntax in ClickHouse
-    snowflake_and_generic().verified_stmt("CREATE TABLE t (PROJECTION DECIMAL(38,0), score DECIMAL(38,0))");
+    snowflake_and_generic()
+        .verified_stmt("CREATE TABLE t (PROJECTION DECIMAL(38,0), score DECIMAL(38,0))");
 }
 
 #[test]

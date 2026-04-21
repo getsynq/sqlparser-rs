@@ -409,7 +409,6 @@ impl fmt::Display for AlterTableOperation {
             AlterTableOperation::ClusterBy { exprs } => {
                 write!(f, "CLUSTER BY ({})", display_comma_separated(exprs))
             }
-
         }
     }
 }
@@ -577,7 +576,16 @@ pub struct CreateTableLikeOption {
 
 impl fmt::Display for CreateTableLikeOption {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", if self.including { "INCLUDING" } else { "EXCLUDING" }, self.option)
+        write!(
+            f,
+            "{} {}",
+            if self.including {
+                "INCLUDING"
+            } else {
+                "EXCLUDING"
+            },
+            self.option
+        )
     }
 }
 
@@ -689,7 +697,10 @@ impl fmt::Display for TableConstraint {
 
                 Ok(())
             }
-            Self::Like { table_name, options } => {
+            Self::Like {
+                table_name,
+                options,
+            } => {
                 write!(f, "LIKE {table_name}")?;
                 for option in options {
                     write!(f, " {option}")?;
@@ -1282,7 +1293,7 @@ pub enum ColumnPolicy {
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct ColumnPolicyProperty {
     pub with: bool,
-    pub policy_name: WithSpan<Ident>,
+    pub policy_name: ObjectName,
     pub using_columns: Option<Vec<WithSpan<Ident>>>,
 }
 
