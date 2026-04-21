@@ -934,6 +934,33 @@ impl<'a> Tokenizer<'a> {
                     } else {
                         false
                     };
+
+                    // Databricks/Spark numeric literal type suffixes:
+                    // D (double), F (float), S (smallint), Y (tinyint), BD (decimal).
+                    // Consumed for parseability; literal value remains in `s`.
+                    if !long && dialect_of!(self is DatabricksDialect) {
+                        let mut lookahead = chars.peekable.clone();
+                        let first = lookahead.next();
+                        let consume = match first {
+                            Some('D') | Some('F') | Some('S') | Some('Y') => {
+                                !matches!(lookahead.peek(), Some(c) if c.is_ascii_alphanumeric() || *c == '_')
+                            }
+                            Some('B') => {
+                                if matches!(lookahead.next(), Some('D')) {
+                                    !matches!(lookahead.peek(), Some(c) if c.is_ascii_alphanumeric() || *c == '_')
+                                } else {
+                                    false
+                                }
+                            }
+                            _ => false,
+                        };
+                        if consume {
+                            chars.next();
+                            if first == Some('B') {
+                                chars.next();
+                            }
+                        }
+                    }
                     Ok(Some(Token::Number(s, long)))
                 }
                 // punctuation

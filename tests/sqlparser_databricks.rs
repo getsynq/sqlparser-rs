@@ -70,6 +70,23 @@ fn test_div_operator() {
 }
 
 #[test]
+fn test_numeric_literal_type_suffixes() {
+    // Spark/Databricks numeric literal suffixes: L, S, Y, F, D, BD.
+    // The suffix signals the literal's SQL type; for lineage purposes we
+    // only need the numeric value to parse successfully.
+    databricks().one_statement_parses_to("SELECT 5.0D", "SELECT 5.0");
+    databricks().one_statement_parses_to("SELECT 4.0D, 5.0D", "SELECT 4.0, 5.0");
+    databricks().one_statement_parses_to(
+        "SELECT ARRAY(0.45D, -0.35D, 0.78D)",
+        "SELECT ARRAY(0.45, -0.35, 0.78)",
+    );
+    databricks().one_statement_parses_to("SELECT 1F", "SELECT 1");
+    databricks().one_statement_parses_to("SELECT 1S", "SELECT 1");
+    databricks().one_statement_parses_to("SELECT 1Y", "SELECT 1");
+    databricks().one_statement_parses_to("SELECT 1BD", "SELECT 1");
+}
+
+#[test]
 fn test_string_escape() {
     databricks().one_statement_parses_to(r#"SELECT 'O\'Connell'"#, r#"SELECT 'O''Connell'"#);
 }
