@@ -418,3 +418,10 @@ fn test_explode_multi_alias() {
     let sql2 = "SELECT col_1, EXPLODE(map_col) AS (k, v), col_2 FROM tbl";
     databricks().verified_stmt(sql2);
 }
+
+#[test]
+fn test_extract_custom_date_part() {
+    // Databricks supports EXTRACT with date parts like YEAROFWEEK and WEEKOFYEAR
+    // that are not reserved keywords. Parse them as custom date/time fields.
+    databricks().verified_stmt("SELECT EXTRACT(YEAROFWEEK FROM col) FROM tbl");
+}

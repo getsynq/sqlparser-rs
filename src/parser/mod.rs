@@ -2169,7 +2169,8 @@ impl<'a> Parser<'a> {
                         next_token,
                     )
                 }
-                _ if dialect_of!(self is SnowflakeDialect | GenericDialect | RedshiftSqlDialect) => {
+                _ if dialect_of!(self is SnowflakeDialect | GenericDialect | RedshiftSqlDialect | DatabricksDialect) =>
+                {
                     self.prev_token();
                     let custom = self.parse_identifier_no_span()?;
                     Ok(DateTimeField::Custom(custom))
