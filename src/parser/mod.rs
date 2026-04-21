@@ -5125,7 +5125,24 @@ impl<'a> Parser<'a> {
 
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
-        // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` is widely supported here.
+        // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` (Postgres/MySQL view updatability constraint).
+        // Consumed and discarded — it's a semantic constraint, not relevant for lineage.
+        if self.parse_keywords(&[Keyword::WITH, Keyword::CHECK, Keyword::OPTION])
+            || self.parse_keywords(&[
+                Keyword::WITH,
+                Keyword::CASCADED,
+                Keyword::CHECK,
+                Keyword::OPTION,
+            ])
+            || self.parse_keywords(&[
+                Keyword::WITH,
+                Keyword::LOCAL,
+                Keyword::CHECK,
+                Keyword::OPTION,
+            ])
+        {
+            // consumed
+        }
 
         comment = if self.parse_keyword(Keyword::COMMENT) {
             let _ = self.consume_token(&Token::Eq);
