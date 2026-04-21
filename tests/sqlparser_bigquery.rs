@@ -2004,6 +2004,14 @@ fn parse_merge_not_matched_by_source() {
         "MERGE T USING S ON T.id = S.id \
         WHEN NOT MATCHED THEN INSERT (id) VALUES (S.id)",
     );
+
+    // BigQuery: INSERT ROW shorthand (insert all source columns)
+    bigquery().verified_stmt("MERGE T USING S ON T.id = S.id WHEN NOT MATCHED THEN INSERT ROW");
+    bigquery().verified_stmt(
+        "MERGE T USING S ON T.id = S.id \
+        WHEN NOT MATCHED AND S.active THEN INSERT ROW \
+        WHEN NOT MATCHED BY SOURCE THEN DELETE",
+    );
 }
 
 #[test]

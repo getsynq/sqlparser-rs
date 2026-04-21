@@ -7539,7 +7539,7 @@ fn parse_merge() {
                             Ident::new("B").empty_span(),
                             Ident::new("C").empty_span(),
                         ],
-                        values: Values {
+                        values: Some(Values {
                             explicit_row: false,
                             rows: vec![vec![
                                 Expr::CompoundIdentifier(
@@ -7552,7 +7552,7 @@ fn parse_merge() {
                                     vec![Ident::new("stg"), Ident::new("C")].empty_span()
                                 ),
                             ]],
-                        },
+                        }),
                     },
                     MergeClause::MatchedUpdate {
                         predicate: Some(Expr::BinaryOp {

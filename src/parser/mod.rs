@@ -13917,13 +13917,24 @@ impl<'a> Parser<'a> {
                             ));
                         }
                         let is_mysql = dialect_of!(self is MySqlDialect);
-                        let columns = self.parse_parenthesized_column_list(Optional, is_mysql)?;
-                        self.expect_keyword(Keyword::VALUES)?;
-                        let values = self.parse_values(is_mysql)?;
-                        MergeClause::NotMatched {
-                            predicate,
-                            columns,
-                            values,
+                        // BigQuery supports `INSERT ROW` as a shorthand for inserting
+                        // all source columns without specifying them.
+                        if self.parse_keyword(Keyword::ROW) {
+                            MergeClause::NotMatched {
+                                predicate,
+                                columns: vec![],
+                                values: None,
+                            }
+                        } else {
+                            let columns =
+                                self.parse_parenthesized_column_list(Optional, is_mysql)?;
+                            self.expect_keyword(Keyword::VALUES)?;
+                            let values = self.parse_values(is_mysql)?;
+                            MergeClause::NotMatched {
+                                predicate,
+                                columns,
+                                values: Some(values),
+                            }
                         }
                     }
                     Some(_) => {
