@@ -19,19 +19,19 @@ fi
 echo "==> Running corpus tests..."
 cd "$REPO_ROOT"
 
-# Run tests (continue on error to get partial results)
-# Set RUST_MIN_STACK to 4MB to handle deeply nested queries without excessive memory
-# Use nextest for better timeout handling (see .config/nextest.toml)
-RUST_MIN_STACK=4194304 cargo nextest run --test sqlparser_corpus --no-fail-fast 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
+mkdir -p "$RESULTS_DIR"
+
+# Build and run the standalone corpus-runner binary (replaces old libtest-mimic harness)
+cargo build --release --bin corpus-runner 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log"
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 \
+    "$REPO_ROOT/target/release/corpus-runner" "$REPO_ROOT/tests/corpus" 2>&1 \
+    | tee -a "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
 
 # Check if report was generated
 if [ ! -f "$REPO_ROOT/target/corpus-report.json" ]; then
     echo "❌ Error: corpus-report.json not generated"
     exit 1
 fi
-
-# Create results directory if it doesn't exist
-mkdir -p "$RESULTS_DIR"
 
 # Copy report to timestamped file
 cp "$REPO_ROOT/target/corpus-report.json" "$OUTPUT_FILE"
