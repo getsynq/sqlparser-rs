@@ -5766,7 +5766,7 @@ impl<'a> Parser<'a> {
             None
         };
         self.expect_token(&Token::LParen)?;
-        let columns = self.parse_comma_separated(Parser::parse_order_by_expr)?;
+        let columns = self.parse_comma_separated(Parser::parse_create_index_column)?;
         self.expect_token(&Token::RParen)?;
 
         let include = if self.parse_keyword(Keyword::INCLUDE) {
@@ -13455,6 +13455,78 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse an expression, optionally followed by ASC or DESC (used in ORDER BY)
+    /// Parse a column specification for `CREATE INDEX`. Accepts the same
+    /// syntax as `parse_order_by_expr` plus PostgreSQL's optional operator
+    /// class name (e.g. `gist_trgm_ops`) between the expression and the
+    /// `ASC`/`DESC`/`NULLS ...` tail. The operator class is consumed but
+    /// not preserved in the AST — it is not a column reference, so lineage
+    /// analysis is unaffected. `COLLATE` is consumed by `parse_expr` itself.
+    pub fn parse_create_index_column(&mut self) -> Result<OrderByExpr, ParserError> {
+        let expr = self.parse_expr()?;
+
+        // Optional PostgreSQL operator class: a bare identifier (not a
+        // reserved index-column keyword) optionally followed by
+        // `(param = value, ...)`.
+        if let Token::Word(w) = &self.peek_token_ref().token {
+            if !matches!(
+                w.keyword,
+                Keyword::ASC | Keyword::DESC | Keyword::NULLS | Keyword::WITH
+            ) && w.quote_style.is_none()
+            {
+                // Look ahead to confirm this is followed by `,`, `)`,
+                // `(`, or an ordering keyword — not an operator (which
+                // would mean we're still inside an expression).
+                let follow = &self.peek_nth_token_ref(1).token;
+                if matches!(follow, Token::Comma | Token::RParen | Token::LParen)
+                    || matches!(
+                        follow,
+                        Token::Word(fw)
+                            if matches!(
+                                fw.keyword,
+                                Keyword::ASC | Keyword::DESC | Keyword::NULLS
+                            )
+                    )
+                {
+                    let _opclass = self.parse_identifier(false)?;
+                    if self.consume_token(&Token::LParen) {
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => break,
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let asc = if self.parse_keyword(Keyword::ASC) {
+            Some(true)
+        } else if self.parse_keyword(Keyword::DESC) {
+            Some(false)
+        } else {
+            None
+        };
+
+        let nulls_first = if self.parse_keywords(&[Keyword::NULLS, Keyword::FIRST]) {
+            Some(true)
+        } else if self.parse_keywords(&[Keyword::NULLS, Keyword::LAST]) {
+            Some(false)
+        } else {
+            None
+        };
+
+        Ok(OrderByExpr {
+            expr,
+            asc,
+            nulls_first,
+            with_fill: None,
+        })
+    }
+
     pub fn parse_order_by_expr(&mut self) -> Result<OrderByExpr, ParserError> {
         let expr = self.parse_expr()?;
 
