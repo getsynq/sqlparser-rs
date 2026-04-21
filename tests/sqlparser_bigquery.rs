@@ -1670,12 +1670,8 @@ fn test_create_table_default_collate() {
 
 #[test]
 fn test_aggregate_having_bound() {
-    bigquery().verified_stmt(
-        "SELECT ANY_VALUE(fruit HAVING MAX sold) FROM fruits",
-    );
-    bigquery().verified_stmt(
-        "SELECT ANY_VALUE(fruit HAVING MIN sold) FROM fruits",
-    );
+    bigquery().verified_stmt("SELECT ANY_VALUE(fruit HAVING MAX sold) FROM fruits");
+    bigquery().verified_stmt("SELECT ANY_VALUE(fruit HAVING MIN sold) FROM fruits");
     bigquery().verified_stmt(
         "SELECT category, ANY_VALUE(product HAVING MAX price), ANY_VALUE(product HAVING MIN cost) FROM products GROUP BY category",
     );
@@ -1809,6 +1805,10 @@ fn parse_expr_wildcard() {
         "SELECT CAST(STRUCT(EXISTS(SELECT 1 FROM tbl_1 WHERE col_1 = 'val')) AS STRUCT<BOOL>).* FROM t",
         "SELECT CAST(STRUCT(EXISTS (SELECT 1 FROM tbl_1 WHERE col_1 = 'val')) AS STRUCT<BOOL>).* FROM t",
     );
+    // Generic function-call struct wildcard: `IF(...).*`
+    bigquery().verified_stmt("SELECT IF(a IS NULL, b, c).* FROM t");
+    bigquery()
+        .verified_stmt("SELECT t.*, IF(NOT a.b IS NULL, a, c).*, x FROM t LEFT JOIN u ON t.a = u.a");
 }
 
 #[test]
