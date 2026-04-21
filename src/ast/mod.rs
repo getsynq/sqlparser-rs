@@ -1241,7 +1241,13 @@ impl fmt::Display for Expr {
                 write!(f, ")")
             }
             Expr::Tuple(exprs) => {
-                write!(f, "({})", display_comma_separated(exprs))
+                if exprs.len() == 1 {
+                    // Single-element tuple — render with trailing comma so
+                    // it roundtrips instead of collapsing to `(expr)`.
+                    write!(f, "({},)", exprs[0])
+                } else {
+                    write!(f, "({})", display_comma_separated(exprs))
+                }
             }
             Expr::Struct { values, fields } => {
                 if !fields.is_empty() {

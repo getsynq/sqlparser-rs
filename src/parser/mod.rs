@@ -1300,11 +1300,22 @@ impl<'a> Parser<'a> {
                         self.prev_token();
                         Expr::Subquery(self.parse_boxed_query()?)
                     } else {
-                        let exprs = self.parse_comma_separated(Parser::parse_expr)?;
-                        match exprs.len() {
-                            0 => unreachable!(), // parse_comma_separated ensures 1 or more
-                            1 => Expr::Nested(Box::new(exprs.into_iter().next().unwrap())),
-                            _ => Expr::Tuple(exprs),
+                        let mut exprs = vec![self.parse_expr()?];
+                        let mut trailing_comma = false;
+                        while self.consume_token(&Token::Comma) {
+                            // ClickHouse allows `(expr,)` as a single-element tuple literal.
+                            if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                                && matches!(self.peek_token_ref().token, Token::RParen)
+                            {
+                                trailing_comma = true;
+                                break;
+                            }
+                            exprs.push(self.parse_expr()?);
+                        }
+                        if exprs.len() == 1 && !trailing_comma {
+                            Expr::Nested(Box::new(exprs.into_iter().next().unwrap()))
+                        } else {
+                            Expr::Tuple(exprs)
                         }
                     };
                 self.expect_token(&Token::RParen)?;

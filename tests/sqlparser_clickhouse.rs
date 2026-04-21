@@ -1767,6 +1767,13 @@ fn clickhouse_and_generic() -> TestedDialects {
 }
 
 #[test]
+fn parse_single_element_tuple_with_trailing_comma() {
+    // ClickHouse treats `(expr,)` as a single-element tuple literal.
+    clickhouse_and_generic().verified_stmt("SELECT tupleConcat((1, 2), ('a',), (true, false))");
+    clickhouse_and_generic().verified_stmt("SELECT (1,)");
+}
+
+#[test]
 fn parse_grant_on_wildcard() {
     // ClickHouse: GRANT privilege ON *.* TO user (wildcard database.table)
     clickhouse_and_generic().verified_stmt("GRANT SELECT ON *.* TO john");
