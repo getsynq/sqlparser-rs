@@ -2969,10 +2969,28 @@ impl<'a> Parser<'a> {
                 self.parse_pg_try_cast(expr)
             }
         } else if Token::ExclamationMark == tok {
-            // Snowflake model method syntax: model!PREDICT(args)
+            // Snowflake model method syntax: model!PREDICT(args) or MODEL(...)!PREDICT(args)
             if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+                // Simple case: identifier receiver, fold method into ObjectName
                 if let Some(method_name) = self.parse_model_method_name(&expr) {
                     return self.parse_function(method_name);
+                }
+                // General case: receiver is a function call or other expression.
+                // Parse the method call and wrap in JsonAccess with ExclamationMark.
+                if matches!(&self.peek_token().token, Token::Word(_))
+                    && self.peek_nth_token_ref(1).token == Token::LParen
+                {
+                    let method_tok = self.next_token();
+                    let method_name = match method_tok.token {
+                        Token::Word(w) => ObjectName(vec![Ident::new(w.value)]),
+                        _ => unreachable!(),
+                    };
+                    let right = self.parse_function(method_name)?;
+                    return Ok(Expr::JsonAccess {
+                        left: Box::new(expr),
+                        operator: JsonOperator::ExclamationMark,
+                        right: Box::new(right),
+                    });
                 }
             }
             // PostgreSQL factorial operation

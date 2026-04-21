@@ -2113,6 +2113,11 @@ fn test_snowflake_model_method_syntax() {
 
     // Model method with qualified object wildcard
     snowflake().verified_stmt("SELECT m!PREDICT(INPUT_DATA => {tbl.*}) AS p FROM tbl");
+
+    // Model method call on a function-result receiver, e.g. MODEL(...)!PREDICT(...)
+    snowflake().verified_stmt(
+        "SELECT MODEL(schema.classifier, 'DEFAULT')!PREDICT(col_1, col_2) FROM tbl",
+    );
 }
 
 #[test]

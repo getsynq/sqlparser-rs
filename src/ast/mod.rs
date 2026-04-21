@@ -340,6 +340,8 @@ pub enum JsonOperator {
     /// jsonb ?& text[] -> boolean: Do all of the strings in the text array exist as
     /// top-level keys or array elements?
     QuestionAnd,
+    /// ! used by Snowflake for ML model method invocation, e.g. `MODEL(...)!PREDICT(args)`
+    ExclamationMark,
 }
 
 impl fmt::Display for JsonOperator {
@@ -372,6 +374,7 @@ impl fmt::Display for JsonOperator {
             JsonOperator::AtAt => write!(f, "@@"),
             JsonOperator::QuestionPipe => write!(f, "?|"),
             JsonOperator::QuestionAnd => write!(f, "?&"),
+            JsonOperator::ExclamationMark => write!(f, "!"),
         }
     }
 }
@@ -1268,7 +1271,10 @@ impl fmt::Display for Expr {
                 operator,
                 right,
             } => {
-                if operator == &JsonOperator::Colon || operator == &JsonOperator::Period {
+                if operator == &JsonOperator::Colon
+                    || operator == &JsonOperator::Period
+                    || operator == &JsonOperator::ExclamationMark
+                {
                     write!(f, "{left}{operator}{right}")
                 } else {
                     write!(f, "{left} {operator} {right}")
