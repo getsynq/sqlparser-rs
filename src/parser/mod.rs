@@ -11089,6 +11089,17 @@ impl<'a> Parser<'a> {
         } else if self.parse_keyword(Keyword::LATERAL) {
             // LATERAL must always be followed by a subquery or table function.
             if self.consume_token(&Token::LParen) {
+                // Snowflake allows `LATERAL ( TABLE(func(...)) )` — a TABLE
+                // function wrapped in an extra pair of parens. Detect and
+                // unwrap so the inner table function parses like a normal one.
+                if self.parse_keyword_with_tokens(Keyword::TABLE, &[Token::LParen]) {
+                    let expr = self.parse_expr()?;
+                    self.expect_token(&Token::RParen)?;
+                    self.expect_token(&Token::RParen)?;
+                    let alias =
+                        self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+                    return Ok(TableFactor::TableFunction { expr, alias });
+                }
                 self.parse_derived_table_factor(Lateral)
             } else {
                 let name = self.parse_object_name(false)?;
