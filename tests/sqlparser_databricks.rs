@@ -472,6 +472,9 @@ fn test_exists_higher_order_function() {
     // start a subquery, parse it as a regular function call.
     databricks().verified_stmt("SELECT EXISTS(arr, x -> x > 0) FROM tbl");
     databricks().verified_stmt("SELECT NOT EXISTS(arr, x -> x > 0) FROM tbl");
+    // First argument may be an ARRAY literal built via keyword constructors.
+    databricks().verified_stmt("SELECT EXISTS(ARRAY(1, 2, 3), x -> x IS NULL)");
+    databricks().verified_stmt("SELECT EXISTS(ARRAY(1, 2, 3), x -> x % 2 = 10)");
     // Subquery form still works.
     databricks().verified_stmt("SELECT 1 FROM tbl WHERE EXISTS (SELECT 1 FROM u)");
     databricks().verified_stmt("SELECT 1 FROM tbl WHERE NOT EXISTS (SELECT 1 FROM u)");

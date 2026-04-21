@@ -1047,14 +1047,21 @@ impl<'a> Parser<'a> {
                 Keyword::SAFE_CAST => self.parse_safe_cast_expr(),
                 Keyword::EXISTS => {
                     // Spark/Databricks overload EXISTS as a higher-order function:
-                    // `exists(array, predicate)`. Detect this form by looking for
-                    // a non-keyword identifier right after `(`, which distinguishes
-                    // it from the subquery form.
+                    // `exists(array, predicate)`. Detect this form by looking at
+                    // the token right after `(`: a bare identifier (NoKeyword) or
+                    // an array/collection constructor keyword distinguishes it
+                    // from the subquery form.
                     if dialect_of!(self is DatabricksDialect)
                         && self.peek_token_is(&Token::LParen)
                         && matches!(
                             &self.peek_nth_token(1).token,
-                            Token::Word(w) if w.keyword == Keyword::NoKeyword,
+                            Token::Word(w) if matches!(
+                                w.keyword,
+                                Keyword::NoKeyword
+                                    | Keyword::ARRAY
+                                    | Keyword::MAP
+                                    | Keyword::STRUCT
+                            ),
                         )
                     {
                         let name = ObjectName(vec![w.to_ident()]);
