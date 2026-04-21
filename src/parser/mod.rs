@@ -1034,10 +1034,7 @@ impl<'a> Parser<'a> {
                     // Detect by checking if first arg after ( is a string literal
                     if dialect_of!(self is ClickHouseDialect)
                         && self.peek_token_is(&Token::LParen)
-                        && matches!(
-                            self.peek_nth_token(1).token,
-                            Token::SingleQuotedString(_)
-                        )
+                        && matches!(self.peek_nth_token(1).token, Token::SingleQuotedString(_))
                     {
                         let name = ObjectName(vec![Ident::new("extract")]);
                         self.parse_function(name)
@@ -1086,11 +1083,17 @@ impl<'a> Parser<'a> {
                 // Oracle/Snowflake hierarchical query prefix operators
                 Keyword::PRIOR => {
                     let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
-                    Ok(Expr::UnaryOp { op: UnaryOperator::Prior, expr: Box::new(expr) })
+                    Ok(Expr::UnaryOp {
+                        op: UnaryOperator::Prior,
+                        expr: Box::new(expr),
+                    })
                 }
                 Keyword::CONNECT_BY_ROOT => {
                     let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
-                    Ok(Expr::UnaryOp { op: UnaryOperator::ConnectByRoot, expr: Box::new(expr) })
+                    Ok(Expr::UnaryOp {
+                        op: UnaryOperator::ConnectByRoot,
+                        expr: Box::new(expr),
+                    })
                 }
                 Keyword::MATCH if dialect_of!(self is MySqlDialect | GenericDialect) => {
                     self.parse_match_against()
@@ -1329,8 +1332,16 @@ impl<'a> Parser<'a> {
             self.parse_optional_args_with_orderby()?;
 
         // ClickHouse parametric aggregate functions: func(params)(args)
-        let (parameters, args, distinct, on_overflow, order_by, limit, null_treatment, having_bound) = if self
-            .peek_token_is(&Token::LParen)
+        let (
+            parameters,
+            args,
+            distinct,
+            on_overflow,
+            order_by,
+            limit,
+            null_treatment,
+            having_bound,
+        ) = if self.peek_token_is(&Token::LParen)
             && dialect_of!(self is ClickHouseDialect | GenericDialect)
         {
             let parameters = Some(args);
@@ -1405,7 +1416,15 @@ impl<'a> Parser<'a> {
             if self.consume_token(&Token::LParen) {
                 let (args, on_overflow, order_by, limit, null_treatment, having_bound) =
                     self.parse_optional_args_with_orderby()?;
-                (args, on_overflow, order_by, limit, false, null_treatment, having_bound)
+                (
+                    args,
+                    on_overflow,
+                    order_by,
+                    limit,
+                    false,
+                    null_treatment,
+                    having_bound,
+                )
             } else {
                 (vec![], None, vec![], None, true, None, None)
             };
@@ -2052,8 +2071,12 @@ impl<'a> Parser<'a> {
             "HOUR" | "H" | "HRS" | "HOURS" => DateTimeField::Hour,
             "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => DateTimeField::Minute,
             "SECOND" | "S" | "SEC" | "SECS" | "SECONDS" => DateTimeField::Second,
-            "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS" | "MILLISECONDS" => DateTimeField::Millisecond,
-            "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS" | "MICROSECONDS" => DateTimeField::Microsecond,
+            "MILLISECOND" | "MS" | "MSEC" | "MSECS" | "MSECOND" | "MSECONDS" | "MILLISECONDS" => {
+                DateTimeField::Millisecond
+            }
+            "MICROSECOND" | "US" | "USEC" | "USECS" | "USECOND" | "USECONDS" | "MICROSECONDS" => {
+                DateTimeField::Microsecond
+            }
             "QUARTER" | "QTR" | "QTRS" | "QUARTERS" => DateTimeField::Quarter,
             "DOW" => DateTimeField::Dow,
             "DOY" => DateTimeField::Doy,
@@ -2138,7 +2161,10 @@ impl<'a> Parser<'a> {
                             return Ok(Self::date_time_field_from_str(s));
                         }
                     }
-                    self.expected("string literal in CAST expression for date/time field", next_token)
+                    self.expected(
+                        "string literal in CAST expression for date/time field",
+                        next_token,
+                    )
                 }
                 _ if dialect_of!(self is SnowflakeDialect | GenericDialect | RedshiftSqlDialect) => {
                     self.prev_token();
@@ -6385,7 +6411,8 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let column_location = if dialect_of!(self is ClickHouseDialect | DatabricksDialect | MySqlDialect | GenericDialect) {
+        let column_location = if dialect_of!(self is ClickHouseDialect | DatabricksDialect | MySqlDialect | GenericDialect)
+        {
             if self.parse_keyword(Keyword::FIRST) {
                 Some(ColumnLocation::First)
             } else if self.parse_keyword(Keyword::AFTER) {
@@ -6877,7 +6904,10 @@ impl<'a> Parser<'a> {
                     let option = self.parse_identifier(false)?.unwrap();
                     options.push(CreateTableLikeOption { including, option });
                 }
-                Ok(Some(TableConstraint::Like { table_name, options }))
+                Ok(Some(TableConstraint::Like {
+                    table_name,
+                    options,
+                }))
             }
             _ => {
                 if name.is_some() {
@@ -7459,20 +7489,14 @@ impl<'a> Parser<'a> {
             } else {
                 // Snowflake: SET SECURE, SET COMMENT = '...', etc.
                 // Hive: SET TBLPROPERTIES (...)
-                while !matches!(
-                    self.peek_token().token,
-                    Token::SemiColon | Token::EOF
-                ) {
+                while !matches!(self.peek_token().token, Token::SemiColon | Token::EOF) {
                     self.next_token();
                 }
                 vec![]
             }
         } else if self.parse_keyword(Keyword::UNSET) {
             // Snowflake: UNSET SECURE, UNSET COMMENT, etc.
-            while !matches!(
-                self.peek_token().token,
-                Token::SemiColon | Token::EOF
-            ) {
+            while !matches!(self.peek_token().token, Token::SemiColon | Token::EOF) {
                 self.next_token();
             }
             vec![]
@@ -8510,12 +8534,10 @@ impl<'a> Parser<'a> {
                     Ok(DataType::Tuple(field_defs))
                 }
                 // BigQuery: ANY TYPE (templated UDF parameter type)
-                Keyword::ANY if self.parse_keyword(Keyword::TYPE) => {
-                    Ok(DataType::Custom(
-                        ObjectName(vec![Ident::new("ANY TYPE")]),
-                        vec![],
-                    ))
-                }
+                Keyword::ANY if self.parse_keyword(Keyword::TYPE) => Ok(DataType::Custom(
+                    ObjectName(vec![Ident::new("ANY TYPE")]),
+                    vec![],
+                )),
                 _ => {
                     self.prev_token();
                     let type_name = self.parse_object_name(false)?;
@@ -9905,18 +9927,18 @@ impl<'a> Parser<'a> {
         loop {
             // Check for FULL [OUTER] UNION (BigQuery set operation with FULL prefix,
             // e.g., `SELECT ... FULL UNION ALL BY NAME SELECT ...`)
-            let full_prefix =
-                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::FULL) {
-                    let t1 = self.peek_nth_token(1).token;
-                    matches!(t1, Token::Word(ref w) if w.keyword == Keyword::UNION)
-                        || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
-                            && matches!(
-                                self.peek_nth_token(2).token,
-                                Token::Word(ref w) if w.keyword == Keyword::UNION
-                            ))
-                } else {
-                    false
-                };
+            let full_prefix = if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::FULL)
+            {
+                let t1 = self.peek_nth_token(1).token;
+                matches!(t1, Token::Word(ref w) if w.keyword == Keyword::UNION)
+                    || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                        && matches!(
+                            self.peek_nth_token(2).token,
+                            Token::Word(ref w) if w.keyword == Keyword::UNION
+                        ))
+            } else {
+                false
+            };
 
             // The query can be optionally followed by a set operator:
             let op = if full_prefix {
@@ -9939,7 +9961,8 @@ impl<'a> Parser<'a> {
             // Consume the operator tokens
             if full_prefix {
                 self.next_token(); // consume FULL
-                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::OUTER) {
+                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                {
                     self.next_token(); // consume optional OUTER
                 }
                 self.next_token(); // consume UNION
@@ -11004,6 +11027,25 @@ impl<'a> Parser<'a> {
 
     /// A table name or a parenthesized subquery, followed by optional `[AS] alias`
     pub fn parse_table_factor(&mut self) -> Result<TableFactor, ParserError> {
+        // Databricks `FROM STREAM table_name` streaming read modifier.
+        // The STREAM keyword marks the source as a streaming read; it is not
+        // preserved in the AST since the underlying table reference carries
+        // the lineage information we care about.
+        if dialect_of!(self is DatabricksDialect | GenericDialect)
+            && matches!(
+                self.peek_tokens(),
+                [
+                    Token::Word(Word {
+                        keyword: Keyword::STREAM,
+                        ..
+                    }),
+                    Token::Word(_) | Token::LParen,
+                ]
+            )
+        {
+            self.expect_keyword(Keyword::STREAM)?;
+            return self.parse_table_factor();
+        }
         if dialect_of!(self is BigQueryDialect) && self.parse_keyword(Keyword::EXTERNAL_QUERY) {
             self.expect_token(&Token::LParen)?;
             let connection_id = self.parse_value()?;
@@ -11396,9 +11438,7 @@ impl<'a> Parser<'a> {
                     Keyword::UNPIVOT => self.parse_unpivot_table_factor(table)?,
                     Keyword::TABLESAMPLE => self.parse_tablesample_table_factor(table, false)?,
                     Keyword::SAMPLE => self.parse_tablesample_table_factor(table, true)?,
-                    Keyword::MATCH_RECOGNIZE => {
-                        self.parse_match_recognize_table_factor(table)?
-                    }
+                    Keyword::MATCH_RECOGNIZE => self.parse_match_recognize_table_factor(table)?,
                     _ => unreachable!(),
                 }
             }
@@ -11580,14 +11620,15 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::RParen)?;
 
         // Snowflake: optional DEFAULT ON NULL (value) clause
-        let default_on_null = if self.parse_keywords(&[Keyword::DEFAULT, Keyword::ON, Keyword::NULL]) {
-            self.expect_token(&Token::LParen)?;
-            let expr = self.parse_expr()?;
-            self.expect_token(&Token::RParen)?;
-            Some(expr)
-        } else {
-            None
-        };
+        let default_on_null =
+            if self.parse_keywords(&[Keyword::DEFAULT, Keyword::ON, Keyword::NULL]) {
+                self.expect_token(&Token::LParen)?;
+                let expr = self.parse_expr()?;
+                self.expect_token(&Token::RParen)?;
+                Some(expr)
+            } else {
+                None
+            };
 
         self.expect_token(&Token::RParen)?;
         let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
@@ -12531,7 +12572,14 @@ impl<'a> Parser<'a> {
             };
 
             self.expect_token(&Token::RParen)?;
-            Ok((args, on_overflow, order_by, limit, null_treatment, having_bound))
+            Ok((
+                args,
+                on_overflow,
+                order_by,
+                limit,
+                null_treatment,
+                having_bound,
+            ))
         }
     }
 
@@ -12622,8 +12670,7 @@ impl<'a> Parser<'a> {
                 if self.parse_keyword(Keyword::AS) {
                     if self.peek_token_is(&Token::LParen) {
                         self.expect_token(&Token::LParen)?;
-                        let aliases =
-                            self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                        let aliases = self.parse_comma_separated(|p| p.parse_identifier(false))?;
                         self.expect_token(&Token::RParen)?;
                         return Ok(SelectItem::ExprWithMultipleAliases {
                             expr: expr_with_location,
