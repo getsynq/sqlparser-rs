@@ -133,8 +133,8 @@ fn parse_array_access_expr() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         },
         select
     );
@@ -1698,6 +1698,15 @@ fn parse_columns_with_apply_transformers() {
         }
         _ => panic!("Expected ColumnsWithTransformers"),
     }
+}
+
+#[test]
+fn parse_wildcard_with_apply_transformers() {
+    // ClickHouse `SELECT * APPLY(func)` wildcard column transformer.
+    // https://clickhouse.com/docs/sql-reference/statements/select#apply
+    clickhouse_and_generic().verified_stmt("SELECT * APPLY(sum) FROM columns_transformers");
+    clickhouse_and_generic()
+        .verified_stmt("SELECT * APPLY(toString) APPLY(length) FROM columns_transformers");
 }
 
 #[test]

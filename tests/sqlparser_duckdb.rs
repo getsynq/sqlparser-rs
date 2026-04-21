@@ -164,6 +164,7 @@ fn test_select_union_by_name() {
                 opt_except: None,
                 opt_rename: None,
                 opt_replace: None,
+                opt_apply: vec![],
             })
             .empty_span()],
             into: None,
@@ -204,6 +205,7 @@ fn test_select_union_by_name() {
                 opt_except: None,
                 opt_rename: None,
                 opt_replace: None,
+                opt_apply: vec![],
             })
             .empty_span()],
             into: None,
@@ -253,6 +255,7 @@ fn test_select_union_by_name() {
                 opt_except: None,
                 opt_rename: None,
                 opt_replace: None,
+                opt_apply: vec![],
             })
             .empty_span()],
             into: None,
@@ -293,6 +296,7 @@ fn test_select_union_by_name() {
                 opt_except: None,
                 opt_rename: None,
                 opt_replace: None,
+                opt_apply: vec![],
             })
             .empty_span()],
             into: None,

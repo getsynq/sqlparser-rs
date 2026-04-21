@@ -618,6 +618,10 @@ pub struct WildcardAdditionalOptions {
     ///  BigQuery syntax: <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_replace>
     ///  Clickhouse syntax: <https://clickhouse.com/docs/en/sql-reference/statements/select#replace>
     pub opt_replace: Option<ReplaceSelectItem>,
+    /// `[APPLY(func) ...]` ClickHouse column transformer applied to a wildcard.
+    /// Multiple APPLYs can be chained, each wrapping the previous result.
+    /// <https://clickhouse.com/docs/sql-reference/statements/select#apply>
+    pub opt_apply: Vec<Ident>,
 }
 
 impl fmt::Display for WildcardAdditionalOptions {
@@ -633,6 +637,9 @@ impl fmt::Display for WildcardAdditionalOptions {
         }
         if let Some(replace) = &self.opt_replace {
             write!(f, " {replace}")?;
+        }
+        for func in &self.opt_apply {
+            write!(f, " APPLY({func})")?;
         }
         Ok(())
     }

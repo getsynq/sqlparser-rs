@@ -1665,6 +1665,7 @@ fn parse_tablesample() {
             opt_except: None,
             opt_rename: None,
             opt_replace: None,
+            opt_apply: vec![],
         })
         .empty_span()],
         into: None,
