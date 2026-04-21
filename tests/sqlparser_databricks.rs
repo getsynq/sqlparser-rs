@@ -246,6 +246,13 @@ fn test_create_table_with_location() {
 }
 
 #[test]
+fn test_alter_table_set_tblproperties() {
+    databricks_and_generic().verified_stmt(
+        "ALTER TABLE t SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name', 'delta.enableDeletionVectors' = 'true')",
+    );
+}
+
+#[test]
 fn test_cross_join() {
     databricks_and_generic().verified_stmt("SELECT * FROM tbl CROSS JOIN tbl2 ON tbl.id = tbl2.id");
 }

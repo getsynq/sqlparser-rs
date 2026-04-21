@@ -135,6 +135,8 @@ pub enum AlterTableOperation {
     },
     /// BigQuery: `SET DEFAULT COLLATE 'collation'`
     SetDefaultCollate { collation: String },
+    /// Databricks/Hive: `SET TBLPROPERTIES ('key' = 'value', ...)`
+    SetTblProperties { properties: Vec<SqlOption> },
     /// ClickHouse: `MODIFY QUERY SELECT ...` (materialized views)
     ModifyQuery { query: Query },
 
@@ -338,6 +340,13 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::SetDefaultCollate { collation } => {
                 write!(f, "SET DEFAULT COLLATE '{collation}'")
+            }
+            AlterTableOperation::SetTblProperties { properties } => {
+                write!(
+                    f,
+                    "SET TBLPROPERTIES ({})",
+                    display_comma_separated(properties)
+                )
             }
             AlterTableOperation::ModifyQuery { query } => {
                 write!(f, "MODIFY QUERY {query}")
