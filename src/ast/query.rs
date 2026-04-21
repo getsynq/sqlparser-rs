@@ -1135,6 +1135,7 @@ pub enum TableFactor {
         connection_id: Value,
         external_database_query: Value,
         options: Option<Value>,
+        alias: Option<TableAlias>,
     },
     /// Represents a parenthesized table factor. The SQL spec only allows a
     /// join expression (`(foo <JOIN> bar [ <JOIN> baz ... ])`) to be nested,
@@ -1332,6 +1333,7 @@ impl fmt::Display for TableFactor {
                 connection_id,
                 external_database_query,
                 options,
+                alias,
             } => {
                 write!(
                     f,
@@ -1343,6 +1345,9 @@ impl fmt::Display for TableFactor {
                     write!(f, ", {options}")?;
                 }
                 write!(f, ")")?;
+                if let Some(alias) = alias {
+                    write!(f, " AS {alias}")?;
+                }
                 Ok(())
             }
             TableFactor::NestedJoin {

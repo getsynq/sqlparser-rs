@@ -11172,10 +11172,12 @@ impl<'a> Parser<'a> {
                 None
             };
             self.expect_token(&Token::RParen)?;
+            let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
             Ok(TableFactor::ExternalQuery {
                 connection_id,
                 external_database_query,
                 options,
+                alias,
             })
         } else if self.parse_keyword(Keyword::LATERAL) {
             // LATERAL must always be followed by a subquery or table function.
