@@ -3576,9 +3576,24 @@ fn parse_create_function() {
                     " BEGIN RETURN i + 1; END; ".into()
                 )),
                 as_query: None,
-                using: None
+                using: None,
+                strict: false,
             },
         }
+    );
+}
+
+#[test]
+fn parse_create_function_strict() {
+    // PostgreSQL STRICT is a function attribute meaning "RETURNS NULL ON NULL INPUT".
+    // It can appear either before or after IMMUTABLE/STABLE/VOLATILE.
+    let sql = "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE SQL IMMUTABLE STRICT AS 'select $1 + $2;'";
+    pg().verified_stmt(sql);
+
+    let sql = "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE plpgsql STRICT IMMUTABLE AS $$ BEGIN RETURN $1 + $2; END; $$";
+    pg().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION add(INTEGER, INTEGER) RETURNS INTEGER LANGUAGE plpgsql IMMUTABLE STRICT AS $$ BEGIN RETURN $1 + $2; END; $$",
     );
 }
 
