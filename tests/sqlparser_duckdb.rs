@@ -36,7 +36,9 @@ fn duckdb_and_generic() -> TestedDialects {
 fn test_select_wildcard_with_exclude() {
     let select = duckdb().verified_only_select("SELECT * EXCLUDE (col_a) FROM data");
     let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
-        opt_exclude: Some(ExcludeSelectItem::Multiple(vec![Ident::new("col_a")])),
+        opt_exclude: Some(ExcludeSelectItem::Multiple(vec![ObjectName(vec![
+            Ident::new("col_a"),
+        ])])),
         ..Default::default()
     })
     .empty_span();
@@ -47,7 +49,9 @@ fn test_select_wildcard_with_exclude() {
     let expected = SelectItem::QualifiedWildcard(
         ObjectName(vec![Ident::new("name")]),
         WildcardAdditionalOptions {
-            opt_exclude: Some(ExcludeSelectItem::Single(Ident::new("department_id"))),
+            opt_exclude: Some(ExcludeSelectItem::Single(ObjectName(vec![Ident::new(
+                "department_id",
+            )]))),
             ..Default::default()
         },
     )
@@ -58,9 +62,22 @@ fn test_select_wildcard_with_exclude() {
         .verified_only_select("SELECT * EXCLUDE (department_id, employee_id) FROM employee_table");
     let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
         opt_exclude: Some(ExcludeSelectItem::Multiple(vec![
-            Ident::new("department_id"),
-            Ident::new("employee_id"),
+            ObjectName(vec![Ident::new("department_id")]),
+            ObjectName(vec![Ident::new("employee_id")]),
         ])),
+        ..Default::default()
+    })
+    .empty_span();
+    assert_eq!(expected, select.projection[0]);
+
+    // Qualified column names in EXCLUDE
+    let select =
+        duckdb().verified_only_select("SELECT * EXCLUDE (tbl_2.col_1) FROM tbl_1 JOIN tbl_2");
+    let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
+        opt_exclude: Some(ExcludeSelectItem::Multiple(vec![ObjectName(vec![
+            Ident::new("tbl_2"),
+            Ident::new("col_1"),
+        ])])),
         ..Default::default()
     })
     .empty_span();
@@ -176,8 +193,8 @@ fn test_select_union_by_name() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         }))),
         right: Box::<SetExpr>::new(SetExpr::Select(Box::new(Select {
             distinct: None,
@@ -216,8 +233,8 @@ fn test_select_union_by_name() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         }))),
     });
 
@@ -265,8 +282,8 @@ fn test_select_union_by_name() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         }))),
         right: Box::<SetExpr>::new(SetExpr::Select(Box::new(Select {
             distinct: None,
@@ -305,8 +322,8 @@ fn test_select_union_by_name() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         }))),
     });
     assert_eq!(ast.body, expected);
@@ -442,7 +459,9 @@ fn test_positional_reference() {
 #[test]
 fn test_select_wildcard_with_replace() {
     duckdb().verified_only_select("SELECT * REPLACE (col_a + 1 AS col_a) FROM data");
-    duckdb().verified_only_select("SELECT * REPLACE (col_a + 1 AS col_a, col_b * 2 AS col_b) FROM data");
+    duckdb().verified_only_select(
+        "SELECT * REPLACE (col_a + 1 AS col_a, col_b * 2 AS col_b) FROM data",
+    );
 }
 
 #[test]

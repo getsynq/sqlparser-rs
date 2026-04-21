@@ -539,7 +539,9 @@ fn snowflake_and_generic() -> TestedDialects {
 fn test_select_wildcard_with_exclude() {
     let select = snowflake_and_generic().verified_only_select("SELECT * EXCLUDE (col_a) FROM data");
     let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
-        opt_exclude: Some(ExcludeSelectItem::Multiple(vec![Ident::new("col_a")])),
+        opt_exclude: Some(ExcludeSelectItem::Multiple(vec![ObjectName(vec![
+            Ident::new("col_a"),
+        ])])),
         ..Default::default()
     })
     .empty_span();
@@ -550,7 +552,9 @@ fn test_select_wildcard_with_exclude() {
     let expected = SelectItem::QualifiedWildcard(
         ObjectName(vec![Ident::new("name")]),
         WildcardAdditionalOptions {
-            opt_exclude: Some(ExcludeSelectItem::Single(Ident::new("department_id"))),
+            opt_exclude: Some(ExcludeSelectItem::Single(ObjectName(vec![Ident::new(
+                "department_id",
+            )]))),
             ..Default::default()
         },
     )
@@ -561,8 +565,8 @@ fn test_select_wildcard_with_exclude() {
         .verified_only_select("SELECT * EXCLUDE (department_id, employee_id) FROM employee_table");
     let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
         opt_exclude: Some(ExcludeSelectItem::Multiple(vec![
-            Ident::new("department_id"),
-            Ident::new("employee_id"),
+            ObjectName(vec![Ident::new("department_id")]),
+            ObjectName(vec![Ident::new("employee_id")]),
         ])),
         ..Default::default()
     })
@@ -612,7 +616,9 @@ fn test_select_wildcard_with_exclude_and_rename() {
     let select = snowflake_and_generic()
         .verified_only_select("SELECT * EXCLUDE col_z RENAME col_a AS col_b FROM data");
     let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
-        opt_exclude: Some(ExcludeSelectItem::Single(Ident::new("col_z"))),
+        opt_exclude: Some(ExcludeSelectItem::Single(ObjectName(vec![Ident::new(
+            "col_z",
+        )]))),
         opt_rename: Some(RenameSelectItem::Single(IdentWithAlias {
             ident: Ident::new("col_a"),
             alias: Ident::new("col_b"),
