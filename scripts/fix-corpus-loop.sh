@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the corpus fix loop using Claude Code (Sonnet) until no progress is made.
+# Runs the corpus fix loop using Claude Code (Opus) until no progress is made.
 # Usage: ./scripts/fix-corpus-loop.sh [max_iterations] [-- extra claude flags...]
 #
 # Examples:
@@ -52,7 +52,7 @@ print(f\"  Failed: {s['total_failed']}\")
 "
 fi
 
-echo "Starting corpus fix loop (model: sonnet, max iterations: ${MAX_ITERATIONS:-unlimited})"
+echo "Starting corpus fix loop (model: opus, max iterations: ${MAX_ITERATIONS:-unlimited})"
 if [ ${#EXTRA_ARGS[@]} -gt 0 ]; then
   echo "Extra claude flags: ${EXTRA_ARGS[*]}"
 fi
@@ -70,10 +70,8 @@ while true; do
   echo "=== Iteration $ITERATION ($(date '+%H:%M:%S')) ==="
 
   claude \
-    --model sonnet \
+    --model opus \
     --dangerously-skip-permissions \
-    --max-budget-usd 5 \
-    --fallback-model haiku \
     --verbose \
     --output-format stream-json \
     ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
