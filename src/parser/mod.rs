@@ -10371,6 +10371,51 @@ impl<'a> Parser<'a> {
         };
 
         loop {
+            // ClickHouse: `LIMIT <n> BY <exprs>` is a per-SELECT clause that must be
+            // consumed here (not in `parse_query`) when it is followed by a set
+            // operator (UNION / INTERSECT / EXCEPT), otherwise the outer
+            // `parse_query` would treat the set operator as an unexpected token.
+            if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                && matches!(expr, SetExpr::Select(_))
+                && matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::LIMIT)
+            {
+                let saved_index = self.index;
+                self.next_token(); // consume LIMIT
+                let consumed = (|| -> Option<(Expr, Vec<Expr>)> {
+                    let limit_expr = self.parse_limit().ok()??;
+                    if !self.parse_keyword(Keyword::BY) {
+                        return None;
+                    }
+                    let limit_by = self.parse_comma_separated(Parser::parse_expr).ok()?;
+                    if self
+                        .parse_set_operator(&self.peek_token_kind().clone())
+                        .is_none()
+                    {
+                        return None;
+                    }
+                    Some((limit_expr, limit_by))
+                })();
+                match consumed {
+                    Some((limit_expr, limit_by)) => {
+                        expr = SetExpr::Query(Box::new(Query {
+                            with: None,
+                            body: Box::new(expr),
+                            order_by: None,
+                            limit: Some(limit_expr),
+                            limit_by,
+                            offset: None,
+                            fetch: None,
+                            locks: vec![],
+                            settings: None,
+                            format_clause: None,
+                        }));
+                    }
+                    None => {
+                        self.index = saved_index;
+                    }
+                }
+            }
+
             // Check for FULL [OUTER] UNION (BigQuery set operation with FULL prefix,
             // e.g., `SELECT ... FULL UNION ALL BY NAME SELECT ...`)
             let full_prefix = if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::FULL)
