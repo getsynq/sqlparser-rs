@@ -2080,6 +2080,20 @@ fn test_revoke_from_application() {
 }
 
 #[test]
+fn test_revoke_grantee_identifier_wrapper() {
+    // Snowflake IDENTIFIER(...) wrapper evaluates to an object name at runtime.
+    // Accept it on the grantee name and unwrap to the inner literal.
+    snowflake().one_statement_parses_to(
+        "REVOKE SELECT ON TABLE tbl_1 FROM ROLE IDENTIFIER('DUST_AI_TEAM') CASCADE",
+        "REVOKE SELECT ON TABLE tbl_1 FROM ROLE 'DUST_AI_TEAM' CASCADE",
+    );
+    snowflake().one_statement_parses_to(
+        "GRANT SELECT ON TABLE tbl_1 TO ROLE IDENTIFIER('analyst')",
+        "GRANT SELECT ON TABLE tbl_1 TO ROLE 'analyst'",
+    );
+}
+
+#[test]
 fn test_snowflake_model_method_syntax() {
     // Simple model method call
     snowflake().verified_stmt("SELECT model!PREDICT(1)");

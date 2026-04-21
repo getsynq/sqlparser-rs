@@ -11902,7 +11902,30 @@ impl<'a> Parser<'a> {
             }
             _ => None,
         };
-        let name = self.parse_identifier(false).map(WithSpan::unwrap)?;
+        // Snowflake: GRANT/REVOKE ... TO/FROM ROLE IDENTIFIER('role_name')
+        // The IDENTIFIER(...) wrapper evaluates to an object name at runtime.
+        // Extract the inner literal as the grantee name for lineage purposes.
+        let name = if matches!(self.peek_token_ref().token, Token::Word(ref w) if w.value.eq_ignore_ascii_case("IDENTIFIER"))
+            && matches!(self.peek_nth_token_ref(1).token, Token::LParen)
+        {
+            self.next_token(); // IDENTIFIER
+            self.expect_token(&Token::LParen)?;
+            let inner = match self.next_token().token {
+                Token::SingleQuotedString(s) => Ident::with_quote('\'', s),
+                Token::DoubleQuotedString(s) => Ident::with_quote('"', s),
+                Token::Word(w) => w.to_ident(),
+                other => {
+                    return Err(ParserError::ParserError(
+                        format!("Expected string literal inside IDENTIFIER(), found: {other}")
+                            .into(),
+                    ))
+                }
+            };
+            self.expect_token(&Token::RParen)?;
+            inner
+        } else {
+            self.parse_identifier(false).map(WithSpan::unwrap)?
+        };
         Ok(Grantee { grantee_type, name })
     }
 
