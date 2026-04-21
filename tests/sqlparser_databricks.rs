@@ -376,6 +376,21 @@ fn test_alter_table_add_column_after() {
 }
 
 #[test]
+fn test_from_stream_modifier() {
+    // Databricks structured streaming: `FROM STREAM table_name` reads the
+    // source as a streaming table. The STREAM keyword is consumed; the
+    // underlying table reference is preserved in the AST for lineage.
+    databricks_and_generic().one_statement_parses_to(
+        "SELECT a FROM STREAM db.sch.tbl",
+        "SELECT a FROM db.sch.tbl",
+    );
+    databricks_and_generic().one_statement_parses_to(
+        "SELECT a FROM STREAM db.sch.tbl AS t",
+        "SELECT a FROM db.sch.tbl AS t",
+    );
+}
+
+#[test]
 fn test_explode_multi_alias() {
     // Databricks/Spark generator function with multiple column aliases
     // EXPLODE(col) AS (key, value) - returns multiple columns
