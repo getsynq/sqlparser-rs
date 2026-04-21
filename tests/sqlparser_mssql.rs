@@ -120,8 +120,8 @@ fn parse_create_procedure() {
                     named_window: vec![],
                     qualify: None,
                     value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                    start_with: None,
+                    connect_by: None,
                 })))
             }))],
             params: Some(vec![
@@ -580,8 +580,8 @@ fn parse_substring_in_select() {
                         named_window: vec![],
                         qualify: None,
                         value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                        start_with: None,
+                        connect_by: None,
                     }))),
                     order_by: None,
                     limit: None,

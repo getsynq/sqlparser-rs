@@ -63,7 +63,9 @@ fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
     // newlines/CRs were escaped as literal \n / \r sequences. Unescape them before parsing
     // so the parser sees proper whitespace.
     let sql = if sql.contains("\\n") || sql.contains("\\r") {
-        sql.replace("\\r\\n", "\n").replace("\\r", "\r").replace("\\n", "\n")
+        sql.replace("\\r\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\n", "\n")
     } else {
         sql
     };
