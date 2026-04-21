@@ -4717,6 +4717,22 @@ impl<'a> Parser<'a> {
                 body.behavior = Some(FunctionBehavior::Volatile);
             } else if self.parse_keyword(Keyword::STRICT) {
                 body.strict = true;
+            } else if self.parse_keywords(&[
+                Keyword::RETURNS,
+                Keyword::NULL,
+                Keyword::ON,
+                Keyword::NULL,
+                Keyword::INPUT,
+            ]) {
+                // PostgreSQL: alias for STRICT
+                body.strict = true;
+            } else if self.parse_keywords(&[
+                Keyword::CALLED,
+                Keyword::ON,
+                Keyword::NULL,
+                Keyword::INPUT,
+            ]) {
+                // PostgreSQL: default behavior (opposite of STRICT) — consume keywords
             } else if self.parse_keyword(Keyword::RETURN) {
                 if self
                     .parse_one_of_keywords(&[Keyword::SELECT, Keyword::WITH])
