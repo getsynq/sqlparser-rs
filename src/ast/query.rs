@@ -118,6 +118,7 @@ pub enum SetExpr {
     Values(Values),
     Insert(Statement),
     Update(Statement),
+    Delete(Statement),
     Table(Box<Table>),
     /// `DEFAULT VALUES` — the body of `INSERT INTO t DEFAULT VALUES`
     /// (PostgreSQL / SQL standard).
@@ -143,6 +144,7 @@ impl fmt::Display for SetExpr {
             SetExpr::Values(v) => write!(f, "{v}"),
             SetExpr::Insert(v) => write!(f, "{v}"),
             SetExpr::Update(v) => write!(f, "{v}"),
+            SetExpr::Delete(v) => write!(f, "{v}"),
             SetExpr::Table(t) => write!(f, "{t}"),
             SetExpr::DefaultValues => write!(f, "DEFAULT VALUES"),
             SetExpr::SetOperation {

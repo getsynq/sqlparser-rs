@@ -4222,3 +4222,15 @@ fn parse_create_view_with_check_option() {
         "CREATE VIEW v AS SELECT * FROM t WHERE x > 0",
     );
 }
+
+#[test]
+fn parse_with_delete() {
+    // PostgreSQL allows DELETE as the top-level statement of a WITH clause,
+    // and also allows DELETE with RETURNING inside a CTE.
+    pg_and_generic().verified_stmt("WITH a AS (SELECT * FROM b) DELETE FROM a");
+    pg_and_generic().verified_stmt(
+        "WITH moved_rows AS (DELETE FROM products WHERE c > 0 RETURNING *) \
+         INSERT INTO products_log SELECT * FROM moved_rows",
+    );
+    pg_and_generic().verified_stmt("WITH t AS (DELETE FROM foo) DELETE FROM bar");
+}
