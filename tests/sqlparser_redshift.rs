@@ -189,6 +189,13 @@ fn parse_delimited_identifiers() {
 }
 
 #[test]
+fn parse_create_table_as_with_column_names_only() {
+    // CREATE TABLE AS allows bare column names (no types) in Redshift/Snowflake.
+    redshift().verified_stmt("CREATE TABLE newtable (id) AS SELECT * FROM oldtable");
+    redshift().verified_stmt("CREATE TABLE tickit.public.test (c1) AS SELECT * FROM oldtable");
+}
+
+#[test]
 fn parse_like() {
     fn chk(negated: bool) {
         let sql = &format!(
@@ -592,10 +599,7 @@ fn test_redshift_array_function_call() {
 fn test_redshift_array_subscript_compound_index() {
     // Redshift supports array subscript with compound column references as index
     // e.g. col[tbl.idx] where tbl.idx is a column reference
-    redshift().one_statement_parses_to(
-        "SELECT col[tbl.idx] FROM t",
-        "SELECT col[tbl.idx] FROM t",
-    );
+    redshift().one_statement_parses_to("SELECT col[tbl.idx] FROM t", "SELECT col[tbl.idx] FROM t");
     redshift().one_statement_parses_to(
         "SELECT a FROM t WHERE col1 = arr_col[tbl.idx]",
         "SELECT a FROM t WHERE col1 = arr_col[tbl.idx]",
