@@ -420,6 +420,21 @@ fn test_explode_multi_alias() {
 }
 
 #[test]
+fn test_alter_table_add_columns_plural() {
+    // Databricks/Hive: ADD COLUMNS (col type, ...) [CASCADE]
+    databricks().verified_stmt("ALTER TABLE `db_1`.sch_1.tbl_1 ADD COLUMNS (test_column STRING)");
+    databricks()
+        .verified_stmt("ALTER TABLE tbl_1 ADD COLUMNS (a INT, b STRING, c TIMESTAMP) CASCADE");
+}
+
+#[test]
+fn test_alter_table_drop_columns_plural() {
+    // Databricks: DROP COLUMNS (c1, c2, ...)
+    databricks().verified_stmt("ALTER TABLE `db_1`.sch_1.tbl_1 DROP COLUMNS (c_name)");
+    databricks().verified_stmt("ALTER TABLE tbl_1 DROP COLUMNS IF EXISTS (a, b) CASCADE");
+}
+
+#[test]
 fn test_extract_custom_date_part() {
     // Databricks supports EXTRACT with date parts like YEAROFWEEK and WEEKOFYEAR
     // that are not reserved keywords. Parse them as custom date/time fields.
