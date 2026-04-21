@@ -1590,6 +1590,20 @@ fn parse_create_view_comment() {
 }
 
 #[test]
+fn parse_create_view_change_tracking() {
+    // Snowflake: CHANGE_TRACKING = TRUE|FALSE view property, appearing before AS.
+    // May be combined with COMMENT in either order.
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v2(one COMMENT 'bar') CHANGE_TRACKING = true AS SELECT a FROM my_table",
+        "CREATE VIEW v2 (one) AS SELECT a FROM my_table",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v2(one) COMMENT = 'fff' CHANGE_TRACKING = true AS SELECT a FROM my_table",
+        "CREATE VIEW v2 (one) COMMENT='fff' AS SELECT a FROM my_table",
+    );
+}
+
+#[test]
 fn parse_create_view_column_comment() {
     snowflake()
         .one_statement_parses_to(r#"CREATE OR REPLACE VIEW DB.SCHEMA.STORAGE_USAGE_HISTORY (DATE COMMENT 'Date of this storage usage record.', AVERAGE_STAGE_BYTES COMMENT 'Number of bytes of stage storage used.') COMMENT='See https://docs.snowflake.com/en/sql-reference/account-usage/stage_storage_usage_history.html' AS (SELECT usage_date AS date, average_stage_bytes FROM snowflake.account_usage.stage_storage_usage_history)"#,

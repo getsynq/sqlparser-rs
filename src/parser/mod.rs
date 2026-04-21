@@ -5142,6 +5142,24 @@ impl<'a> Parser<'a> {
         // Skip optional TAG (...) clause (Snowflake)
         self.parse_optional_tag_clause();
 
+        // Snowflake: CHANGE_TRACKING = TRUE|FALSE view property (before AS).
+        // Consumed and discarded — metadata flag, no lineage relevance.
+        loop {
+            if self.parse_keyword(Keyword::CHANGE_TRACKING) {
+                let _ = self.consume_token(&Token::Eq);
+                let _ = self.next_token();
+            } else if comment.is_none() && self.parse_keyword(Keyword::COMMENT) {
+                let _ = self.consume_token(&Token::Eq);
+                let next_token = self.next_token();
+                comment = match next_token.token {
+                    Token::SingleQuotedString(str) => Some(str),
+                    _ => self.expected("comment", next_token)?,
+                };
+            } else {
+                break;
+            }
+        }
+
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
         // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` (Postgres/MySQL view updatability constraint).

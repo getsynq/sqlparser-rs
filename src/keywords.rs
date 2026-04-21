@@ -150,6 +150,7 @@ define_keywords!(
     CHAIN,
     CHANGE,
     CHANGES,
+    CHANGE_TRACKING,
     CHAR,
     CHARACTER,
     CHARACTERS,
