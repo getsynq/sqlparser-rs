@@ -654,3 +654,18 @@ fn test_redshift_create_procedure_trailing_clauses() {
     let sql = "CREATE OR REPLACE PROCEDURE sp_definer() AS $$ BEGIN SELECT 1; END; $$ LANGUAGE plpgsql SECURITY DEFINER";
     redshift().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn test_redshift_column_encode() {
+    // Redshift: CREATE TABLE with per-column ENCODE <encoding>
+    redshift().verified_stmt("CREATE TABLE t (a INT ENCODE AZ64, b VARCHAR(10) ENCODE LZO)");
+    // ENCODE with COLLATE (COLLATE is normalized before ENCODE in Display)
+    redshift().one_statement_parses_to(
+        "CREATE TABLE t (a CHARACTER(1) ENCODE LZO COLLATE case_sensitive)",
+        "CREATE TABLE t (a CHARACTER(1) COLLATE case_sensitive ENCODE LZO)",
+    );
+    // ENCODE combined with NOT NULL and PRIMARY KEY at table level
+    redshift().verified_stmt(
+        "CREATE TABLE t (a INT NOT NULL ENCODE AZ64, b INT ENCODE AZ64, PRIMARY KEY (a))",
+    );
+}
