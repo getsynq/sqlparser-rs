@@ -2310,6 +2310,22 @@ fn parse_create_index_with_storage_parameters() {
 }
 
 #[test]
+fn parse_create_index_with_opclass() {
+    // PostgreSQL operator class after the indexed column
+    let sql = "CREATE INDEX wrd_trgm ON wrd USING gist(word gist_trgm_ops)";
+    pg().one_statement_parses_to(sql, "CREATE INDEX wrd_trgm ON wrd USING gist (word)");
+
+    // opclass with parameters and an explicit ordering keyword
+    let sql = "CREATE INDEX i ON t USING btree(c varchar_pattern_ops DESC)";
+    pg().one_statement_parses_to(sql, "CREATE INDEX i ON t USING btree (c DESC)");
+
+    // COLLATE + opclass (COLLATE is preserved via `Expr::Collate`; opclass
+    // is consumed and discarded).
+    let sql = "CREATE INDEX i ON t(c COLLATE \"en_US\" text_pattern_ops)";
+    pg().one_statement_parses_to(sql, "CREATE INDEX i ON t(c COLLATE \"en_US\")");
+}
+
+#[test]
 fn parse_array_subquery_expr() {
     let sql = "SELECT ARRAY(SELECT 1 UNION SELECT 2)";
     let select = pg().verified_only_select(sql);
