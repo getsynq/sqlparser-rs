@@ -933,9 +933,7 @@ fn parse_hyphenated_table_identifiers() {
     bigquery().verified_stmt(
         "CREATE MATERIALIZED VIEW project-id.my_dataset.my_mv_table AS SELECT date FROM project-id.my_dataset.my_base_table",
     );
-    bigquery().verified_stmt(
-        "CREATE VIEW project-id.my_dataset.my_view AS SELECT 1",
-    );
+    bigquery().verified_stmt("CREATE VIEW project-id.my_dataset.my_view AS SELECT 1");
 }
 
 #[test]
@@ -2029,6 +2027,16 @@ fn parse_deferred_join_on_clause() {
     bigquery().one_statement_parses_to(
         "SELECT * FROM tbl_a INNER JOIN tbl_b LEFT JOIN tbl_c ON tbl_c.id = tbl_b.id ON tbl_a.id = tbl_b.id",
         "SELECT * FROM tbl_a JOIN tbl_b ON tbl_a.id = tbl_b.id LEFT JOIN tbl_c ON tbl_c.id = tbl_b.id",
+    );
+}
+
+#[test]
+fn parse_deferred_join_on_followed_by_more_joins() {
+    // After resolving the deferred ON, additional joins may follow.
+    // FROM A JOIN B JOIN C ON c_cond ON a_b_cond JOIN D ON d_cond
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM a LEFT JOIN b LEFT JOIN c ON b.x = c.x ON a.y = b.y LEFT JOIN d ON d.z = a.z",
+        "SELECT * FROM a LEFT JOIN b ON a.y = b.y LEFT JOIN c ON b.x = c.x LEFT JOIN d ON d.z = a.z",
     );
 }
 
