@@ -13726,11 +13726,21 @@ impl<'a> Parser<'a> {
             return Ok(Statement::ExecuteAs { user });
         }
 
-        // EXECUTE IMMEDIATE 'sql' [USING p1, p2] — Trino, Oracle, DB2, etc.
+        // EXECUTE IMMEDIATE 'sql' [USING p1 [AS n1], p2 [AS n2]] — Trino, Oracle, DB2,
+        // Databricks, etc. Databricks allows `AS name` aliases that bind to named
+        // parameter markers (`:name`) in the SQL string.
         if self.parse_keyword(Keyword::IMMEDIATE) {
             let immediate = self.parse_expr()?;
             let using = if self.parse_keyword(Keyword::USING) {
-                self.parse_comma_separated(Parser::parse_expr)?
+                self.parse_comma_separated(|p| {
+                    let expr = p.parse_expr()?;
+                    let alias = if p.parse_keyword(Keyword::AS) {
+                        Some(p.parse_identifier(false)?.unwrap())
+                    } else {
+                        None
+                    };
+                    Ok(ExecuteImmediateUsingExpr { expr, alias })
+                })?
             } else {
                 vec![]
             };
