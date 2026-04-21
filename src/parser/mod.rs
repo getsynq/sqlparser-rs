@@ -5892,6 +5892,13 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // PostgreSQL: CREATE TABLE child PARTITION OF parent ...
+        let partition_of = if self.parse_keywords(&[Keyword::PARTITION, Keyword::OF]) {
+            Some(self.parse_object_name(false)?)
+        } else {
+            None
+        };
+
         // BigQuery: CREATE TABLE t COPY source_table
         // Must not consume COPY if followed by GRANTS (Snowflake COPY GRANTS)
         let copy = if matches!(
@@ -5909,6 +5916,13 @@ impl<'a> Parser<'a> {
 
         // parse optional column list (schema)
         let (columns, constraints, projections) = self.parse_columns()?;
+
+        // PostgreSQL: partition bound for `PARTITION OF parent`
+        let partition_bound = if partition_of.is_some() {
+            self.parse_partition_bound_spec()?
+        } else {
+            None
+        };
 
         let (using, using_template) = if self.parse_keyword(Keyword::USING) {
             if self.parse_keyword(Keyword::TEMPLATE) {
@@ -6408,6 +6422,8 @@ impl<'a> Parser<'a> {
             .cluster_by(cluster_by)
             .default_charset(default_charset)
             .default_collate(default_collate)
+            .partition_of(partition_of)
+            .partition_bound(partition_bound)
             .collation(collation)
             .on_commit(on_commit)
             .partitioned_by(partitioned_by)
@@ -7227,6 +7243,72 @@ impl<'a> Parser<'a> {
         let partitions = self.parse_comma_separated(Parser::parse_expr)?;
         self.expect_token(&Token::RParen)?;
         Ok(Partition::Partitions(partitions))
+    }
+
+    /// PostgreSQL partition bound: `FOR VALUES ...` or `DEFAULT`.
+    pub fn parse_partition_bound_spec(
+        &mut self,
+    ) -> Result<Option<PartitionBoundSpec>, ParserError> {
+        if self.parse_keyword(Keyword::DEFAULT) {
+            return Ok(Some(PartitionBoundSpec::Default));
+        }
+        if !self.parse_keywords(&[Keyword::FOR, Keyword::VALUES]) {
+            return Ok(None);
+        }
+        if self.parse_keyword(Keyword::IN) {
+            self.expect_token(&Token::LParen)?;
+            let exprs = self.parse_comma_separated(Parser::parse_expr)?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(PartitionBoundSpec::In(exprs)))
+        } else if self.parse_keyword(Keyword::FROM) {
+            self.expect_token(&Token::LParen)?;
+            let from = self.parse_comma_separated(Parser::parse_expr)?;
+            self.expect_token(&Token::RParen)?;
+            self.expect_keyword(Keyword::TO)?;
+            self.expect_token(&Token::LParen)?;
+            let to = self.parse_comma_separated(Parser::parse_expr)?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(PartitionBoundSpec::FromTo { from, to }))
+        } else if self.parse_keyword(Keyword::WITH) {
+            self.expect_token(&Token::LParen)?;
+            let parse_u64 = |p: &mut Parser| -> Result<u64, ParserError> {
+                let tok = p.next_token();
+                match tok.token {
+                    Token::Number(s, _) => s.parse::<u64>().map_err(|_| {
+                        ParserError::ParserError(format!("expected integer, found: {s}").into())
+                    }),
+                    _ => p.expected("integer literal", tok),
+                }
+            };
+            let mut modulus: Option<u64> = None;
+            let mut remainder: Option<u64> = None;
+            loop {
+                let tok = self.next_token();
+                match tok.token {
+                    Token::Word(ref w) if w.value.eq_ignore_ascii_case("MODULUS") => {
+                        modulus = Some(parse_u64(self)?);
+                    }
+                    Token::Word(ref w) if w.value.eq_ignore_ascii_case("REMAINDER") => {
+                        remainder = Some(parse_u64(self)?);
+                    }
+                    _ => return self.expected("MODULUS or REMAINDER", tok),
+                }
+                if !self.consume_token(&Token::Comma) {
+                    break;
+                }
+            }
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(PartitionBoundSpec::WithModulus {
+                modulus: modulus.ok_or_else(|| {
+                    ParserError::ParserError("expected MODULUS".to_string().into())
+                })?,
+                remainder: remainder.ok_or_else(|| {
+                    ParserError::ParserError("expected REMAINDER".to_string().into())
+                })?,
+            }))
+        } else {
+            self.expected("IN, FROM, or WITH", self.peek_token())
+        }
     }
 
     pub fn parse_alter_table_operation(&mut self) -> Result<AlterTableOperation, ParserError> {
