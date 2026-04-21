@@ -10028,6 +10028,19 @@ impl<'a> Parser<'a> {
                 settings: None,
                 format_clause: None,
             })
+        } else if self.parse_keyword(Keyword::DELETE) {
+            Ok(Query {
+                with,
+                body: self.parse_delete_setexpr_boxed()?,
+                limit: None,
+                limit_by: vec![],
+                order_by: None,
+                offset: None,
+                fetch: None,
+                locks: vec![],
+                settings: None,
+                format_clause: None,
+            })
         } else {
             let body = self.parse_boxed_query_body(0)?;
 
@@ -12579,6 +12592,10 @@ impl<'a> Parser<'a> {
     /// This is used to reduce the size of the stack frames in debug builds
     fn parse_insert_setexpr_boxed(&mut self) -> Result<Box<SetExpr>, ParserError> {
         Ok(Box::new(SetExpr::Insert(self.parse_insert()?)))
+    }
+
+    fn parse_delete_setexpr_boxed(&mut self) -> Result<Box<SetExpr>, ParserError> {
+        Ok(Box::new(SetExpr::Delete(self.parse_delete()?)))
     }
 
     /// Parse an INSERT statement
