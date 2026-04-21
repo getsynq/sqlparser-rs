@@ -559,6 +559,7 @@ impl<'a> Parser<'a> {
                 Keyword::DELETE => Ok(self.parse_delete()?),
                 Keyword::INSERT => Ok(self.parse_insert()?),
                 Keyword::UNCACHE => Ok(self.parse_uncache_table()?),
+                Keyword::REFRESH => Ok(self.parse_refresh_materialized_view()?),
                 Keyword::UPDATE => Ok(self.parse_update()?),
                 Keyword::ALTER => Ok(self.parse_alter()?),
                 Keyword::EXCHANGE => {
@@ -4152,6 +4153,29 @@ impl<'a> Parser<'a> {
         } else {
             self.expected("a `TABLE` keyword", self.peek_token())
         }
+    }
+
+    /// `REFRESH MATERIALIZED VIEW [ CONCURRENTLY ] name [ WITH [ NO ] DATA ]`
+    pub fn parse_refresh_materialized_view(&mut self) -> Result<Statement, ParserError> {
+        self.expect_keywords(&[Keyword::MATERIALIZED, Keyword::VIEW])?;
+        let concurrently = self.parse_keyword(Keyword::CONCURRENTLY);
+        let name = self.parse_object_name(false)?;
+        let with_data = if self.parse_keyword(Keyword::WITH) {
+            if self.parse_keyword(Keyword::NO) {
+                self.expect_keyword(Keyword::DATA)?;
+                Some(false)
+            } else {
+                self.expect_keyword(Keyword::DATA)?;
+                Some(true)
+            }
+        } else {
+            None
+        };
+        Ok(Statement::RefreshMaterializedView {
+            name,
+            concurrently,
+            with_data,
+        })
     }
 
     /// SQLite-specific `CREATE VIRTUAL TABLE`

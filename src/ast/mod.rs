@@ -38,20 +38,20 @@ pub use self::dcl::{
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
-    CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition, ProcedureParam,
-    ReferentialAction, TableConstraint, TableProjection, UserDefinedTypeCompositeAttributeDef,
-    UserDefinedTypeRepresentation, ViewSecurity,
+    CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition,
+    ProcedureParam, ReferentialAction, TableConstraint, TableProjection,
+    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
-    AggregateItem, ColumnTransformer, ConnectBy, Cte, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch,
-    FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr,
-    Join, JoinConstraint, JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition,
-    NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue,
-    PivotValueSource, Query, RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem,
-    SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr, SetOperator,
-    SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed, TableVersion,
-    TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling, ValueTableMode, Values,
+    AggregateItem, ColumnTransformer, ConnectBy, Cte, Distinct, ExceptSelectItem,
+    ExcludeSelectItem, Fetch, FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias,
+    Interpolate, InterpolateExpr, Join, JoinConstraint, JoinOperator, LateralView, LockClause,
+    LockType, NamedWindowDefinition, NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy,
+    OrderByExpr, PivotValue, PivotValueSource, Query, RenameSelectItem, ReplaceSelectElement,
+    ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr,
+    SetOperator, SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed,
+    TableVersion, TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling, ValueTableMode, Values,
     WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
@@ -2458,6 +2458,15 @@ pub enum Statement {
         table_name: ObjectName,
         if_exists: bool,
     },
+    /// `REFRESH MATERIALIZED VIEW [ CONCURRENTLY ] <name> [ WITH [ NO ] DATA ]`
+    ///
+    /// Supported by PostgreSQL and Trino.
+    RefreshMaterializedView {
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        name: ObjectName,
+        concurrently: bool,
+        with_data: Option<bool>,
+    },
     ///CreateSequence -- define a new sequence
     /// CREATE [ { TEMPORARY | TEMP } ] SEQUENCE [ IF NOT EXISTS ] <sequence_name>
     CreateSequence {
@@ -4044,6 +4053,23 @@ impl fmt::Display for Statement {
                 } else {
                     write!(f, "UNCACHE TABLE {table_name}")
                 }
+            }
+            Statement::RefreshMaterializedView {
+                name,
+                concurrently,
+                with_data,
+            } => {
+                write!(f, "REFRESH MATERIALIZED VIEW ")?;
+                if *concurrently {
+                    write!(f, "CONCURRENTLY ")?;
+                }
+                write!(f, "{name}")?;
+                match with_data {
+                    Some(true) => write!(f, " WITH DATA")?,
+                    Some(false) => write!(f, " WITH NO DATA")?,
+                    None => {}
+                }
+                Ok(())
             }
             Statement::CreateSequence {
                 temporary,

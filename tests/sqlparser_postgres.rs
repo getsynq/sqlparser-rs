@@ -1106,8 +1106,8 @@ fn parse_copy_to() {
                     sort_by: vec![],
                     qualify: None,
                     value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                    start_with: None,
+                    connect_by: None,
                 }))),
                 order_by: None,
                 limit: None,
@@ -1502,7 +1502,9 @@ fn parse_execute() {
         Statement::Execute {
             name: Ident::new("").empty_span(),
             parameters: vec![],
-            immediate: Some(Expr::Value(Value::SingleQuotedString("SELECT 1".to_string()))),
+            immediate: Some(Expr::Value(Value::SingleQuotedString(
+                "SELECT 1".to_string()
+            ))),
             using: vec![],
         }
     );
@@ -1514,7 +1516,9 @@ fn parse_execute() {
         Statement::Execute {
             name: Ident::new("").empty_span(),
             parameters: vec![],
-            immediate: Some(Expr::Value(Value::SingleQuotedString("SELECT ?".to_string()))),
+            immediate: Some(Expr::Value(Value::SingleQuotedString(
+                "SELECT ?".to_string()
+            ))),
             using: vec![
                 Expr::Value(Value::SingleQuotedString("billing".to_string())),
                 Expr::Value(Value::SingleQuotedString("payments".to_string())),
@@ -2291,8 +2295,8 @@ fn parse_array_subquery_expr() {
                     named_window: vec![],
                     qualify: None,
                     value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                    start_with: None,
+                    connect_by: None,
                 }))),
                 right: Box::new(SetExpr::Select(Box::new(Select {
                     distinct: None,
@@ -2314,8 +2318,8 @@ fn parse_array_subquery_expr() {
                     named_window: vec![],
                     qualify: None,
                     value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                    start_with: None,
+                    connect_by: None,
                 }))),
             }),
             order_by: None,
@@ -4013,4 +4017,15 @@ fn parse_filter_with_over() {
     pg().verified_stmt("SELECT SUM(x) FILTER (WHERE x > 0) OVER w");
     // FILTER without OVER should still work
     pg().verified_stmt("SELECT COUNT(*) FILTER (WHERE x > 0)");
+}
+
+#[test]
+fn parse_refresh_materialized_view() {
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view");
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW sch.my_view");
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view");
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view WITH DATA");
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view WITH NO DATA");
+    pg_and_generic()
+        .verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view WITH NO DATA");
 }
