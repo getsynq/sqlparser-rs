@@ -2505,6 +2505,23 @@ fn parse_listagg() {
 }
 
 #[test]
+fn parse_ansi_filter_during_aggregation() {
+    let dialect = TestedDialects {
+        dialects: vec![Box::new(AnsiDialect {})],
+        options: None,
+    };
+    dialect.verified_stmt("SELECT SUM(x) FILTER (WHERE x > 1) FROM t");
+    dialect.one_statement_parses_to(
+        "SELECT SUM(x) FILTER(WHERE x > 1) FROM t",
+        "SELECT SUM(x) FILTER (WHERE x > 1) FROM t",
+    );
+    dialect.one_statement_parses_to(
+        "SELECT SUM(x) FILTER(WHERE x > 1) OVER (ORDER BY y) FROM t",
+        "SELECT SUM(x) FILTER (WHERE x > 1) OVER (ORDER BY y) FROM t",
+    );
+}
+
+#[test]
 fn parse_array_agg_func() {
     let supported_dialects = TestedDialects {
         dialects: vec![
