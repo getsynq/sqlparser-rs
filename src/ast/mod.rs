@@ -1661,6 +1661,10 @@ pub enum Statement {
         after_columns: Vec<WithSpan<Ident>>,
         /// whether the insert has the table keyword (Hive)
         table: bool,
+        /// Databricks `INSERT INTO target BY NAME` - match columns by name rather than position
+        by_name: bool,
+        /// Databricks `REPLACE WHERE <predicate>` - replace rows matching predicate
+        replace_where: Option<Expr>,
         on: Option<OnInsert>,
         /// RETURNING
         returning: Option<Vec<WithSpan<SelectItem>>>,
@@ -2777,6 +2781,8 @@ impl fmt::Display for Statement {
                 after_columns,
                 source,
                 table,
+                by_name,
+                replace_where,
                 on,
                 returning,
             } => {
@@ -2804,6 +2810,12 @@ impl fmt::Display for Statement {
                 }
                 if !after_columns.is_empty() {
                     write!(f, "({}) ", display_comma_separated(after_columns))?;
+                }
+                if *by_name {
+                    write!(f, "BY NAME ")?;
+                }
+                if let Some(ref predicate) = replace_where {
+                    write!(f, "REPLACE WHERE {predicate} ")?;
                 }
                 write!(f, "{source}")?;
 

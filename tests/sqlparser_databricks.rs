@@ -462,3 +462,14 @@ fn test_cast_interval_with_qualifier() {
     databricks().verified_stmt("SELECT CAST('1-6' AS INTERVAL YEAR TO MONTH)");
     databricks().verified_stmt("SELECT CAST('1' AS INTERVAL DAY)");
 }
+
+#[test]
+fn test_insert_by_name() {
+    // Databricks supports `INSERT INTO target BY NAME <query>` where columns
+    // are matched by name rather than by position.
+    databricks().verified_stmt("INSERT INTO target BY NAME SELECT 1 AS a, 2 AS b");
+    // Combined with REPLACE WHERE predicate.
+    databricks().verified_stmt(
+        "INSERT INTO sales BY NAME REPLACE WHERE tx_date = '2022-10-01' SELECT 1 AS amount",
+    );
+}

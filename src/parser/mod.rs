@@ -12515,6 +12515,14 @@ impl<'a> Parser<'a> {
                 self.prev_token(); // put back VALUES so parse_query sees it
             }
 
+            // Databricks: INSERT INTO target BY NAME [REPLACE WHERE <predicate>] SELECT ...
+            let by_name = self.parse_keywords(&[Keyword::BY, Keyword::NAME]);
+            let replace_where = if self.parse_keywords(&[Keyword::REPLACE, Keyword::WHERE]) {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
             let source = Box::new(self.parse_query()?);
             let on = if self.parse_keyword(Keyword::ON) {
                 if self.parse_keyword(Keyword::CONFLICT) {
@@ -12580,6 +12588,8 @@ impl<'a> Parser<'a> {
                 after_columns,
                 source,
                 table,
+                by_name,
+                replace_where,
                 on,
                 returning,
             })
