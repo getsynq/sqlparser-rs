@@ -1166,6 +1166,25 @@ fn test_copy_into_with_transformations() {
 }
 
 #[test]
+fn test_copy_into_unload_from_query() {
+    // COPY INTO @stage FROM (<query>) — unload form, full query as source.
+    let sql = "COPY INTO @my_stage FROM (SELECT * FROM orderstiny LIMIT 5)";
+    match snowflake().verified_stmt(sql) {
+        Statement::CopyIntoSnowflake {
+            into, from_query, ..
+        } => {
+            assert_eq!(into, ObjectName(vec![Ident::new("@my_stage")]));
+            let q = from_query.expect("from_query should be Some");
+            // Ensure the table reference inside the subquery is preserved
+            // (critical for column-level lineage).
+            assert!(q.to_string().contains("orderstiny"));
+        }
+        _ => unreachable!(),
+    }
+    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
+}
+
+#[test]
 fn test_copy_into_file_format() {
     // Use SQL without backslash escaping issues in string literals
     let sql = concat!(

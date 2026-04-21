@@ -1723,6 +1723,9 @@ pub enum Statement {
         from_stage_alias: Option<Ident>,
         stage_params: StageParamsObject,
         from_transformations: Option<Vec<StageLoadSelectItem>>,
+        /// Full query source for unload (`COPY INTO @stage FROM (<query>)`).
+        /// Mutually exclusive with `from_stage`/`from_transformations`.
+        from_query: Option<Box<Query>>,
         files: Option<Vec<String>>,
         pattern: Option<String>,
         file_format: DataLoadingOptions,
@@ -4153,6 +4156,7 @@ impl fmt::Display for Statement {
                 from_stage_alias,
                 stage_params,
                 from_transformations,
+                from_query,
                 files,
                 pattern,
                 file_format,
@@ -4164,7 +4168,9 @@ impl fmt::Display for Statement {
                 if !columns.is_empty() {
                     write!(f, " ({})", display_comma_separated(columns))?;
                 }
-                if !from_stage.0.is_empty() {
+                if let Some(query) = from_query {
+                    write!(f, " FROM ({})", query)?;
+                } else if !from_stage.0.is_empty() {
                     if from_transformations.is_none() {
                         // Standard data load
                         write!(f, " FROM {}{}", from_stage, stage_params)?;

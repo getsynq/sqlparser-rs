@@ -157,6 +157,7 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
     let columns = parser.parse_parenthesized_column_list(IsOptional::Optional, false)?;
     let mut files: Vec<String> = vec![];
     let mut from_transformations: Option<Vec<StageLoadSelectItem>> = None;
+    let mut from_query: Option<Box<crate::ast::Query>> = None;
     let mut from_stage_alias = None;
     let mut from_stage = ObjectName(vec![]);
     let mut stage_params = StageParamsObject {
@@ -172,24 +173,51 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
         // check if data load transformations are present
         match parser.next_token().token {
             Token::LParen => {
-                // data load with transformations
-                parser.expect_keyword(Keyword::SELECT)?;
-                from_transformations = parse_select_items_for_data_load(parser)?;
-
-                parser.expect_keyword(Keyword::FROM)?;
-                from_stage = parser.parse_object_name(true)?;
-                stage_params = parse_stage_params(parser)?;
-
-                // as
-                from_stage_alias = if parser.parse_keyword(Keyword::AS) {
-                    Some(match parser.next_token().token {
-                        Token::Word(w) => Ok(Ident::new(w.value)),
-                        _ => parser.expected("stage alias", parser.peek_token()),
-                    }?)
+                // Distinguish between:
+                //   (a) COPY INTO <table> FROM (SELECT $1, ... FROM @stage)   -- load transformation
+                //   (b) COPY INTO @stage FROM (<query>)                       -- unload from query
+                // The transformation form begins `SELECT <placeholder>` or
+                // `SELECT <alias>.<placeholder>`. Anything else is a full query.
+                let starts_with_select = matches!(
+                    &parser.peek_token().token,
+                    Token::Word(w) if w.keyword == Keyword::SELECT
+                );
+                let is_transformation = if starts_with_select {
+                    match parser.peek_nth_token(1).token {
+                        Token::Placeholder(_) => true,
+                        Token::Word(_) => {
+                            matches!(parser.peek_nth_token(2).token, Token::Period)
+                                && matches!(parser.peek_nth_token(3).token, Token::Placeholder(_))
+                        }
+                        _ => false,
+                    }
                 } else {
-                    None
+                    false
                 };
-                parser.expect_token(&Token::RParen)?;
+
+                if is_transformation {
+                    parser.expect_keyword(Keyword::SELECT)?;
+                    from_transformations = parse_select_items_for_data_load(parser)?;
+
+                    parser.expect_keyword(Keyword::FROM)?;
+                    from_stage = parser.parse_object_name(true)?;
+                    stage_params = parse_stage_params(parser)?;
+
+                    // as
+                    from_stage_alias = if parser.parse_keyword(Keyword::AS) {
+                        Some(match parser.next_token().token {
+                            Token::Word(w) => Ok(Ident::new(w.value)),
+                            _ => parser.expected("stage alias", parser.peek_token()),
+                        }?)
+                    } else {
+                        None
+                    };
+                    parser.expect_token(&Token::RParen)?;
+                } else {
+                    // Full query as source (unload).
+                    from_query = Some(Box::new(parser.parse_query()?));
+                    parser.expect_token(&Token::RParen)?;
+                }
             }
             _ => {
                 parser.prev_token();
@@ -366,6 +394,7 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
         from_stage_alias,
         stage_params,
         from_transformations,
+        from_query,
         files: if files.is_empty() { None } else { Some(files) },
         pattern,
         file_format: DataLoadingOptions {
