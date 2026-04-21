@@ -44,15 +44,15 @@ pub use self::ddl::{
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
-    AggregateItem, ColumnTransformer, ConnectBy, Cte, Distinct, ExceptSelectItem,
-    ExcludeSelectItem, Fetch, FormatClause, GroupByExpr, GroupByWithModifier, IdentWithAlias,
-    Interpolate, InterpolateExpr, Join, JoinConstraint, JoinOperator, LateralView, LockClause,
-    LockType, NamedWindowDefinition, NamedWindowExpr, NonBlock, Offset, OffsetRows, OrderBy,
-    OrderByExpr, PivotValue, PivotValueSource, Query, RenameSelectItem, ReplaceSelectElement,
-    ReplaceSelectItem, SamplingMethod, Select, SelectInto, SelectItem, SelectionCount, SetExpr,
-    SetOperator, SetQuantifier, Setting, Table, TableAlias, TableFactor, TableSampleSeed,
-    TableVersion, TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling, ValueTableMode, Values,
-    WildcardAdditionalOptions, With, WithFill,
+    AggregateItem, ColumnTransformer, ConnectBy, Cte, CteCycle, CteCycleMarkValues, CteSearch,
+    CteSearchKind, Distinct, ExceptSelectItem, ExcludeSelectItem, Fetch, FormatClause, GroupByExpr,
+    GroupByWithModifier, IdentWithAlias, Interpolate, InterpolateExpr, Join, JoinConstraint,
+    JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NamedWindowExpr,
+    NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query,
+    RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto,
+    SelectItem, SelectionCount, SetExpr, SetOperator, SetQuantifier, Setting, Table, TableAlias,
+    TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top, UnpivotInValue,
+    UnpivotNullHandling, ValueTableMode, Values, WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,
