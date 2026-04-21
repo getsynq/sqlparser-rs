@@ -1538,6 +1538,14 @@ fn parse_pivot_with_subquery_in_clause() {
 }
 
 #[test]
+fn parse_pivot_with_expression_values() {
+    // Snowflake allows arbitrary expressions (e.g. CAST) in PIVOT's IN value list
+    snowflake().verified_stmt(
+        "SELECT * FROM tbl PIVOT(SUM(col_2) FOR col_3 IN (CAST('2025-11-01' AS DATE), CAST('2025-12-01' AS DATE)))",
+    );
+}
+
+#[test]
 fn parse_pivot_default_on_null() {
     // Snowflake supports DEFAULT ON NULL clause in PIVOT
     snowflake().verified_stmt(

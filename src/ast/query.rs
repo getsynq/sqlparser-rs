@@ -958,7 +958,7 @@ impl Display for TableSampleSeed {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct PivotValue {
-    pub value: Value,
+    pub value: Expr,
     pub alias: Option<Ident>,
 }
 
