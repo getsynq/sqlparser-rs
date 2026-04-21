@@ -2615,7 +2615,7 @@ fn parse_create_table() {
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -2629,7 +2629,7 @@ fn parse_create_table() {
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         codec: None,
                         options: vec![],
@@ -2835,7 +2835,7 @@ fn parse_create_table_with_constraint_characteristics() {
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         options: vec![ColumnOptionDef {
                             name: None,
@@ -2849,7 +2849,7 @@ fn parse_create_table_with_constraint_characteristics() {
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         options: vec![],
                         codec: None,
@@ -3364,7 +3364,7 @@ fn parse_create_external_table() {
                     },
                     ColumnDef {
                         name: Ident::new("lat").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         codec: None,
                         options: vec![ColumnOptionDef {
@@ -3378,7 +3378,7 @@ fn parse_create_external_table() {
                     },
                     ColumnDef {
                         name: Ident::new("lng").empty_span(),
-                        data_type: DataType::Double,
+                        data_type: DataType::Double(None),
                         collation: None,
                         codec: None,
                         options: vec![],
@@ -4242,8 +4242,8 @@ fn test_parse_named_window() {
         ],
         qualify: None,
         value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+        start_with: None,
+        connect_by: None,
     };
     assert_eq!(actual_select_only, expected);
 }
@@ -4633,8 +4633,8 @@ fn parse_interval_and_or_xor() {
             named_window: vec![],
             qualify: None,
             value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+            start_with: None,
+            connect_by: None,
         }))),
         order_by: None,
         limit: None,
@@ -8992,8 +8992,8 @@ fn parse_unload() {
                     named_window: vec![],
                     qualify: None,
                     value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
+                    start_with: None,
+                    connect_by: None,
                 }))),
                 with: None,
                 limit: None,

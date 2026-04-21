@@ -2268,3 +2268,10 @@ fn test_snowflake_connect_by() {
         "WITH hier AS (SELECT col_id, CONNECT_BY_ROOT col_id AS root_id FROM tbl START WITH col_parent_id IS NULL CONNECT BY col_parent_id = PRIOR col_id) SELECT * FROM hier",
     );
 }
+
+#[test]
+fn test_snowflake_double_with_precision() {
+    // Snowflake query logs emit DOUBLE(p) as a synonym for DOUBLE; accept and preserve it.
+    snowflake_and_generic().verified_stmt("SELECT CAST(x AS DOUBLE(6)) FROM t");
+    snowflake_and_generic().verified_stmt("SELECT CAST(x AS DOUBLE) FROM t");
+}
