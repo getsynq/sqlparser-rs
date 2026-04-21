@@ -5577,7 +5577,9 @@ pub enum MergeClause {
     NotMatched {
         predicate: Option<Expr>,
         columns: Vec<WithSpan<Ident>>,
-        values: Values,
+        /// `None` represents BigQuery's `INSERT ROW` shorthand, which inserts
+        /// all source columns without specifying them.
+        values: Option<Values>,
     },
     /// `WHEN NOT MATCHED BY SOURCE THEN UPDATE SET ...`
     /// BigQuery extension: applies to target rows not present in the source
@@ -5625,12 +5627,15 @@ impl fmt::Display for MergeClause {
                 if let Some(pred) = predicate {
                     write!(f, " AND {pred}")?;
                 }
-                write!(
-                    f,
-                    " THEN INSERT ({}) {}",
-                    display_comma_separated(columns),
-                    values
-                )
+                match values {
+                    Some(values) => write!(
+                        f,
+                        " THEN INSERT ({}) {}",
+                        display_comma_separated(columns),
+                        values
+                    ),
+                    None => write!(f, " THEN INSERT ROW"),
+                }
             }
             NotMatchedBySourceUpdate {
                 predicate,
