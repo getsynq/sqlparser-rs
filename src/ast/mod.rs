@@ -2370,8 +2370,10 @@ pub enum Statement {
         parameters: Vec<Expr>,
         /// For `EXECUTE IMMEDIATE 'sql'` syntax (Trino, Oracle, etc.)
         immediate: Option<Expr>,
-        /// USING parameters for `EXECUTE IMMEDIATE 'sql' USING p1, p2`
-        using: Vec<Expr>,
+        /// USING parameters for `EXECUTE IMMEDIATE 'sql' USING p1 [AS n1], p2 [AS n2]`.
+        /// The optional alias is used by Databricks for named parameter markers
+        /// (e.g. `USING 10 AS val` to bind `:val`).
+        using: Vec<ExecuteImmediateUsingExpr>,
     },
     /// ```sql
     /// EXECUTE AS <user>
@@ -5807,6 +5809,26 @@ impl fmt::Display for ArgMode {
             ArgMode::Out => write!(f, "OUT"),
             ArgMode::InOut => write!(f, "INOUT"),
         }
+    }
+}
+
+/// A `USING` argument in `EXECUTE IMMEDIATE 'sql' USING expr [AS name]`.
+/// The optional alias is used by Databricks to bind to named parameter markers.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ExecuteImmediateUsingExpr {
+    pub expr: Expr,
+    pub alias: Option<Ident>,
+}
+
+impl fmt::Display for ExecuteImmediateUsingExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.expr)?;
+        if let Some(alias) = &self.alias {
+            write!(f, " AS {alias}")?;
+        }
+        Ok(())
     }
 }
 

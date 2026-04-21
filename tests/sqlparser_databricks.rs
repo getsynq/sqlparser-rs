@@ -516,6 +516,17 @@ fn test_pivot_multi_column_for() {
 }
 
 #[test]
+fn test_execute_immediate_using_with_alias() {
+    // Databricks supports named parameter markers (`:name`) bound via
+    // `USING <expr> AS <name>`. The alias must be preserved in the AST.
+    databricks_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT :val AS c1' USING 10 AS val");
+    databricks_and_generic()
+        .verified_stmt("EXECUTE IMMEDIATE 'SELECT 1::DECIMAL(:p, :s)' USING 6 AS p, 4 AS s");
+    // Mixed aliased and unaliased arguments still parse.
+    databricks_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT ?, :n' USING 1, 2 AS n");
+}
+
+#[test]
 fn test_sort_by_with_direction_and_nulls() {
     // Databricks supports ASC/DESC and NULLS FIRST/LAST on SORT BY expressions.
     databricks().verified_stmt("SELECT age, name, zip_code FROM person SORT BY age DESC");

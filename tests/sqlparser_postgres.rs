@@ -1520,8 +1520,14 @@ fn parse_execute() {
                 "SELECT ?".to_string()
             ))),
             using: vec![
-                Expr::Value(Value::SingleQuotedString("billing".to_string())),
-                Expr::Value(Value::SingleQuotedString("payments".to_string())),
+                ExecuteImmediateUsingExpr {
+                    expr: Expr::Value(Value::SingleQuotedString("billing".to_string())),
+                    alias: None,
+                },
+                ExecuteImmediateUsingExpr {
+                    expr: Expr::Value(Value::SingleQuotedString("payments".to_string())),
+                    alias: None,
+                },
             ],
         }
     );
