@@ -1268,38 +1268,39 @@ impl<'a> Tokenizer<'a> {
 
             if let Some('$') = chars.peek() {
                 chars.next();
-                s.push_str(&peeking_take_while(chars, |ch| ch != '$'));
-
-                match chars.peek() {
-                    Some('$') => {
-                        chars.next();
-                        for (_, c) in value.chars().enumerate() {
-                            let next_char = chars.next();
-                            if Some(c) != next_char {
-                                return self.tokenizer_error(
-                                    chars.location(),
-                                    format!(
-                                        "Unterminated dollar-quoted string at or near \"{value}\""
-                                    ),
-                                );
-                            }
-                        }
-
-                        if let Some('$') = chars.peek() {
-                            chars.next();
-                        } else {
-                            return self.tokenizer_error(
-                                chars.location(),
-                                "Unterminated dollar-quoted string, expected $",
-                            );
-                        }
-                    }
-                    _ => {
+                loop {
+                    s.push_str(&peeking_take_while(chars, |ch| ch != '$'));
+                    if chars.peek().is_none() {
                         return self.tokenizer_error(
                             chars.location(),
-                            "Unterminated dollar-quoted, expected $",
+                            format!("Unterminated dollar-quoted string at or near \"{value}\""),
                         );
                     }
+                    // Tentatively consume '$' and try to match closing tag `$value$`.
+                    chars.next();
+                    let mut matched = String::new();
+                    let mut mismatch = false;
+                    for c in value.chars() {
+                        match chars.peek() {
+                            Some(&next_char) if next_char == c => {
+                                matched.push(next_char);
+                                chars.next();
+                            }
+                            _ => {
+                                mismatch = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !mismatch {
+                        if let Some('$') = chars.peek() {
+                            chars.next();
+                            break;
+                        }
+                    }
+                    // Not the closing tag: treat consumed characters as body content and keep scanning.
+                    s.push('$');
+                    s.push_str(&matched);
                 }
             } else {
                 return Ok(Token::Placeholder(String::from("$") + &value));

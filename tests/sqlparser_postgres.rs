@@ -3737,6 +3737,26 @@ fn parse_dollar_quoted_string() {
 }
 
 #[test]
+fn parse_dollar_quoted_string_with_nested_untagged_quotes() {
+    let sql = "SELECT $body$foo $$bar$$ baz$body$";
+    let stmt = pg().parse_sql_statements(sql).unwrap();
+    let projection = match stmt.first().unwrap() {
+        Statement::Query(query) => match &*query.body {
+            SetExpr::Select(select) => &select.projection,
+            _ => unreachable!(),
+        },
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        &Expr::Value(Value::DollarQuotedString(DollarQuotedString {
+            tag: Some("body".into()),
+            value: "foo $$bar$$ baz".into(),
+        })),
+        expr_from_projection(&projection[0])
+    );
+}
+
+#[test]
 fn parse_incorrect_dollar_quoted_string() {
     let sql = "SELECT $x$hello$$";
     assert!(pg().parse_sql_statements(sql).is_err());
