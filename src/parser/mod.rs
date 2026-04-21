@@ -4947,7 +4947,8 @@ impl<'a> Parser<'a> {
 
         // Many dialects support `OR ALTER` right after `CREATE`, but we don't (yet).
         // ANSI SQL and Postgres support RECURSIVE here, but we don't support it either.
-        let name = self.parse_object_name(false)?;
+        // BigQuery allows hyphens in project identifiers, e.g. `project-id.dataset.view`.
+        let name = self.parse_object_name(dialect_of!(self is BigQueryDialect))?;
 
         let destination_table = if dialect_of!(self is ClickHouseDialect)
             && materialized
