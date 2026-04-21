@@ -391,6 +391,16 @@ fn test_from_stream_modifier() {
 }
 
 #[test]
+fn test_parenthesized_bare_table() {
+    // Databricks permits extra parentheses around a lone table reference,
+    // e.g. `FROM (db.sch.tbl)`. The extra parens are not preserved in the AST.
+    databricks().one_statement_parses_to(
+        "SELECT c1, c2 FROM (`db_1`.`sch_1`.tbl_1)",
+        "SELECT c1, c2 FROM `db_1`.`sch_1`.tbl_1",
+    );
+}
+
+#[test]
 fn test_explode_multi_alias() {
     // Databricks/Spark generator function with multiple column aliases
     // EXPLODE(col) AS (key, value) - returns multiple columns

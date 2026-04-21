@@ -11199,8 +11199,8 @@ impl<'a> Parser<'a> {
                     table_with_joins: Box::new(table_and_joins),
                     alias,
                 })
-            } else if dialect_of!(self is SnowflakeDialect | GenericDialect) {
-                // Dialect-specific behavior: Snowflake diverges from the
+            } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | BigQueryDialect | DuckDbDialect | AnsiDialect | GenericDialect) {
+                // Dialect-specific behavior: several dialects diverge from the
                 // standard and from most of the other implementations by
                 // allowing extra parentheses not only around a join (B), but
                 // around lone table names (e.g. `FROM (mytable [AS alias])`)
