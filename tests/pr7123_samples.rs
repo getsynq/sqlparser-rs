@@ -75,7 +75,10 @@ end
     let stmt = parse_one(&SnowflakeDialect {}, sql);
     match stmt {
         Statement::CreateProcedure { name, params, .. } => {
-            assert_eq!(name, object_name(&["analytics", "sp_refresh_current_inventory"]));
+            assert_eq!(
+                name,
+                object_name(&["analytics", "sp_refresh_current_inventory"])
+            );
             assert_eq!(params.as_deref(), Some([].as_slice()));
         }
         other => panic!("expected CreateProcedure, got {other:?}"),
@@ -103,7 +106,10 @@ AS (
             let args = args.expect("function args");
             assert_eq!(args.len(), 1);
             assert_eq!(args[0].name.as_ref().unwrap().value, "var_name");
-            assert!(matches!(return_type, Some(DataType::String(_) | DataType::Varchar(_))));
+            assert!(matches!(
+                return_type,
+                Some(DataType::String(_) | DataType::Varchar(_))
+            ));
         }
         other => panic!("expected CreateFunction, got {other:?}"),
     }
