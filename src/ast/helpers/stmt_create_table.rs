@@ -90,6 +90,7 @@ pub struct CreateTableBuilder {
     pub using: Option<ObjectName>,
     pub using_template: Option<Box<Expr>>,
     pub copy_grants: bool,
+    pub inherits: Option<Vec<ObjectName>>,
 }
 
 impl CreateTableBuilder {
@@ -138,6 +139,7 @@ impl CreateTableBuilder {
             using: None,
             using_template: None,
             copy_grants: false,
+            inherits: None,
         }
     }
     pub fn or_replace(mut self, or_replace: bool) -> Self {
@@ -348,6 +350,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn inherits(mut self, inherits: Option<Vec<ObjectName>>) -> Self {
+        self.inherits = inherits;
+        self
+    }
+
     pub fn build(self) -> Statement {
         Statement::CreateTable {
             or_replace: self.or_replace,
@@ -393,6 +400,7 @@ impl CreateTableBuilder {
             using: self.using,
             using_template: self.using_template,
             copy_grants: self.copy_grants,
+            inherits: self.inherits,
         }
     }
 }
@@ -448,6 +456,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 using,
                 using_template,
                 copy_grants,
+                inherits,
             } => Ok(Self {
                 or_replace,
                 temporary,
@@ -492,6 +501,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 using,
                 using_template,
                 copy_grants,
+                inherits,
             }),
             _ => Err(ParserError::ParserError(
                 format!("Expected create table statement, but received: {stmt}").into(),

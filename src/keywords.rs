@@ -372,6 +372,7 @@ define_keywords!(
     INDEX,
     INDICATOR,
     INHERIT,
+    INHERITS,
     INITIALLY,
     INNER,
     INOUT,
