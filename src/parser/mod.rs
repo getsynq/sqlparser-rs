@@ -7341,6 +7341,12 @@ impl<'a> Parser<'a> {
                     options,
                     has_options_keyword: true,
                 }
+            } else if self.parse_keyword(Keyword::TBLPROPERTIES) {
+                // Databricks/Hive: SET TBLPROPERTIES ('key' = 'value', ...)
+                self.expect_token(&Token::LParen)?;
+                let properties = self.parse_comma_separated(Parser::parse_sql_option)?;
+                self.expect_token(&Token::RParen)?;
+                AlterTableOperation::SetTblProperties { properties }
             } else if self.consume_token(&Token::LParen) {
                 // PostgreSQL: SET (key = value, ...)
                 let options = self.parse_comma_separated(Parser::parse_sql_option)?;
