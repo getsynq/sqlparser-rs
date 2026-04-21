@@ -4539,13 +4539,34 @@ impl<'a> Parser<'a> {
         };
 
         // parse: [ argname ] argtype
-        let mut name = None;
-        let mut data_type = self.parse_data_type()?;
-        if let DataType::Custom(n, _) = &data_type {
-            // the first token is actually a name
-            name = Some(n.0[0].clone());
-            data_type = self.parse_data_type()?;
-        }
+        // Try `name + data_type` first so that parameter names that happen to
+        // match data-type keywords (e.g. `bytes`, `date`) are not mistaken for
+        // anonymous-parameter type declarations.
+        let (name, data_type) = if let Some((n, dt)) = self.maybe_parse(|p| {
+            let ident = p.parse_identifier(false)?.unwrap();
+            let dt = p.parse_data_type()?;
+            if !matches!(
+                p.peek_token().token,
+                Token::Comma | Token::RParen | Token::EOF
+            ) && !matches!(
+                p.peek_token().token,
+                Token::Word(w) if w.keyword == Keyword::DEFAULT
+            ) && p.peek_token().token != Token::Eq
+            {
+                return Err(ParserError::ParserError("not a named arg".into()));
+            }
+            Ok((ident, dt))
+        }) {
+            (Some(n), dt)
+        } else {
+            let mut name = None;
+            let mut data_type = self.parse_data_type()?;
+            if let DataType::Custom(n, _) = &data_type {
+                name = Some(n.0[0].clone());
+                data_type = self.parse_data_type()?;
+            }
+            (name, data_type)
+        };
 
         let default_expr = if self.parse_keyword(Keyword::DEFAULT) || self.consume_token(&Token::Eq)
         {
