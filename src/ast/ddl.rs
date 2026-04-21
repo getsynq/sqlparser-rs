@@ -47,6 +47,13 @@ pub enum AlterTableOperation {
         /// <column_def>.
         column_def: ColumnDef,
     },
+    /// `ADD COLUMNS (<column_def>, ...) [CASCADE]`
+    ///
+    /// Hive/Databricks plural form for adding multiple columns in one statement.
+    AddColumns {
+        column_defs: Vec<ColumnDef>,
+        cascade: bool,
+    },
     /// `DROP CONSTRAINT [ IF EXISTS ] <name>`
     DropConstraint {
         if_exists: bool,
@@ -56,6 +63,14 @@ pub enum AlterTableOperation {
     /// `DROP [ COLUMN ] [ IF EXISTS ] <column_name> [ CASCADE ]`
     DropColumn {
         column_name: Ident,
+        if_exists: bool,
+        cascade: bool,
+    },
+    /// `DROP COLUMNS [ IF EXISTS ] (<column_name>, ...) [ CASCADE ]`
+    ///
+    /// Hive/Databricks plural form for dropping multiple columns in one statement.
+    DropColumns {
+        column_names: Vec<Ident>,
         if_exists: bool,
         cascade: bool,
     },
@@ -246,6 +261,29 @@ impl fmt::Display for AlterTableOperation {
                 write!(f, " {column_def}")?;
 
                 Ok(())
+            }
+            AlterTableOperation::AddColumns {
+                column_defs,
+                cascade,
+            } => {
+                write!(f, "ADD COLUMNS ({})", display_comma_separated(column_defs))?;
+                if *cascade {
+                    write!(f, " CASCADE")?;
+                }
+                Ok(())
+            }
+            AlterTableOperation::DropColumns {
+                column_names,
+                if_exists,
+                cascade,
+            } => {
+                write!(
+                    f,
+                    "DROP COLUMNS {}({}){}",
+                    if *if_exists { "IF EXISTS " } else { "" },
+                    display_comma_separated(column_names),
+                    if *cascade { " CASCADE" } else { "" }
+                )
             }
             AlterTableOperation::AlterColumn { column_name, op } => {
                 write!(f, "ALTER COLUMN {column_name} {op}")

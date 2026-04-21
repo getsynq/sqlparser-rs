@@ -7228,6 +7228,18 @@ impl<'a> Parser<'a> {
                         if_not_exists,
                         new_partitions: partitions,
                     }
+                } else if self.parse_keyword(Keyword::COLUMNS)
+                    && self.peek_token().token == Token::LParen
+                {
+                    // Hive/Databricks plural form: ADD COLUMNS (col type, ...) [CASCADE]
+                    self.expect_token(&Token::LParen)?;
+                    let column_defs = self.parse_comma_separated(Parser::parse_column_def)?;
+                    self.expect_token(&Token::RParen)?;
+                    let cascade = self.parse_keyword(Keyword::CASCADE);
+                    AlterTableOperation::AddColumns {
+                        column_defs,
+                        cascade,
+                    }
                 } else {
                     let column_keyword = self.parse_keyword(Keyword::COLUMN);
 
@@ -7317,6 +7329,19 @@ impl<'a> Parser<'a> {
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
                 let name = self.parse_identifier(false)?.unwrap();
                 AlterTableOperation::DropIndex { if_exists, name }
+            } else if self.parse_keyword(Keyword::COLUMNS) {
+                // Hive/Databricks plural form: DROP COLUMNS [IF EXISTS] (col, ...) [CASCADE]
+                let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+                self.expect_token(&Token::LParen)?;
+                let column_names = self
+                    .parse_comma_separated(|p| p.parse_identifier(false).map(|id| id.unwrap()))?;
+                self.expect_token(&Token::RParen)?;
+                let cascade = self.parse_keyword(Keyword::CASCADE);
+                AlterTableOperation::DropColumns {
+                    column_names,
+                    if_exists,
+                    cascade,
+                }
             } else {
                 let _ = self.parse_keyword(Keyword::COLUMN); // [ COLUMN ]
                 let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
