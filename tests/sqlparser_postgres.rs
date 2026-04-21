@@ -3558,6 +3558,24 @@ fn parse_create_function() {
 }
 
 #[test]
+fn parse_create_function_arg_name_matches_data_type_keyword() {
+    // Parameter names that happen to collide with data-type keywords
+    // (e.g. `bytes`, `date`) must be parsed as names, not as anonymous types.
+    let sql = "CREATE OR REPLACE FUNCTION hr_bytes(bytes INT8) RETURNS VARCHAR LANGUAGE sql IMMUTABLE AS 'select 1'";
+    let stmt = pg().verified_stmt(sql);
+    if let Statement::CreateFunction {
+        args: Some(args), ..
+    } = stmt
+    {
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].name.as_ref().unwrap().value, "bytes");
+        assert!(matches!(args[0].data_type, DataType::Int8(_)));
+    } else {
+        panic!("expected CREATE FUNCTION");
+    }
+}
+
+#[test]
 fn parse_drop_function() {
     let sql = "DROP FUNCTION IF EXISTS test_func";
     assert_eq!(
@@ -4026,6 +4044,5 @@ fn parse_refresh_materialized_view() {
     pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view");
     pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view WITH DATA");
     pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view WITH NO DATA");
-    pg_and_generic()
-        .verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view WITH NO DATA");
+    pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view WITH NO DATA");
 }
