@@ -4066,3 +4066,21 @@ fn parse_refresh_materialized_view() {
     pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW my_view WITH NO DATA");
     pg_and_generic().verified_stmt("REFRESH MATERIALIZED VIEW CONCURRENTLY my_view WITH NO DATA");
 }
+
+#[test]
+fn parse_create_view_with_check_option() {
+    // Postgres/MySQL: WITH [CASCADED|LOCAL] CHECK OPTION after view body.
+    // Currently consumed and discarded (not preserved in AST).
+    pg().one_statement_parses_to(
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0 WITH CHECK OPTION",
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0",
+    );
+    pg().one_statement_parses_to(
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0 WITH LOCAL CHECK OPTION",
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0",
+    );
+    pg().one_statement_parses_to(
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0 WITH CASCADED CHECK OPTION",
+        "CREATE VIEW v AS SELECT * FROM t WHERE x > 0",
+    );
+}
