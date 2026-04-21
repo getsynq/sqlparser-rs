@@ -12887,11 +12887,22 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let mut opt_apply = Vec::new();
+        if dialect_of!(self is GenericDialect | ClickHouseDialect) {
+            while self.parse_keyword(Keyword::APPLY) {
+                self.expect_token(&Token::LParen)?;
+                let func_name = self.parse_identifier(false)?.unwrap();
+                self.expect_token(&Token::RParen)?;
+                opt_apply.push(func_name);
+            }
+        }
+
         Ok(WildcardAdditionalOptions {
             opt_exclude,
             opt_except,
             opt_rename,
             opt_replace,
+            opt_apply,
         })
     }
 
