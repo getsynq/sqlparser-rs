@@ -11683,20 +11683,7 @@ impl<'a> Parser<'a> {
             PivotValueSource::Subquery(Box::new(query))
         } else {
             let pivot_values = self.parse_comma_separated(|p| {
-                // Handle negative numbers like -1 in PIVOT IN lists
-                let negative = p.consume_token(&Token::Minus);
-                let value = p.parse_value()?;
-                let value = if negative {
-                    match value {
-                        Value::Number(n, b) => {
-                            let neg_str = format!("-{n}");
-                            Value::Number(neg_str.parse().unwrap_or(n), b)
-                        }
-                        other => other,
-                    }
-                } else {
-                    value
-                };
+                let value = p.parse_expr()?;
                 let alias = if p.parse_keyword(Keyword::AS) {
                     Some(p.parse_identifier(false)?.unwrap())
                 } else {
