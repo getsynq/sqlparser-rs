@@ -8455,7 +8455,7 @@ fn parse_pivot_table() {
                 within_group: None,
                 having_bound: None,
             }))],
-            value_column: vec![Ident::new("a"), Ident::new("MONTH")],
+            value_columns: vec![vec![Ident::new("a"), Ident::new("MONTH")]],
             value_source: PivotValueSource::List(vec![
                 PivotValue {
                     value: Expr::Value(Value::SingleQuotedString("JAN".to_string())),
@@ -8572,7 +8572,7 @@ fn parse_pivot_table_aliases() {
                     alias: Ident::new("total"),
                 },
             ],
-            value_column: vec![Ident::new("a"), Ident::new("MONTH")],
+            value_columns: vec![vec![Ident::new("a"), Ident::new("MONTH")]],
             value_source: PivotValueSource::List(vec![
                 PivotValue {
                     value: Expr::Value(Value::SingleQuotedString("JAN".to_string())),
@@ -8795,7 +8795,7 @@ fn parse_pivot_unpivot_table() {
                 null_treatment: None,
                 having_bound: None,
             }))],
-            value_column: vec![Ident::new("year")],
+            value_columns: vec![vec![Ident::new("year")]],
             value_source: PivotValueSource::List(vec![
                 PivotValue {
                     value: Expr::Value(Value::SingleQuotedString("population_2000".to_string())),

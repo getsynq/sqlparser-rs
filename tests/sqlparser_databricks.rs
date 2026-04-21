@@ -473,3 +473,17 @@ fn test_insert_by_name() {
         "INSERT INTO sales BY NAME REPLACE WHERE tx_date = '2022-10-01' SELECT 1 AS amount",
     );
 }
+
+#[test]
+fn test_pivot_multi_column_for() {
+    // Databricks supports multi-column PIVOT: the FOR clause may reference a
+    // parenthesised list of columns whose values are matched against tuples in
+    // the IN clause.
+    databricks().verified_stmt(
+        "SELECT * FROM sales PIVOT(SUM(amount) AS sum_score, AVG(amount) AS avg_score \
+         FOR (subject, quarter) IN (('Math', 'Q1') AS q1_math, ('English', 'Q1') AS q1_english))",
+    );
+    // Single-column form still works unchanged.
+    databricks()
+        .verified_stmt("SELECT * FROM sales PIVOT(SUM(amount) FOR quarter IN ('Q1', 'Q2'))");
+}

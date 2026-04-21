@@ -11813,7 +11813,15 @@ impl<'a> Parser<'a> {
         let aggregates = self.parse_comma_separated(|p| p.parse_aggregate_item(&[Keyword::FOR]))?;
 
         self.expect_keyword(Keyword::FOR)?;
-        let value_column = self.parse_object_name(false)?.0;
+        // Databricks supports multi-column PIVOT: `FOR (col_a, col_b) IN (...)`.
+        // Single-column remains `FOR col IN (...)`.
+        let value_columns = if self.consume_token(&Token::LParen) {
+            let cols = self.parse_comma_separated(|p| Ok(p.parse_object_name(false)?.0))?;
+            self.expect_token(&Token::RParen)?;
+            cols
+        } else {
+            vec![self.parse_object_name(false)?.0]
+        };
         self.expect_keyword(Keyword::IN)?;
         self.expect_token(&Token::LParen)?;
 
@@ -11867,7 +11875,7 @@ impl<'a> Parser<'a> {
         Ok(TableFactor::Pivot {
             table: Box::new(table),
             aggregates,
-            value_column,
+            value_columns,
             value_source,
             default_on_null,
             alias,
