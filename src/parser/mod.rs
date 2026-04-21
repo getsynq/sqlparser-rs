@@ -1144,8 +1144,10 @@ impl<'a> Parser<'a> {
                             self.prev_token();
                             let function = self.parse_function(ObjectName(id_parts))?;
                             if dialect_of!(self is BigQueryDialect | DatabricksDialect)
-                                && self.consume_token(&Token::Period)
+                                && self.peek_token_ref().token == Token::Period
+                                && self.peek_nth_token_ref(1).token != Token::Mul
                             {
+                                self.next_token();
                                 Ok(Expr::JsonAccess {
                                     left: Box::new(function),
                                     operator: JsonOperator::Period,
