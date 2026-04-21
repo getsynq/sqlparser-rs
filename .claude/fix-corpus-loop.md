@@ -4,19 +4,21 @@ You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/
 
 ## Priority
 
-**Focus on customer-facing issues first.** The corpus directories have these priority tiers:
+**Only work on real customer SQL.** We care about what customers actually run in their warehouses, not theoretical syntax the DWH docs say is legal. The corpus directories are tiered accordingly:
 
-1. **Highest priority — customer query logs & real customer SQL:**
-   - `unparsed_snowflake`, `unparsed_bigquery`, `unparsed_redshift`, `unparsed_trino`
-   - `customer_snowflake`, `customer_bigquery`, `customer_redshift`, `customer_clickhouse`, `customer_databricks`, `customer_postgres`, etc.
-2. **High priority — first-party dialect tests:**
-   - `snowflake`, `bigquery`, `redshift`, `databricks`, `clickhouse`, `postgres`
-3. **Lower priority — sqlglot fixtures and others:**
+1. **ONLY tier worth fixing — customer query logs & real customer SQL definitions:**
+   - `unparsed_snowflake`, `unparsed_bigquery`, `unparsed_redshift`, `unparsed_trino` (raw query logs)
+   - `customer_snowflake`, `customer_bigquery`, `customer_redshift`, `customer_clickhouse`, `customer_databricks`, `customer_postgres`, etc. (real customer model/view definitions)
+2. **Skip unless tier 1 is empty — first-party upstream fixtures:**
+   - `snowflake`, `bigquery`, `redshift`, `databricks`, `clickhouse`, `postgres`, `mysql`, `mssql`, `duckdb`, `hive`, `sqlite`, `ansi`, `generic`, `trino`
+3. **Always skip — synthetic/third-party fixtures:**
    - `sqlglot_*`, `synq_*`, etc.
 
-**Dialect priority order:** Snowflake > BigQuery > Redshift > Databricks > ClickHouse > Postgres > everything else.
+**Hard rule:** if the chosen error pattern has **zero tier-1 files**, do not fix it — pick a different pattern. If every top candidate is tier-2/tier-3 only, stop the iteration without a commit. A fix that only helps theoretical queries adds AST surface and regression risk for no customer benefit.
 
-When picking which failure to fix, prefer higher-priority directories and dialects. Within the same priority, prefer error patterns that affect more files.
+**Dialect priority order (within tier 1):** Snowflake > Redshift > BigQuery > Databricks > ClickHouse > Postgres > everything else.
+
+When picking which failure to fix, maximize tier-1 file count, then prefer higher-priority dialects.
 
 ## Dialect strategy
 
@@ -99,12 +101,15 @@ for err, info in ranked[:15]:
 ```
 
 **Pick a failure pattern that:**
-- Has the most tier-1 (customer/unparsed) failures
-- Affects important dialects (Snowflake > BigQuery > Redshift > Databricks > ClickHouse > Postgres)
+- Has **at least one** tier-1 (customer/unparsed) failure — zero tier-1 means skip this pattern entirely
+- Among qualifying patterns, maximize tier-1 file count
+- Affects important dialects (Snowflake > Redshift > BigQuery > Databricks > ClickHouse > Postgres)
 - Looks like a parser limitation (not garbage SQL)
 - You can actually fix without massive AST changes
 
-Read 2-3 example SQL files for the chosen error pattern to understand what syntax is failing.
+If the top-15 ranked list has no tier-1 candidates, stop the iteration without a commit — tier-2/3-only fixes are out of scope. Report that no tier-1 failures remain and exit.
+
+Read 2-3 example SQL files from the tier-1 set for the chosen error pattern to understand what syntax is failing.
 
 ### Step 2: Understand the root cause
 - Read the failing SQL files to understand what SQL construct is not supported
