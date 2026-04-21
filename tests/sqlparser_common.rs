@@ -23,9 +23,9 @@ use sqlparser::ast::SelectItem::UnnamedExpr;
 use sqlparser::ast::TableFactor::{Pivot, Unpivot};
 use sqlparser::ast::*;
 use sqlparser::dialect::{
-    AnsiDialect, BigQueryDialect, ClickHouseDialect, Dialect, DuckDbDialect, GenericDialect,
-    HiveDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect, RedshiftSqlDialect, SQLiteDialect,
-    SnowflakeDialect,
+    AnsiDialect, BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect,
+    GenericDialect, HiveDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect, RedshiftSqlDialect,
+    SQLiteDialect, SnowflakeDialect,
 };
 use sqlparser::keywords::ALL_KEYWORDS;
 use sqlparser::parser::{Parser, ParserError, ParserOptions};
@@ -2341,7 +2341,10 @@ fn parse_extract() {
     verified_stmt("SELECT EXTRACT(TIMEZONE_MINUTE FROM d)");
 
     let dialects = all_dialects_except(|d| {
-        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+        d.is::<SnowflakeDialect>()
+            || d.is::<GenericDialect>()
+            || d.is::<RedshiftSqlDialect>()
+            || d.is::<DatabricksDialect>()
     });
     let res = dialects.parse_sql_statements("SELECT EXTRACT(JIFFY FROM d)");
     assert_eq!(
@@ -2386,7 +2389,10 @@ fn parse_ceil_datetime() {
     verified_stmt("SELECT CEIL(d TO MILLISECOND) FROM df");
 
     let dialects = all_dialects_except(|d| {
-        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+        d.is::<SnowflakeDialect>()
+            || d.is::<GenericDialect>()
+            || d.is::<RedshiftSqlDialect>()
+            || d.is::<DatabricksDialect>()
     });
     let res = dialects.parse_sql_statements("SELECT CEIL(d TO JIFFY) FROM df");
     assert_eq!(
@@ -2419,7 +2425,10 @@ fn parse_floor_datetime() {
     verified_stmt("SELECT FLOOR(d TO MILLISECOND) FROM df");
 
     let dialects = all_dialects_except(|d| {
-        d.is::<SnowflakeDialect>() || d.is::<GenericDialect>() || d.is::<RedshiftSqlDialect>()
+        d.is::<SnowflakeDialect>()
+            || d.is::<GenericDialect>()
+            || d.is::<RedshiftSqlDialect>()
+            || d.is::<DatabricksDialect>()
     });
     let res = dialects.parse_sql_statements("SELECT FLOOR(d TO JIFFY) FROM df");
     assert_eq!(
