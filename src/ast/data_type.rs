@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "visitor")]
 use sqlparser_derive::{Visit, VisitMut};
 
-use crate::ast::{display_comma_separated, ObjectName, StructField};
+use crate::ast::{display_comma_separated, value::DateTimeField, ObjectName, StructField};
 
 use super::{value::escape_single_quote_string, ColumnDef};
 
@@ -261,8 +261,10 @@ pub enum DataType {
     ///
     /// [1]: https://jakewheat.github.io/sql-overview/sql-2016-foundation-grammar.html#datetime-type
     Timestamp(Option<u64>, TimezoneInfo),
-    /// Interval
-    Interval,
+    /// Interval, optionally qualified by leading field and optional trailing
+    /// field, e.g. `INTERVAL DAY TO SECOND`, `INTERVAL YEAR TO MONTH` (ANSI /
+    /// Databricks / Spark). Bare `INTERVAL` has no qualifier.
+    Interval(Option<IntervalQualifier>),
     /// JSON type used in BigQuery
     JSON,
     /// Regclass used in postgresql serial
@@ -333,6 +335,25 @@ pub enum DataType {
     /// [`SQLiteDialect`](crate::dialect::SQLiteDialect), from statements such
     /// as `CREATE TABLE t1 (a)`.
     Unspecified,
+}
+
+/// Qualifier for the `INTERVAL` data type (e.g. `INTERVAL DAY TO SECOND`).
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct IntervalQualifier {
+    pub leading_field: DateTimeField,
+    pub last_field: Option<DateTimeField>,
+}
+
+impl fmt::Display for IntervalQualifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.leading_field)?;
+        if let Some(last) = &self.last_field {
+            write!(f, " TO {last}")?;
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Display for DataType {
@@ -494,7 +515,10 @@ impl fmt::Display for DataType {
                     timezone,
                 )
             }
-            DataType::Interval => write!(f, "INTERVAL"),
+            DataType::Interval(qualifier) => match qualifier {
+                None => write!(f, "INTERVAL"),
+                Some(q) => write!(f, "INTERVAL {q}"),
+            },
             DataType::JSON => write!(f, "JSON"),
             DataType::Regclass => write!(f, "REGCLASS"),
             DataType::Text => write!(f, "TEXT"),

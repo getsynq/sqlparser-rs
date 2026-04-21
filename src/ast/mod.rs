@@ -30,7 +30,7 @@ use sqlparser_derive::{Visit, VisitMut};
 
 pub use self::data_type::{
     ArrayElemTypeDef, CharLengthUnits, CharacterLength, DataType, EnumTypeValue, ExactNumberInfo,
-    TimezoneInfo,
+    IntervalQualifier, TimezoneInfo,
 };
 pub use self::dcl::{
     AlterRoleOperation, Grantee, GranteesType, ResetConfig, RoleOption, SetConfigValue,

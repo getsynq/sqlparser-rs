@@ -567,7 +567,7 @@ fn parse_typed_struct_syntax() {
             }),],
             fields: vec![StructField {
                 field_name: None,
-                field_type: DataType::Interval,
+                field_type: DataType::Interval(None),
                 colon: false,
                 not_null: false,
                 options: vec![],

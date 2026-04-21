@@ -452,3 +452,13 @@ fn test_exists_higher_order_function() {
     databricks().verified_stmt("SELECT 1 FROM tbl WHERE EXISTS (SELECT 1 FROM u)");
     databricks().verified_stmt("SELECT 1 FROM tbl WHERE NOT EXISTS (SELECT 1 FROM u)");
 }
+
+#[test]
+fn test_cast_interval_with_qualifier() {
+    // Databricks/Spark supports qualified INTERVAL types in CAST:
+    //   INTERVAL DAY TO SECOND, INTERVAL YEAR TO MONTH, INTERVAL DAY, etc.
+    databricks().verified_stmt("SELECT CAST('11 23:4:0' AS INTERVAL DAY TO SECOND)");
+    databricks().verified_stmt("SELECT CAST('1' AS INTERVAL DAY TO MINUTE)");
+    databricks().verified_stmt("SELECT CAST('1-6' AS INTERVAL YEAR TO MONTH)");
+    databricks().verified_stmt("SELECT CAST('1' AS INTERVAL DAY)");
+}
