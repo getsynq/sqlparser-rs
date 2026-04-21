@@ -514,3 +514,12 @@ fn test_pivot_multi_column_for() {
     databricks()
         .verified_stmt("SELECT * FROM sales PIVOT(SUM(amount) FOR quarter IN ('Q1', 'Q2'))");
 }
+
+#[test]
+fn test_sort_by_with_direction_and_nulls() {
+    // Databricks supports ASC/DESC and NULLS FIRST/LAST on SORT BY expressions.
+    databricks().verified_stmt("SELECT age, name, zip_code FROM person SORT BY age DESC");
+    databricks()
+        .verified_stmt("SELECT age, name, zip_code FROM person SORT BY age DESC NULLS FIRST");
+    databricks().verified_stmt("SELECT a FROM t SORT BY a ASC, b DESC NULLS LAST");
+}
