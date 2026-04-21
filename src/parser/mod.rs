@@ -13821,6 +13821,16 @@ impl<'a> Parser<'a> {
         } else {
             // Body is a string literal or expression - skip to end of statement
             let _ = self.parse_expr();
+            // Consume trailing clauses like `LANGUAGE plpgsql`, `SECURITY INVOKER`,
+            // `STABLE`, `VOLATILE`, etc. that follow the body in PostgreSQL/Redshift.
+            loop {
+                match self.peek_token_kind() {
+                    Token::SemiColon | Token::EOF => break,
+                    _ => {
+                        self.next_token();
+                    }
+                }
+            }
             Ok(Statement::CreateProcedure {
                 name,
                 or_alter,
