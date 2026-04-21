@@ -183,6 +183,16 @@ fn parse_lateral_flatten() {
 }
 
 #[test]
+fn parse_lateral_table_function_parens() {
+    // Snowflake allows wrapping a TABLE(func(...)) call in an extra pair of
+    // parens after LATERAL. Accept it and unwrap to a plain TABLE(...) factor.
+    snowflake().one_statement_parses_to(
+        "SELECT * FROM t, LATERAL (TABLE(my_func(t.col)))",
+        "SELECT * FROM t, TABLE(my_func(t.col))",
+    );
+}
+
+#[test]
 fn parse_within_group() {
     snowflake().verified_only_select(r#"SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY ride_duration) AS median_ride_duration FROM rides"#);
 }
