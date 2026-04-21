@@ -1357,6 +1357,7 @@ fn test_external_query() {
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY(\"projects/bq-proj/locations/EU/connections/connection_name\",\"SELECT * FROM public.auth0_user \")");
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY(\"projects/bq-proj/locations/EU/connections/connection_name\",\"SELECT * FROM public.auth0_user \", '{\"default_type_for_decimal_columns\":\"numeric\"}')");
     bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY('connection_id','''SELECT * FROM customers AS c ORDER BY c.customer_id''')");
+    bigquery().verified_only_select("SELECT * FROM EXTERNAL_QUERY('conn','SELECT 1') AS rq");
 }
 
 #[test]
@@ -1807,8 +1808,9 @@ fn parse_expr_wildcard() {
     );
     // Generic function-call struct wildcard: `IF(...).*`
     bigquery().verified_stmt("SELECT IF(a IS NULL, b, c).* FROM t");
-    bigquery()
-        .verified_stmt("SELECT t.*, IF(NOT a.b IS NULL, a, c).*, x FROM t LEFT JOIN u ON t.a = u.a");
+    bigquery().verified_stmt(
+        "SELECT t.*, IF(NOT a.b IS NULL, a, c).*, x FROM t LEFT JOIN u ON t.a = u.a",
+    );
 }
 
 #[test]
