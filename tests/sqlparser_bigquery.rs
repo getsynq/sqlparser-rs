@@ -929,6 +929,13 @@ fn parse_hyphenated_table_identifiers() {
 
     let error_sql = "select foo-bar.* from foo-bar";
     assert!(bigquery().parse_sql_statements(error_sql).is_err());
+
+    bigquery().verified_stmt(
+        "CREATE MATERIALIZED VIEW project-id.my_dataset.my_mv_table AS SELECT date FROM project-id.my_dataset.my_base_table",
+    );
+    bigquery().verified_stmt(
+        "CREATE VIEW project-id.my_dataset.my_view AS SELECT 1",
+    );
 }
 
 #[test]
