@@ -6008,6 +6008,7 @@ impl<'a> Parser<'a> {
         let mut collation: Option<String> = None;
         let mut on_commit: Option<OnCommit> = None;
         let mut strict = false;
+        let mut inherits: Option<Vec<ObjectName>> = None;
 
         loop {
             // WITH (...) options
@@ -6231,6 +6232,15 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // PostgreSQL: INHERITS (parent_table [, ...])
+            if inherits.is_none() && self.parse_keyword(Keyword::INHERITS) {
+                self.expect_token(&Token::LParen)?;
+                let parents = self.parse_comma_separated(|p| p.parse_object_name(false))?;
+                self.expect_token(&Token::RParen)?;
+                inherits = Some(parents);
+                continue;
+            }
+
             // Redshift: BACKUP YES/NO, ENCODE type
             if self.parse_keyword(Keyword::BACKUP) {
                 let _ = self.parse_one_of_keywords(&[Keyword::YES, Keyword::NO]);
@@ -6411,6 +6421,7 @@ impl<'a> Parser<'a> {
             .projections(projections)
             .copy_grants(copy_grants)
             .location(location)
+            .inherits(inherits)
             .build())
     }
 

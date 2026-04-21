@@ -1882,6 +1882,9 @@ pub enum Statement {
         using_template: Option<Box<Expr>>,
         // Snowflake COPY GRANTS
         copy_grants: bool,
+        /// PostgreSQL `INHERITS (parent_table [, ...])`
+        /// <https://www.postgresql.org/docs/current/ddl-inherit.html>
+        inherits: Option<Vec<ObjectName>>,
     },
     /// ```sql
     /// CREATE VIRTUAL TABLE .. USING <module_name> (<module_args>)`
@@ -3188,6 +3191,7 @@ impl fmt::Display for Statement {
                 using,
                 using_template,
                 copy_grants,
+                inherits,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3283,6 +3287,10 @@ impl fmt::Display for Statement {
 
                 if let Some(c) = copy {
                     write!(f, " COPY {c}")?;
+                }
+
+                if let Some(parents) = inherits {
+                    write!(f, " INHERITS ({})", display_comma_separated(parents))?;
                 }
 
                 match hive_distribution {

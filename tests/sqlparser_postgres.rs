@@ -4059,6 +4059,28 @@ fn parse_table_inheritance_wildcard() {
 }
 
 #[test]
+fn parse_create_table_inherits() {
+    // PostgreSQL table inheritance:
+    // https://www.postgresql.org/docs/current/ddl-inherit.html
+    pg().verified_stmt("CREATE TABLE capitals (state CHAR(2)) INHERITS (cities)");
+    pg().verified_stmt("CREATE TABLE t (c CHAR(2) UNIQUE NOT NULL) INHERITS (t1)");
+    pg().verified_stmt("CREATE TABLE s.t (c CHAR(2) UNIQUE NOT NULL) INHERITS (s.t1, s.t2)");
+    // CHECK constraint followed by INHERITS
+    pg_and_generic().verified_stmt(
+        "CREATE TABLE measurement_y2008m02 (CHECK (logdate >= DATE '2008-02-01' AND logdate < DATE '2008-03-01')) INHERITS (measurement)",
+    );
+    // Verify AST preserves the inherited table references
+    match pg().verified_stmt("CREATE TABLE capitals (state CHAR(2)) INHERITS (cities)") {
+        Statement::CreateTable { inherits, .. } => {
+            let parents = inherits.expect("INHERITS parents");
+            assert_eq!(parents.len(), 1);
+            assert_eq!(parents[0].to_string(), "cities");
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_create_table_like() {
     // Simple LIKE clause inside column list (Redshift/PostgreSQL syntax)
     pg().verified_stmt("CREATE TABLE new_tbl (LIKE old_tbl)");
