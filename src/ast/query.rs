@@ -1155,7 +1155,9 @@ pub enum TableFactor {
         #[cfg_attr(feature = "visitor", visit(with = "visit_table_factor"))]
         table: Box<TableFactor>,
         aggregates: Vec<AggregateItem>,
-        value_column: Vec<Ident>,
+        /// The column(s) in the `FOR` clause. Single-column pivots have one
+        /// entry; multi-column pivots (Databricks) have multiple.
+        value_columns: Vec<Vec<Ident>>,
         value_source: PivotValueSource,
         /// Optional `DEFAULT ON NULL (value)` clause (Snowflake)
         default_on_null: Option<Expr>,
@@ -1370,19 +1372,34 @@ impl fmt::Display for TableFactor {
             TableFactor::Pivot {
                 table,
                 aggregates: aggregate_projections,
-                value_column,
+                value_columns,
                 value_source,
                 default_on_null,
                 alias,
             } => {
                 write!(
                     f,
-                    "{} PIVOT({} FOR {} IN ({})",
+                    "{} PIVOT({} FOR ",
                     table,
                     display_comma_separated(aggregate_projections),
-                    Expr::CompoundIdentifier(value_column.to_vec().empty_span()),
-                    value_source
                 )?;
+                if value_columns.len() == 1 {
+                    write!(
+                        f,
+                        "{}",
+                        Expr::CompoundIdentifier(value_columns[0].to_vec().empty_span())
+                    )?;
+                } else {
+                    let cols = value_columns
+                        .iter()
+                        .map(|parts| {
+                            Expr::CompoundIdentifier(parts.to_vec().empty_span()).to_string()
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    write!(f, "({cols})")?;
+                }
+                write!(f, " IN ({value_source})")?;
                 if let Some(default) = default_on_null {
                     write!(f, " DEFAULT ON NULL ({default})")?;
                 }
