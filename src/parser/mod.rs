@@ -6677,6 +6677,15 @@ impl<'a> Parser<'a> {
             Ok(Some(ColumnOption::DialectSpecific(vec![
                 Token::make_keyword("CODEC"),
             ])))
+        } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+            && self.parse_keyword(Keyword::ENCODE)
+        {
+            // Redshift: ENCODE <encoding>
+            let encoding = self.parse_identifier(false)?.unwrap();
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("ENCODE"),
+                Token::make_word(&encoding.value, encoding.quote_style),
+            ])))
         } else {
             Ok(None)
         }

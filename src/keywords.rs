@@ -262,6 +262,7 @@ define_keywords!(
     EACH,
     ELEMENT,
     ELSE,
+    ENCODE,
     ENCODING,
     ENCRYPTION,
     END,
