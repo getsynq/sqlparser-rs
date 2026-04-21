@@ -12696,7 +12696,22 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            let source = Box::new(self.parse_query()?);
+            let source = if self.parse_keywords(&[Keyword::DEFAULT, Keyword::VALUES]) {
+                Box::new(Query {
+                    with: None,
+                    body: Box::new(SetExpr::DefaultValues),
+                    order_by: None,
+                    limit: None,
+                    limit_by: vec![],
+                    offset: None,
+                    fetch: None,
+                    locks: vec![],
+                    settings: None,
+                    format_clause: None,
+                })
+            } else {
+                Box::new(self.parse_query()?)
+            };
             let on = if self.parse_keyword(Keyword::ON) {
                 if self.parse_keyword(Keyword::CONFLICT) {
                     let conflict_target =

@@ -1775,6 +1775,19 @@ fn parse_pg_on_conflict() {
 }
 
 #[test]
+fn parse_pg_insert_default_values() {
+    let stmt = pg_and_generic().verified_stmt("INSERT INTO products DEFAULT VALUES");
+    match stmt {
+        Statement::Insert { source, .. } => {
+            assert!(matches!(*source.body, SetExpr::DefaultValues));
+        }
+        _ => unreachable!(),
+    }
+
+    pg_and_generic().verified_stmt("INSERT INTO products DEFAULT VALUES RETURNING id");
+}
+
+#[test]
 fn parse_pg_returning() {
     let stmt = pg_and_generic().verified_stmt(
         "INSERT INTO distributors (did, dname) VALUES (DEFAULT, 'XYZ Widgets') RETURNING did",
