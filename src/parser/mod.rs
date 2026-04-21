@@ -2851,6 +2851,7 @@ impl<'a> Parser<'a> {
                 Keyword::AND => Some(BinaryOperator::And),
                 Keyword::OR => Some(BinaryOperator::Or),
                 Keyword::XOR => Some(BinaryOperator::Xor),
+                Keyword::DIV => Some(BinaryOperator::MyIntegerDivide),
                 Keyword::OPERATOR if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
                     self.expect_token(&Token::LParen)?;
                     // there are special rules for operator names in
