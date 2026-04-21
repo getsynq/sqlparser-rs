@@ -659,6 +659,7 @@ define_keywords!(
     SESSION,
     SESSION_USER,
     SET,
+    SETOF,
     SETS,
     SETTINGS,
     SHARE,

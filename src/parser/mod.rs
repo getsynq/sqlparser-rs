@@ -4596,6 +4596,9 @@ impl<'a> Parser<'a> {
             };
 
             let return_type = if self.parse_keyword(Keyword::RETURNS) {
+                // PostgreSQL: `RETURNS SETOF <type>` marks set-returning functions;
+                // consume the keyword and parse the element type.
+                let _ = self.parse_keyword(Keyword::SETOF);
                 Some(self.parse_data_type()?)
             } else {
                 None
