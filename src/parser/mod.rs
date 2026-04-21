@@ -986,7 +986,9 @@ impl<'a> Parser<'a> {
         let span = self.peek_token().span;
         return_ok_if_some!(self.maybe_parse(|parser| {
             match parser.parse_data_type()? {
-                DataType::Interval if parser.parse_interval_guard() => parser.parse_interval(),
+                DataType::Interval(None) if parser.parse_interval_guard() => {
+                    parser.parse_interval()
+                }
                 // PostgreSQL allows almost any identifier to be used as custom data type name,
                 // and we support that in `parse_data_type()`. But unlike Postgres we don't
                 // have a list of globally reserved keywords (since they vary across dialects),
@@ -2479,6 +2481,38 @@ impl<'a> Parser<'a> {
             leading_precision,
             last_field,
             fractional_seconds_precision: fsec_precision,
+        }))
+    }
+
+    /// Parse the optional qualifier of an `INTERVAL` data type, e.g. the
+    /// `DAY TO SECOND` in `INTERVAL DAY TO SECOND` (used in `CAST` and column
+    /// definitions in Databricks, Spark, Oracle, ANSI SQL).
+    fn parse_optional_interval_qualifier(
+        &mut self,
+    ) -> Result<Option<crate::ast::IntervalQualifier>, ParserError> {
+        let is_date_time_field = |kw: Keyword| {
+            matches!(
+                kw,
+                Keyword::YEAR
+                    | Keyword::MONTH
+                    | Keyword::DAY
+                    | Keyword::HOUR
+                    | Keyword::MINUTE
+                    | Keyword::SECOND
+            )
+        };
+        let leading_field = match self.peek_token().token {
+            Token::Word(ref w) if is_date_time_field(w.keyword) => self.parse_date_time_field()?,
+            _ => return Ok(None),
+        };
+        let last_field = if self.parse_keyword(Keyword::TO) {
+            Some(self.parse_date_time_field()?)
+        } else {
+            None
+        };
+        Ok(Some(crate::ast::IntervalQualifier {
+            leading_field,
+            last_field,
         }))
     }
 
@@ -8578,7 +8612,9 @@ impl<'a> Parser<'a> {
                 // Interval types can be followed by a complicated interval
                 // qualifier that we don't currently support. See
                 // parse_interval for a taste.
-                Keyword::INTERVAL => Ok(DataType::Interval),
+                Keyword::INTERVAL => Ok(DataType::Interval(
+                    self.parse_optional_interval_qualifier()?,
+                )),
                 Keyword::JSON => Ok(DataType::JSON),
                 Keyword::REGCLASS => Ok(DataType::Regclass),
                 Keyword::STRING => Ok(DataType::String(self.parse_optional_precision()?)),
