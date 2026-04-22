@@ -4843,9 +4843,22 @@ impl<'a> Parser<'a> {
         } else {
             let mut name = None;
             let mut data_type = self.parse_data_type()?;
+            // The parsed Custom name might be the arg *name*, with the real type
+            // following. Only split it off if there's more to parse (a type
+            // keyword / identifier) — a comma, `)`, `=`, DEFAULT, or EOF means
+            // this was really an anonymous-typed arg like `refcursor` alone.
             if let DataType::Custom(n, _) = &data_type {
-                name = Some(n.0[0].clone());
-                data_type = self.parse_data_type()?;
+                let next_is_terminator = matches!(
+                    self.peek_token().token,
+                    Token::Comma | Token::RParen | Token::EOF | Token::Eq
+                ) || matches!(
+                    self.peek_token().token,
+                    Token::Word(w) if w.keyword == Keyword::DEFAULT
+                );
+                if !next_is_terminator {
+                    name = Some(n.0[0].clone());
+                    data_type = self.parse_data_type()?;
+                }
             }
             (name, data_type)
         };

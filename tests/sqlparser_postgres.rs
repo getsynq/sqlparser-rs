@@ -4297,3 +4297,12 @@ fn test_postgres_for_update_before_limit() {
     let sql = "WITH b AS (SELECT ctid FROM t WHERE status = 'x' ORDER BY d FOR UPDATE LIMIT 10000) DELETE FROM t USING b WHERE t.ctid = b.ctid";
     pg().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn test_postgres_function_anonymous_custom_type_args() {
+    // PostgreSQL functions accept anonymous arguments with custom types,
+    // e.g. `myfunc(refcursor, refcursor)`. Previously the parser assumed
+    // a second data type would follow a Custom one, which failed at the comma.
+    let sql = "CREATE FUNCTION myfunc(refcursor, refcursor) RETURNS SETOF refcursor AS $$ BEGIN OPEN $1 FOR SELECT 1; END; $$ LANGUAGE plpgsql";
+    pg().parse_sql_statements(sql).unwrap();
+}
