@@ -2376,3 +2376,27 @@ fn test_snowflake_double_with_precision() {
     snowflake_and_generic().verified_stmt("SELECT CAST(x AS DOUBLE(6)) FROM t");
     snowflake_and_generic().verified_stmt("SELECT CAST(x AS DOUBLE) FROM t");
 }
+
+#[test]
+fn test_snowflake_alter_dynamic_table() {
+    // Snowflake dynamic tables: SUSPEND/RESUME/REFRESH. ALTER DYNAMIC TABLE is
+    // normalized to ALTER TABLE in the AST so lineage can treat both uniformly.
+    let cases = [
+        ("ALTER DYNAMIC TABLE foo SUSPEND", "ALTER TABLE foo SUSPEND"),
+        ("ALTER DYNAMIC TABLE foo RESUME", "ALTER TABLE foo RESUME"),
+        ("ALTER DYNAMIC TABLE foo REFRESH", "ALTER TABLE foo REFRESH"),
+        (
+            "ALTER DYNAMIC TABLE IF EXISTS db.sch.foo REFRESH",
+            "ALTER TABLE IF EXISTS db.sch.foo REFRESH",
+        ),
+    ];
+    for (input, expected) in cases {
+        let stmt = snowflake().one_statement_parses_to(input, expected);
+        match stmt {
+            Statement::AlterTable { name, .. } => {
+                assert!(!name.0.is_empty(), "name should be preserved");
+            }
+            other => panic!("expected AlterTable, got {other:?}"),
+        }
+    }
+}
