@@ -681,3 +681,12 @@ fn test_redshift_column_encode() {
         "CREATE TABLE t (a INT NOT NULL ENCODE AZ64, b INT ENCODE AZ64, PRIMARY KEY (a))",
     );
 }
+
+#[test]
+fn test_redshift_extract_nested_cast_string() {
+    // Redshift EXTRACT accepts string literals cast to a type as the field. SQL
+    // generators sometimes emit nested casts around the literal, e.g.
+    // `EXTRACT(CAST(CAST('epoch' AS VARCHAR) AS VARCHAR(MAX)) FROM ts)`.
+    let sql = "SELECT EXTRACT(CAST(CAST('epoch' AS VARCHAR) AS VARCHAR(MAX)) FROM ts) FROM t";
+    redshift().parse_sql_statements(sql).unwrap();
+}

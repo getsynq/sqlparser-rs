@@ -2308,14 +2308,17 @@ impl<'a> Parser<'a> {
                 Keyword::TIMEZONE_MINUTE => Ok(DateTimeField::TimezoneMinute),
                 Keyword::TIMEZONE_REGION => Ok(DateTimeField::TimezoneRegion),
                 // Redshift allows CAST(...) expression as date/time field
-                // e.g., EXTRACT(CAST('epoch' AS VARCHAR(MAX)) FROM ...)
+                // e.g., EXTRACT(CAST('epoch' AS VARCHAR(MAX)) FROM ...). SQL generators
+                // often nest casts (CAST(CAST('epoch' AS VARCHAR) AS VARCHAR(MAX))),
+                // so unwrap until we find the underlying string literal.
                 Keyword::CAST if dialect_of!(self is RedshiftSqlDialect | GenericDialect) => {
                     self.prev_token();
-                    let cast_expr = self.parse_expr()?;
-                    if let Expr::Cast { expr, .. } = cast_expr {
-                        if let Expr::Value(Value::SingleQuotedString(ref s)) = *expr {
-                            return Ok(Self::date_time_field_from_str(s));
-                        }
+                    let mut cur = self.parse_expr()?;
+                    while let Expr::Cast { expr, .. } = cur {
+                        cur = *expr;
+                    }
+                    if let Expr::Value(Value::SingleQuotedString(ref s)) = cur {
+                        return Ok(Self::date_time_field_from_str(s));
                     }
                     self.expected(
                         "string literal in CAST expression for date/time field",
