@@ -156,6 +156,7 @@ fn test_select_union_by_name() {
     let expected = Box::<SetExpr>::new(SetExpr::SetOperation {
         op: SetOperator::Union,
         set_quantifier: SetQuantifier::ByName,
+        set_prefix: None,
         left: Box::<SetExpr>::new(SetExpr::Select(Box::new(Select {
             distinct: None,
             top: None,
@@ -247,6 +248,7 @@ fn test_select_union_by_name() {
     let expected = Box::<SetExpr>::new(SetExpr::SetOperation {
         op: SetOperator::Union,
         set_quantifier: SetQuantifier::AllByName,
+        set_prefix: None,
         left: Box::<SetExpr>::new(SetExpr::Select(Box::new(Select {
             distinct: None,
             top: None,

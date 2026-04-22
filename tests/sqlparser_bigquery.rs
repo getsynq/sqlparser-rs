@@ -2080,3 +2080,52 @@ fn parse_bigquery_json_path_function_call() {
     // Regular field access (no parens) still works
     bigquery().verified_stmt("SELECT arr[SAFE_OFFSET(0)].field_name FROM t");
 }
+
+#[test]
+fn test_bigquery_set_operator_prefix() {
+    // BigQuery supports `{LEFT | FULL | INNER} [OUTER] { UNION | INTERSECT | EXCEPT }`
+    // as an outer-join-style set operator. The prefix must be captured on the
+    // AST so lineage visitors see both branches of the union.
+    let cases = [
+        (
+            "SELECT * FROM t1 LEFT OUTER UNION ALL BY NAME SELECT * FROM t2",
+            SetPrefix::Left,
+        ),
+        (
+            "SELECT * FROM t1 LEFT UNION ALL SELECT * FROM t2",
+            SetPrefix::Left,
+        ),
+        (
+            "SELECT * FROM t1 INNER UNION ALL SELECT * FROM t2",
+            SetPrefix::Inner,
+        ),
+        (
+            "SELECT * FROM t1 FULL OUTER UNION ALL BY NAME SELECT * FROM t2",
+            SetPrefix::Full,
+        ),
+    ];
+    for (sql, expected_prefix) in cases {
+        let stmts = bigquery().parse_sql_statements(sql).unwrap();
+        match &stmts[0] {
+            Statement::Query(q) => match &*q.body {
+                SetExpr::SetOperation {
+                    set_prefix,
+                    left,
+                    right,
+                    ..
+                } => {
+                    assert_eq!(
+                        *set_prefix,
+                        Some(expected_prefix),
+                        "prefix mismatch for {sql}"
+                    );
+                    // Both branches must reach visitors: ensure neither is DefaultValues.
+                    assert!(matches!(**left, SetExpr::Select(_)));
+                    assert!(matches!(**right, SetExpr::Select(_)));
+                }
+                other => panic!("expected SetOperation, got {other:?}"),
+            },
+            other => panic!("expected Query, got {other:?}"),
+        }
+    }
+}

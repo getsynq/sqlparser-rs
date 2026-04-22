@@ -114,6 +114,10 @@ pub enum SetExpr {
         set_quantifier: SetQuantifier,
         left: Box<SetExpr>,
         right: Box<SetExpr>,
+        /// BigQuery-style outer-join prefix on a set operator:
+        /// `LEFT [OUTER] UNION`, `FULL [OUTER] UNION`, `INNER UNION` (and
+        /// the analogous forms for `INTERSECT` / `EXCEPT`).
+        set_prefix: Option<SetPrefix>,
     },
     Values(Values),
     Insert(Statement),
@@ -152,13 +156,18 @@ impl fmt::Display for SetExpr {
                 right,
                 op,
                 set_quantifier,
+                set_prefix,
             } => {
-                // FULL [OUTER] UNION variants need "FULL" prefix before the operator
-                match set_quantifier {
-                    SetQuantifier::FullByName | SetQuantifier::FullAllByName => {
-                        write!(f, "{left} FULL {op}")?
-                    }
-                    _ => write!(f, "{left} {op}")?,
+                // BigQuery LEFT/FULL/INNER prefix rendered here; legacy
+                // FullByName/FullAllByName quantifiers imply FULL prefix.
+                let legacy_full = matches!(
+                    set_quantifier,
+                    SetQuantifier::FullByName | SetQuantifier::FullAllByName
+                );
+                match (set_prefix, legacy_full) {
+                    (Some(prefix), _) => write!(f, "{left} {prefix} {op}")?,
+                    (None, true) => write!(f, "{left} FULL {op}")?,
+                    (None, false) => write!(f, "{left} {op}")?,
                 }
                 match set_quantifier {
                     SetQuantifier::All
@@ -183,6 +192,27 @@ pub enum SetOperator {
     Union,
     Except,
     Intersect,
+}
+
+/// BigQuery outer-join-style prefix on a set operator.
+/// <https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators>
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SetPrefix {
+    Full,
+    Left,
+    Inner,
+}
+
+impl fmt::Display for SetPrefix {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            SetPrefix::Full => "FULL",
+            SetPrefix::Left => "LEFT",
+            SetPrefix::Inner => "INNER",
+        })
+    }
 }
 
 impl fmt::Display for SetOperator {
