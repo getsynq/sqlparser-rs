@@ -6652,12 +6652,14 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_procedure_param(&mut self) -> Result<ProcedureParam, ParserError> {
-        // Redshift / Postgres-style procedures accept an optional IN/OUT/INOUT mode
-        // before the parameter name. MSSQL doesn't use these keywords here, but
-        // accepting them is harmless — `IN`/`OUT`/`INOUT` are not valid identifier
-        // starts for a parameter definition.
-        let mode = self.parse_arg_mode();
+        // Redshift / Postgres-style procedures accept an optional IN/OUT/INOUT mode.
+        // Postgres puts the mode before the name (`OUT argname type`); Redshift allows
+        // it after the name (`argname OUT type`). Accept both orders.
+        let mut mode = self.parse_arg_mode();
         let name = self.parse_identifier(false)?.unwrap();
+        if mode.is_none() {
+            mode = self.parse_arg_mode();
+        }
         let data_type = self.parse_data_type()?;
         let default_expr = if self.parse_keyword(Keyword::DEFAULT) || self.consume_token(&Token::Eq)
         {
