@@ -204,6 +204,28 @@ LANGUAGE plpgsql AS $$ BEGIN SELECT 1; END; $$"#;
 }
 
 #[test]
+fn snowflake_procedure_handler_without_as_body() {
+    // Snowflake procedures can delegate the body to HANDLER + IMPORTS and omit
+    // the AS clause entirely. The statement still parses.
+    let sql = r#"CREATE OR REPLACE PROCEDURE foo.bar()
+RETURNS VARCHAR
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.10'
+HANDLER = 'mod.fn'
+IMPORTS = ('@stage/src.zip')
+EXECUTE AS CALLER
+;"#;
+    let stmt = parse_one(&SnowflakeDialect {}, sql);
+    match stmt {
+        Statement::CreateProcedure { name, body, .. } => {
+            assert_eq!(name, object_name(&["foo", "bar"]));
+            assert!(body.is_empty());
+        }
+        other => panic!("expected CreateProcedure, got {other:?}"),
+    }
+}
+
+#[test]
 fn procedure_param_with_default_value() {
     // Snowflake stored procedures allow `DEFAULT <expr>` on parameters.
     let sql = "CREATE OR REPLACE PROCEDURE foo.bar(\"A\" VARCHAR, \"B\" VARCHAR DEFAULT 'x', \"C\" NUMBER DEFAULT 1) RETURNS VARCHAR LANGUAGE SQL AS 'return 1'";
