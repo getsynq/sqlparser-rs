@@ -11692,11 +11692,10 @@ impl<'a> Parser<'a> {
                         if peek_keyword == Keyword::INNER {
                             let t1 = self.peek_nth_token(1).token;
                             if matches!(t1,
-                                Token::Word(ref w) if matches!(
-                                    w.keyword,
-                                    Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
-                                ))
-                            {
+                            Token::Word(ref w) if matches!(
+                                w.keyword,
+                                Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
+                            )) {
                                 break;
                             }
                         }
@@ -11707,11 +11706,13 @@ impl<'a> Parser<'a> {
                     kw @ Keyword::LEFT | kw @ Keyword::RIGHT => {
                         // BigQuery `LEFT [OUTER] { UNION | INTERSECT | EXCEPT }` — not a JOIN.
                         if kw == Keyword::LEFT {
-                            let is_set_op_kw = |t: &Token| matches!(t,
+                            let is_set_op_kw = |t: &Token| {
+                                matches!(t,
                                 Token::Word(w) if matches!(
                                     w.keyword,
                                     Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
-                                ));
+                                ))
+                            };
                             let t1 = self.peek_nth_token(1).token;
                             let left_union = is_set_op_kw(&t1)
                                 || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
@@ -13095,6 +13096,14 @@ impl<'a> Parser<'a> {
             };
             let is_mysql = dialect_of!(self is MySqlDialect);
 
+            // PostgreSQL: `INSERT INTO <table> AS <alias> (col_list)` — the alias is
+            // referenced by ON CONFLICT DO UPDATE predicates (e.g. `WHERE d.zipcode <> '…'`).
+            let table_alias = if self.parse_keyword(Keyword::AS) {
+                Some(self.parse_identifier(false)?.unwrap())
+            } else {
+                None
+            };
+
             // Parse optional column list, but be careful not to consume a parenthesized query
             // e.g., INSERT INTO t (SELECT ...) should not treat (SELECT ...) as a column list
             // ClickHouse allows INSERT INTO t (*) to mean all columns
@@ -13223,6 +13232,7 @@ impl<'a> Parser<'a> {
             Ok(Statement::Insert {
                 or,
                 table_name,
+                table_alias,
                 into,
                 overwrite,
                 partitioned,

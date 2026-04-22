@@ -1653,6 +1653,9 @@ pub enum Statement {
         /// TABLE
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         table_name: ObjectName,
+        /// PostgreSQL: `INSERT INTO <table> AS <alias> (...)`. The alias is
+        /// referenced in ON CONFLICT DO UPDATE predicates.
+        table_alias: Option<Ident>,
         /// COLUMNS
         columns: Vec<WithSpan<Ident>>,
         /// True if columns were specified as (*) - ClickHouse syntax for all columns
@@ -2804,6 +2807,7 @@ impl fmt::Display for Statement {
                 or,
                 into,
                 table_name,
+                table_alias,
                 overwrite,
                 partitioned,
                 columns,
@@ -2827,6 +2831,9 @@ impl fmt::Display for Statement {
                         int = if *into { " INTO" } else { "" },
                         tbl = if *table { " TABLE" } else { "" }
                     )?;
+                }
+                if let Some(alias) = table_alias {
+                    write!(f, "AS {alias} ")?;
                 }
                 if *insert_all_columns {
                     write!(f, "(*) ")?;
