@@ -53,6 +53,9 @@ pub struct CreateTableBuilder {
     pub global: Option<bool>,
     pub if_not_exists: bool,
     pub transient: bool,
+    pub dynamic: bool,
+    pub iceberg: bool,
+    pub hybrid: bool,
     pub name: ObjectName,
     pub columns: Vec<ColumnDef>,
     pub constraints: Vec<TableConstraint>,
@@ -104,6 +107,9 @@ impl CreateTableBuilder {
             global: None,
             if_not_exists: false,
             transient: false,
+            dynamic: false,
+            iceberg: false,
+            hybrid: false,
             name,
             columns: vec![],
             constraints: vec![],
@@ -173,6 +179,21 @@ impl CreateTableBuilder {
 
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
+        self
+    }
+
+    pub fn dynamic(mut self, dynamic: bool) -> Self {
+        self.dynamic = dynamic;
+        self
+    }
+
+    pub fn iceberg(mut self, iceberg: bool) -> Self {
+        self.iceberg = iceberg;
+        self
+    }
+
+    pub fn hybrid(mut self, hybrid: bool) -> Self {
+        self.hybrid = hybrid;
         self
     }
 
@@ -377,6 +398,9 @@ impl CreateTableBuilder {
             global: self.global,
             if_not_exists: self.if_not_exists,
             transient: self.transient,
+            dynamic: self.dynamic,
+            iceberg: self.iceberg,
+            hybrid: self.hybrid,
             name: self.name,
             columns: self.columns,
             constraints: self.constraints,
@@ -435,6 +459,9 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 global,
                 if_not_exists,
                 transient,
+                dynamic,
+                iceberg,
+                hybrid,
                 name,
                 columns,
                 constraints,
@@ -482,6 +509,9 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 global,
                 if_not_exists,
                 transient,
+                dynamic,
+                iceberg,
+                hybrid,
                 name,
                 columns,
                 constraints,
