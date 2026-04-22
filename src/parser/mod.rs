@@ -6739,11 +6739,30 @@ impl<'a> Parser<'a> {
         }
 
         // COLLATE may also appear after column options (e.g., NOT NULL COLLATE 'utf8')
-        let collation = if collation.is_none() && self.parse_keyword(Keyword::COLLATE) {
-            Some(self.parse_collation_name()?)
-        } else {
-            collation
-        };
+        // and may be followed by more options (e.g. `COLLATE 'en-cs' DEFAULT '-' COMMENT ...`).
+        let mut collation = collation;
+        while collation.is_none() && self.parse_keyword(Keyword::COLLATE) {
+            collation = Some(self.parse_collation_name()?);
+            // Resume parsing trailing options such as DEFAULT / COMMENT / NOT NULL
+            // that the first options loop stopped at when it hit COLLATE.
+            loop {
+                if self.parse_keyword(Keyword::CONSTRAINT) {
+                    let name = Some(self.parse_identifier(false)?.unwrap());
+                    if let Some(option) = self.parse_optional_column_option()? {
+                        options.push(ColumnOptionDef { name, option });
+                    } else {
+                        return self.expected(
+                            "constraint details after CONSTRAINT <name>",
+                            self.peek_token(),
+                        );
+                    }
+                } else if let Some(option) = self.parse_optional_column_option()? {
+                    options.push(ColumnOptionDef { name: None, option });
+                } else {
+                    break;
+                }
+            }
+        }
 
         let column_options = self.parse_options(Keyword::OPTIONS)?;
 

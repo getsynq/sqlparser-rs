@@ -2400,3 +2400,14 @@ fn test_snowflake_alter_dynamic_table() {
         }
     }
 }
+
+#[test]
+fn test_snowflake_column_collate_then_default() {
+    // Real customer DDL puts COLLATE between NOT NULL and DEFAULT/COMMENT.
+    // The parser must resume consuming column options after COLLATE.
+    // Display normalizes COLLATE before other options — accept the rewrite.
+    snowflake_and_generic().one_statement_parses_to(
+        "CREATE TABLE t (c VARCHAR(32) NOT NULL COLLATE 'en-cs' DEFAULT '-' COMMENT 'd')",
+        "CREATE TABLE t (c VARCHAR(32) COLLATE 'en-cs' NOT NULL DEFAULT '-' COMMENT 'd')",
+    );
+}
