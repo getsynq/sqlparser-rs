@@ -2571,3 +2571,14 @@ fn test_snowflake_create_hybrid_table() {
         other => panic!("expected CreateTable, got {other:?}"),
     }
 }
+
+#[test]
+fn test_snowflake_execute_immediate_from() {
+    // Snowflake `EXECUTE IMMEDIATE FROM <stage_path>` runs SQL stored in a file.
+    snowflake()
+        .parse_sql_statements("EXECUTE IMMEDIATE FROM './insert-inventory.sql'")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("EXECUTE IMMEDIATE FROM '@mystage/script.sql'")
+        .unwrap();
+}
