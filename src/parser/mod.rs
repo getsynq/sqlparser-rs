@@ -14376,6 +14376,13 @@ impl<'a> Parser<'a> {
             if self.peek_token_is(&Token::EOF) || self.peek_token_is(&Token::SemiColon) {
                 break;
             }
+            // Postgres `MERGE … RETURNING …` terminates the WHEN clause list.
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::RETURNING
+            ) {
+                break;
+            }
             self.expect_keyword(Keyword::WHEN)?;
 
             let is_not_matched = self.parse_keyword(Keyword::NOT);
@@ -14511,12 +14518,20 @@ impl<'a> Parser<'a> {
         let on = self.parse_expr()?;
         let clauses = self.parse_merge_clauses()?;
 
+        // PostgreSQL 17+ `MERGE … RETURNING <select_list>`.
+        let returning = if self.parse_keyword(Keyword::RETURNING) {
+            Some(self.parse_comma_separated(Parser::parse_select_item)?)
+        } else {
+            None
+        };
+
         Ok(Statement::Merge {
             into,
             table,
             source,
             on: Box::new(on),
             clauses,
+            returning,
         })
     }
 
