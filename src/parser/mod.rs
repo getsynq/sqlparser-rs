@@ -3212,10 +3212,14 @@ impl<'a> Parser<'a> {
                 return self.parse_array_index(expr);
             }
             let expr = self.parse_map_access(expr)?;
-            // Snowflake, BigQuery, Redshift, and Databricks allow col[1].key syntax
+            // Snowflake, BigQuery, Redshift, and Databricks allow col[1].key syntax.
+            // BigQuery also uses `expr[OFFSET(0)].*` as a struct wildcard — stop
+            // at `.*` so parse_select_item turns it into SelectItem::ExprWildcard.
             return if dialect_of!(self is SnowflakeDialect | BigQueryDialect | DatabricksDialect | RedshiftSqlDialect)
-                && self.consume_token(&Token::Period)
+                && matches!(self.peek_token_ref().token, Token::Period)
+                && !matches!(self.peek_nth_token_ref(1).token, Token::Mul)
             {
+                self.next_token(); // consume `.`
                 Ok(Expr::JsonAccess {
                     left: Box::new(expr),
                     operator: JsonOperator::Period,
