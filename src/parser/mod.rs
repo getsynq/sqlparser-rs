@@ -4222,12 +4222,12 @@ impl<'a> Parser<'a> {
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             if self.parse_keyword(Keyword::FUNCTION) {
                 // Snowflake: CREATE EXTERNAL FUNCTION
-                self.parse_create_function(or_replace, temporary, false)
+                self.parse_create_function_inner(or_replace, temporary, false, secure)
             } else {
                 self.parse_create_external_table(or_replace)
             }
         } else if self.parse_keyword(Keyword::FUNCTION) {
-            self.parse_create_function(or_replace, temporary, false)
+            self.parse_create_function_inner(or_replace, temporary, false, secure)
         } else if self.parse_keyword(Keyword::MACRO) {
             self.parse_create_macro(or_replace, temporary)
         } else if self.parse_keyword(Keyword::INDEX) {
@@ -4652,6 +4652,16 @@ impl<'a> Parser<'a> {
         temporary: bool,
         table_function: bool,
     ) -> Result<Statement, ParserError> {
+        self.parse_create_function_inner(or_replace, temporary, table_function, false)
+    }
+
+    fn parse_create_function_inner(
+        &mut self,
+        or_replace: bool,
+        temporary: bool,
+        table_function: bool,
+        secure: bool,
+    ) -> Result<Statement, ParserError> {
         if dialect_of!(self is HiveDialect) {
             let name = self.parse_object_name(false)?;
             self.expect_keyword(Keyword::AS)?;
@@ -4671,6 +4681,7 @@ impl<'a> Parser<'a> {
                 return_type: None,
                 comment: None,
                 params,
+                secure,
             })
         } else if dialect_of!(self is ClickHouseDialect) {
             // ClickHouse: CREATE FUNCTION name AS (params) -> body
@@ -4691,6 +4702,7 @@ impl<'a> Parser<'a> {
                 return_type: None,
                 comment: None,
                 params,
+                secure,
             })
         } else if dialect_of!(self is PostgreSqlDialect | DatabricksDialect | BigQueryDialect | SnowflakeDialect | AnsiDialect | RedshiftSqlDialect | MsSqlDialect | MySqlDialect | SQLiteDialect | GenericDialect)
         {
@@ -4740,6 +4752,7 @@ impl<'a> Parser<'a> {
                 return_type,
                 comment,
                 params,
+                secure,
             })
         } else if dialect_of!(self is DuckDbDialect) {
             self.parse_create_macro(or_replace, temporary)

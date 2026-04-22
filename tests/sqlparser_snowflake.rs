@@ -2472,3 +2472,23 @@ fn test_snowflake_create_secure_materialized_view() {
         other => panic!("expected CreateView, got {other:?}"),
     }
 }
+
+#[test]
+fn test_snowflake_create_secure_function() {
+    // Snowflake `SECURE` modifier on CREATE FUNCTION must set CreateFunction { secure: true, .. }.
+    let sql = "CREATE OR REPLACE SECURE FUNCTION safe_div(a NUMBER, b NUMBER) RETURNS NUMBER AS $$ CASE WHEN b = 0 THEN NULL ELSE a / b END $$";
+    let stmt = snowflake().verified_stmt(sql);
+    match stmt {
+        Statement::CreateFunction {
+            secure,
+            or_replace,
+            name,
+            ..
+        } => {
+            assert!(secure);
+            assert!(or_replace);
+            assert_eq!(name.to_string(), "safe_div");
+        }
+        other => panic!("expected CreateFunction, got {other:?}"),
+    }
+}

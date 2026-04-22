@@ -3553,6 +3553,7 @@ fn parse_create_function() {
                 )),
                 ..Default::default()
             },
+            secure: false,
         }
     );
 
@@ -3585,6 +3586,7 @@ fn parse_create_function() {
                 }),
                 ..Default::default()
             },
+            secure: false,
         }
     );
 
@@ -3614,6 +3616,7 @@ fn parse_create_function() {
                 using: None,
                 strict: false,
             },
+            secure: false,
         }
     );
 }
