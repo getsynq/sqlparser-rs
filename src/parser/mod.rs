@@ -13320,6 +13320,15 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_function_args(&mut self) -> Result<FunctionArg, ParserError> {
+        // PostgreSQL: `VARIADIC <expr>` marks the final argument as variadic,
+        // passing the elements of an array as separate arguments. Consume the
+        // modifier so the expression parser can handle the array/value itself.
+        if matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.value.eq_ignore_ascii_case("VARIADIC")
+        ) {
+            self.next_token();
+        }
         // BigQuery ML functions use MODEL/TABLE keyword-prefixed table references
         // e.g. ML.PREDICT(MODEL `mydataset.mymodel`, TABLE `mydataset.mytable`)
         if dialect_of!(self is BigQueryDialect | GenericDialect) {
