@@ -5183,7 +5183,13 @@ impl<'a> Parser<'a> {
 
         let cluster_by = if self.parse_keyword(Keyword::CLUSTER) {
             self.expect_keyword(Keyword::BY)?;
-            self.parse_parenthesized_column_list(Optional, false)?
+            // BigQuery `CREATE MATERIALIZED VIEW ... CLUSTER BY col_a, col_b` —
+            // unparenthesized identifier list. ClickHouse uses parens.
+            if self.peek_token_is(&Token::LParen) {
+                self.parse_parenthesized_column_list(Optional, false)?
+            } else {
+                self.parse_comma_separated(|p| p.parse_identifier(false))?
+            }
         } else {
             vec![]
         };
