@@ -10434,6 +10434,15 @@ impl<'a> Parser<'a> {
             while self.parse_keyword(Keyword::FOR) {
                 locks.push(self.parse_lock()?);
             }
+            // Postgres allows `FOR UPDATE LIMIT n` — LIMIT/OFFSET after locks.
+            for _x in 0..2 {
+                if limit.is_none() && self.parse_keyword(Keyword::LIMIT) {
+                    limit = self.parse_limit()?
+                }
+                if offset.is_none() && self.parse_keyword(Keyword::OFFSET) {
+                    offset = Some(self.parse_offset()?)
+                }
+            }
             let format_clause = if dialect_of!(self is ClickHouseDialect | GenericDialect)
                 && self.parse_keyword(Keyword::FORMAT)
             {
