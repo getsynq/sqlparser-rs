@@ -4289,3 +4289,11 @@ fn test_postgres_insert_table_alias() {
         other => panic!("expected Insert, got {other:?}"),
     }
 }
+
+#[test]
+fn test_postgres_for_update_before_limit() {
+    // PostgreSQL allows the locking clause `FOR UPDATE` before `LIMIT`/`OFFSET`,
+    // e.g. inside a CTE that caps the number of rows locked for deletion.
+    let sql = "WITH b AS (SELECT ctid FROM t WHERE status = 'x' ORDER BY d FOR UPDATE LIMIT 10000) DELETE FROM t USING b WHERE t.ctid = b.ctid";
+    pg().parse_sql_statements(sql).unwrap();
+}
