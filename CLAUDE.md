@@ -292,6 +292,8 @@ When adding fields to AST structs, you must update ALL pattern matches:
 
 **High-churn structs**: `Function` struct is constructed in ~30+ places across parser and test files. Adding a field requires updating all of them — use `replace_all` or agent assistance.
 
+**Multi-line sed on macOS**: `sed -i ''` operates line-by-line and silently skips multi-line patterns. For bulk edits that span newlines (e.g. appending a field after a `params,\n        })` block) use `perl -i -0pe '…'` instead.
+
 **Recursive AST types**: New fields containing `Expr` inside `Function`/`Expr` cycle need `Box<Expr>` to break infinite size (e.g., `HavingBound(Box<Expr>)`).
 
 **`ObjectName` uses `Vec<Ident>`** not `Vec<WithSpan<Ident>>` — don't wrap idents in `WithSpan` when constructing manually.
@@ -309,6 +311,7 @@ Since this is a fork of apache/datafusion-sqlparser-rs:
 - Use `pretty_assertions` for readable diffs
 - Run `cargo fmt`, `cargo clippy`, `cargo nextest run` before submitting
 - CI runs: `cargo check`, `cargo nextest run --all-features`
+- `cargo nextest run` without `RUST_MIN_STACK=8388608` always SIGABRTs three tests (`parse_deeply_nested_expr_hits_recursion_limits`, `..._parens_...`, `..._subquery_...`). These are stack-size probes, not regressions — ignore if the rest of the run is green.
 - Avoid adding serde dependency to test code - use manual JSON building if needed
 
 **Running corpus tests (now fast!):**
@@ -403,7 +406,10 @@ json_example = [...]       # JSON output in CLI example
 The crate includes a CLI for parsing SQL and dumping JSON:
 ```bash
 cargo run --features json_example --example cli queries/example.sql
-cargo run --features json_example --example cli queries/example.sql --dialect snowflake
+cargo run --features json_example --example cli queries/example.sql --snowflake
+# Dialect flag is the dialect name as a `--<name>` token: --bigquery, --snowflake,
+# --redshift, --postgres, --clickhouse, --duckdb, --mssql, --mysql, --hive, --sqlite,
+# --ansi, or --generic (default). Not `--dialect <name>`.
 ```
 
 ## Troubleshooting
