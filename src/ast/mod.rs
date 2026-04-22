@@ -2294,6 +2294,8 @@ pub enum Statement {
         comment: Option<String>,
         /// Optional parameters.
         params: CreateFunctionBody,
+        /// Snowflake `SECURE` modifier: `CREATE SECURE FUNCTION ...`.
+        secure: bool,
     },
     /// ```sql
     /// CREATE PROCEDURE
@@ -2994,12 +2996,14 @@ impl fmt::Display for Statement {
                 return_type,
                 comment,
                 params,
+                secure,
             } => {
                 write!(
                     f,
-                    "CREATE {or_replace}{temp}{table}FUNCTION {name}",
+                    "CREATE {or_replace}{secure}{temp}{table}FUNCTION {name}",
                     temp = if *temporary { "TEMPORARY " } else { "" },
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    secure = if *secure { "SECURE " } else { "" },
                     table = if *table_function { "TABLE " } else { "" },
                 )?;
                 if let Some(args) = args {
