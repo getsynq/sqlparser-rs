@@ -6659,10 +6659,17 @@ impl<'a> Parser<'a> {
         let mode = self.parse_arg_mode();
         let name = self.parse_identifier(false)?.unwrap();
         let data_type = self.parse_data_type()?;
+        let default_expr = if self.parse_keyword(Keyword::DEFAULT) || self.consume_token(&Token::Eq)
+        {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
         Ok(ProcedureParam {
             mode,
             name,
             data_type,
+            default_expr,
         })
     }
 

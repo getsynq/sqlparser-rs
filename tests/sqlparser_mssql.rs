@@ -131,7 +131,8 @@ fn parse_create_procedure() {
                         value: "@foo".into(),
                         quote_style: None
                     },
-                    data_type: DataType::Int(None)
+                    data_type: DataType::Int(None),
+                    default_expr: None,
                 },
                 ProcedureParam {
                     mode: None,
@@ -142,7 +143,8 @@ fn parse_create_procedure() {
                     data_type: DataType::Varchar(Some(CharacterLength::IntegerLength {
                         length: 256,
                         unit: None
-                    }))
+                    })),
+                    default_expr: None,
                 }
             ]),
             name: ObjectName(vec![Ident {

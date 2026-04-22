@@ -825,6 +825,7 @@ pub struct ProcedureParam {
     pub mode: Option<ArgMode>,
     pub name: Ident,
     pub data_type: DataType,
+    pub default_expr: Option<Expr>,
 }
 
 impl fmt::Display for ProcedureParam {
@@ -832,7 +833,11 @@ impl fmt::Display for ProcedureParam {
         if let Some(mode) = &self.mode {
             write!(f, "{mode} ")?;
         }
-        write!(f, "{} {}", self.name, self.data_type)
+        write!(f, "{} {}", self.name, self.data_type)?;
+        if let Some(default) = &self.default_expr {
+            write!(f, " DEFAULT {default}")?;
+        }
+        Ok(())
     }
 }
 

@@ -204,6 +204,23 @@ LANGUAGE plpgsql AS $$ BEGIN SELECT 1; END; $$"#;
 }
 
 #[test]
+fn procedure_param_with_default_value() {
+    // Snowflake stored procedures allow `DEFAULT <expr>` on parameters.
+    let sql = "CREATE OR REPLACE PROCEDURE foo.bar(\"A\" VARCHAR, \"B\" VARCHAR DEFAULT 'x', \"C\" NUMBER DEFAULT 1) RETURNS VARCHAR LANGUAGE SQL AS 'return 1'";
+    let stmt = parse_one(&SnowflakeDialect {}, sql);
+    match stmt {
+        Statement::CreateProcedure { params, .. } => {
+            let params = params.unwrap();
+            assert_eq!(params.len(), 3);
+            assert!(params[0].default_expr.is_none());
+            assert!(params[1].default_expr.is_some());
+            assert!(params[2].default_expr.is_some());
+        }
+        other => panic!("expected CreateProcedure, got {other:?}"),
+    }
+}
+
+#[test]
 fn snowflake_varchar_empty_parens_as_column_type() {
     // Guardrails: the `VARCHAR()` fix should also hold outside of CREATE FUNCTION.
     let stmt = parse_one(&SnowflakeDialect {}, "CREATE TABLE t (c VARCHAR())");
