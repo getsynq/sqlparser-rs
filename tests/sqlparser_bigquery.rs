@@ -2141,10 +2141,7 @@ fn test_bigquery_expr_wildcard_after_subscript() {
     match &stmts[0] {
         Statement::Query(q) => match q.body.as_ref() {
             SetExpr::Select(s) => {
-                assert!(matches!(
-                    &*s.projection[0],
-                    SelectItem::ExprWildcard { .. }
-                ));
+                assert!(matches!(&*s.projection[0], SelectItem::ExprWildcard { .. }));
             }
             other => panic!("expected Select, got {other:?}"),
         },

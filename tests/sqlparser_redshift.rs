@@ -690,3 +690,20 @@ fn test_redshift_extract_nested_cast_string() {
     let sql = "SELECT EXTRACT(CAST(CAST('epoch' AS VARCHAR) AS VARCHAR(MAX)) FROM ts) FROM t";
     redshift().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn test_redshift_partiql_unnest_at_position() {
+    // Redshift SUPER/PartiQL unnesting binds the zero-based position to an
+    // index alias via `AT <ident>`:
+    //     FROM tbl, tbl.arr_col AS elem AT idx WHERE idx > 0
+    // The parser must accept the `AT idx` tail without losing the surrounding
+    // FROM/WHERE clauses.
+    redshift()
+        .parse_sql_statements("SELECT * FROM t, arr AS e AT i WHERE i > 0")
+        .unwrap();
+    redshift()
+        .parse_sql_statements(
+            "SELECT * FROM t, \"tbl_9\".\"col_19\" AS \"element\" AT \"index\" WHERE NOT \"tbl_9\".\"col_19\" IS NULL",
+        )
+        .unwrap();
+}
