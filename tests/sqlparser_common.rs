@@ -6157,6 +6157,7 @@ fn parse_create_view() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!("myschema.myview", name.to_string());
             assert_eq!(Vec::<WithSpan<Ident>>::new(), columns);
@@ -6232,6 +6233,7 @@ fn parse_create_view_with_columns() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6291,6 +6293,7 @@ fn parse_create_view_if_not_exists() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(true, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6350,6 +6353,7 @@ fn parse_create_or_replace_view() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6407,6 +6411,7 @@ fn parse_create_or_replace_materialized_view() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("v", name.to_string());
@@ -6460,6 +6465,7 @@ fn parse_create_materialized_view() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());
@@ -6513,6 +6519,7 @@ fn parse_create_materialized_view_with_cluster_by() {
             view_options,
             copy_grants,
             view_security,
+            secure: _,
         } => {
             assert_eq!(false, if_not_exists);
             assert_eq!("myschema.myview", name.to_string());

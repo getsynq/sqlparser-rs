@@ -1815,6 +1815,8 @@ pub enum Statement {
         view_options: Vec<SqlOption>,
         copy_grants: bool,
         view_security: Option<ViewSecurity>,
+        /// Snowflake `SECURE` modifier: `CREATE SECURE VIEW ...` / `CREATE SECURE MATERIALIZED VIEW ...`
+        secure: bool,
     },
     /// ```sql
     /// CREATE TABLE
@@ -3080,11 +3082,13 @@ impl fmt::Display for Statement {
                 view_options,
                 copy_grants,
                 view_security,
+                secure,
             } => {
                 write!(
                     f,
-                    "CREATE {or_replace}{materialized}VIEW {if_not_exists}{name}",
+                    "CREATE {or_replace}{secure}{materialized}VIEW {if_not_exists}{name}",
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    secure = if *secure { "SECURE " } else { "" },
                     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                     materialized = if *materialized { "MATERIALIZED " } else { "" },
                     name = name
