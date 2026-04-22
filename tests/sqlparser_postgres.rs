@@ -4342,3 +4342,14 @@ fn test_postgres_merge_returning() {
         other => panic!("expected Merge, got {other:?}"),
     }
 }
+
+#[test]
+fn test_postgres_variadic_argument() {
+    // PostgreSQL `VARIADIC` modifier in a function call: expand an array into
+    // separate arguments at call time. Lineage only cares about the expression
+    // itself, so VARIADIC is consumed transparently.
+    pg().parse_sql_statements("SELECT mleast(VARIADIC ARRAY[]::numeric[])")
+        .unwrap();
+    pg().parse_sql_statements("SELECT mleast(VARIADIC ARRAY[1, 2, 3])")
+        .unwrap();
+}
