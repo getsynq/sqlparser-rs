@@ -2148,3 +2148,19 @@ fn test_bigquery_expr_wildcard_after_subscript() {
         other => panic!("expected Query, got {other:?}"),
     }
 }
+
+#[test]
+fn test_bigquery_materialized_view_unparenthesized_cluster_by() {
+    // BigQuery `CREATE MATERIALIZED VIEW ... CLUSTER BY col` lists the
+    // clustering columns without parentheses, unlike ClickHouse.
+    bigquery()
+        .parse_sql_statements(
+            "CREATE MATERIALIZED VIEW dataset.mv CLUSTER BY s_market_id AS (SELECT s_market_id FROM t)",
+        )
+        .unwrap();
+    bigquery()
+        .parse_sql_statements(
+            "CREATE MATERIALIZED VIEW dataset.mv CLUSTER BY a, b AS (SELECT a, b FROM t)",
+        )
+        .unwrap();
+}
