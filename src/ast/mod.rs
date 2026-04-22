@@ -2320,6 +2320,13 @@ pub enum Statement {
         name: ObjectName,
         params: Option<Vec<ProcedureParam>>,
         body: Vec<Statement>,
+        /// Raw body definition for procedures whose body is a single string
+        /// literal (typically plpgsql in `AS $$ ... $$` for
+        /// PostgreSQL/Redshift). When set, `body` is empty because the
+        /// contents are opaque to the SQL parser; downstream consumers such
+        /// as kernel-cll re-parse the string leniently to extract embedded
+        /// DML/DDL for lineage purposes.
+        body_definition: Option<FunctionDefinition>,
     },
     /// ```sql
     /// CREATE MACRO
@@ -3045,6 +3052,7 @@ impl fmt::Display for Statement {
                 or_alter,
                 params,
                 body,
+                body_definition,
             } => {
                 write!(
                     f,
@@ -3058,11 +3066,15 @@ impl fmt::Display for Statement {
                         write!(f, " ({})", display_comma_separated(p))?;
                     }
                 }
-                write!(
-                    f,
-                    " AS BEGIN {body} END",
-                    body = display_separated(body, "; ")
-                )
+                if let Some(def) = body_definition {
+                    write!(f, " AS {def}")
+                } else {
+                    write!(
+                        f,
+                        " AS BEGIN {body} END",
+                        body = display_separated(body, "; ")
+                    )
+                }
             }
             Statement::CreateMacro {
                 or_replace,

@@ -14831,6 +14831,7 @@ impl<'a> Parser<'a> {
                 or_alter,
                 params,
                 body: vec![],
+                body_definition: None,
             });
         }
 
@@ -14843,10 +14844,27 @@ impl<'a> Parser<'a> {
                 or_alter,
                 params,
                 body: statements,
+                body_definition: None,
             })
         } else {
-            // Body is a string literal or expression - skip to end of statement
-            let _ = self.parse_expr();
+            // Body is a string literal (plpgsql in `AS $$...$$` or `AS '...'`)
+            // or another expression. Capture the raw definition string so
+            // downstream consumers (lineage extractors) can re-parse it, then
+            // skip the remainder of the statement.
+            let body_definition = match self.peek_token().token.clone() {
+                Token::DollarQuotedString(s) => {
+                    self.next_token();
+                    Some(FunctionDefinition::DoubleDollarDef(s.value))
+                }
+                Token::SingleQuotedString(s) => {
+                    self.next_token();
+                    Some(FunctionDefinition::SingleQuotedDef(s))
+                }
+                _ => {
+                    let _ = self.parse_expr();
+                    None
+                }
+            };
             // Consume trailing clauses like `LANGUAGE plpgsql`, `SECURITY INVOKER`,
             // `STABLE`, `VOLATILE`, etc. that follow the body in PostgreSQL/Redshift.
             loop {
@@ -14862,6 +14880,7 @@ impl<'a> Parser<'a> {
                 or_alter,
                 params,
                 body: vec![],
+                body_definition,
             })
         }
     }
