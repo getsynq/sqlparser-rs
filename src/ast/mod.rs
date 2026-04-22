@@ -2257,7 +2257,11 @@ pub enum Statement {
     /// ```sql
     /// ROLLBACK [ TRANSACTION | WORK ] [ AND [ NO ] CHAIN ] [ TO [ SAVEPOINT ] savepoint_name ]
     /// ```
-    Rollback { chain: bool },
+    Rollback {
+        chain: bool,
+        /// `ROLLBACK TO [SAVEPOINT] <name>` — PostgreSQL.
+        savepoint: Option<Ident>,
+    },
     /// ```sql
     /// CREATE SCHEMA
     /// ```
@@ -3955,8 +3959,12 @@ impl fmt::Display for Statement {
             Statement::Commit { chain } => {
                 write!(f, "COMMIT{}", if *chain { " AND CHAIN" } else { "" },)
             }
-            Statement::Rollback { chain } => {
-                write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" },)
+            Statement::Rollback { chain, savepoint } => {
+                write!(f, "ROLLBACK{}", if *chain { " AND CHAIN" } else { "" })?;
+                if let Some(name) = savepoint {
+                    write!(f, " TO SAVEPOINT {name}")?;
+                }
+                Ok(())
             }
             Statement::CreateSchema {
                 schema_name,
