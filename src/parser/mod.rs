@@ -14497,10 +14497,14 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // Skip optional clauses until AS keyword (LANGUAGE, EXECUTE AS CALLER, etc.)
+        // Skip optional clauses until AS keyword (LANGUAGE, EXECUTE AS CALLER, etc.).
+        // Snowflake procedures may omit the body entirely when using HANDLER +
+        // IMPORTS — allow EOF / `;` as a clean exit with no body.
+        let mut has_body = false;
         loop {
-            if self.peek_token_is(&Token::EOF) {
-                return self.expected("AS", self.peek_token());
+            match self.peek_token_kind() {
+                Token::EOF | Token::SemiColon => break,
+                _ => {}
             }
             if self.parse_keywords(&[Keyword::EXECUTE, Keyword::AS]) {
                 // EXECUTE AS CALLER/OWNER - skip the identifier after AS
@@ -14508,10 +14512,20 @@ impl<'a> Parser<'a> {
                 continue;
             }
             if self.parse_keyword(Keyword::AS) {
+                has_body = true;
                 break;
             }
             // Skip this token
             self.next_token();
+        }
+
+        if !has_body {
+            return Ok(Statement::CreateProcedure {
+                name,
+                or_alter,
+                params,
+                body: vec![],
+            });
         }
 
         // Try BEGIN/END block style first, otherwise treat as expression/string body
