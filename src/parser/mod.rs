@@ -7471,7 +7471,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_alter_table_operation(&mut self) -> Result<AlterTableOperation, ParserError> {
-        let operation = if self.parse_keyword(Keyword::ADD) {
+        let operation = if self.parse_keyword(Keyword::SUSPEND) {
+            AlterTableOperation::Suspend
+        } else if self.parse_keyword(Keyword::RESUME) {
+            AlterTableOperation::Resume
+        } else if self.parse_keyword(Keyword::REFRESH) {
+            AlterTableOperation::Refresh
+        } else if self.parse_keyword(Keyword::ADD) {
             if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
                 let policy = self.parse_object_name(false)?;
                 self.expect_keyword(Keyword::ON)?;
@@ -7903,6 +7909,21 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_alter(&mut self) -> Result<Statement, ParserError> {
+        // Snowflake: `ALTER DYNAMIC TABLE ...` — treat as a regular ALTER TABLE
+        // for AST purposes so lineage sees the target name and any
+        // SUSPEND/RESUME/REFRESH operation.
+        if self.parse_keyword(Keyword::DYNAMIC) {
+            self.expect_keyword(Keyword::TABLE)?;
+            let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+            let table_name = self.parse_object_name(false)?;
+            let operations = self.parse_comma_separated(Parser::parse_alter_table_operation)?;
+            return Ok(Statement::AlterTable {
+                name: table_name,
+                if_exists,
+                only: false,
+                operations,
+            });
+        }
         let object_type = self.expect_one_of_keywords(&[
             Keyword::VIEW,
             Keyword::TABLE,

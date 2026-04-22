@@ -224,6 +224,12 @@ pub enum AlterTableOperation {
     /// Note: this is a Snowflake-specific operation
     /// <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
     ClusterBy { exprs: Vec<OrderByExpr> },
+    /// `SUSPEND` — Snowflake dynamic tables.
+    Suspend,
+    /// `RESUME` — Snowflake dynamic tables.
+    Resume,
+    /// `REFRESH` — Snowflake dynamic tables.
+    Refresh,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -456,6 +462,9 @@ impl fmt::Display for AlterTableOperation {
             AlterTableOperation::ClusterBy { exprs } => {
                 write!(f, "CLUSTER BY ({})", display_comma_separated(exprs))
             }
+            AlterTableOperation::Suspend => write!(f, "SUSPEND"),
+            AlterTableOperation::Resume => write!(f, "RESUME"),
+            AlterTableOperation::Refresh => write!(f, "REFRESH"),
         }
     }
 }
