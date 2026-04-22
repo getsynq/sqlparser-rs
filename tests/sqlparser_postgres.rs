@@ -4353,3 +4353,14 @@ fn test_postgres_variadic_argument() {
     pg().parse_sql_statements("SELECT mleast(VARIADIC ARRAY[1, 2, 3])")
         .unwrap();
 }
+
+#[test]
+fn test_postgres_for_update_not_an_alias() {
+    // `FOR UPDATE` / `FOR SHARE` are locking clauses, not table/column aliases.
+    // Without `FOR` being reserved, parsers consumed it as the alias for `mytable`.
+    pg().parse_sql_statements("SELECT * FROM mytable FOR UPDATE").unwrap();
+    pg().parse_sql_statements(
+        "SELECT * FROM (SELECT * FROM mytable FOR UPDATE) ss WHERE col1 = 5",
+    )
+    .unwrap();
+}
