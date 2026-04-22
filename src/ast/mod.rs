@@ -2488,6 +2488,9 @@ pub enum Statement {
         on: Box<Expr>,
         // Specifies the actions to perform when values match or do not match.
         clauses: Vec<MergeClause>,
+        // PostgreSQL 17+ `RETURNING ...` clause: rows (and their per-action state)
+        // produced by the merge. Preserved so lineage sees these projections.
+        returning: Option<Vec<WithSpan<SelectItem>>>,
     },
     /// `CACHE [ FLAG ] TABLE <table_name> [ OPTIONS('K1' = 'V1', 'K2' = V2) ] [ AS ] [ <query> ]`.
     ///
@@ -4102,6 +4105,7 @@ impl fmt::Display for Statement {
                 source,
                 on,
                 clauses,
+                returning,
             } => {
                 write!(
                     f,
@@ -4109,7 +4113,11 @@ impl fmt::Display for Statement {
                     int = if *into { " INTO" } else { "" }
                 )?;
                 write!(f, "ON {on} ")?;
-                write!(f, "{}", display_separated(clauses, " "))
+                write!(f, "{}", display_separated(clauses, " "))?;
+                if let Some(returning) = returning {
+                    write!(f, " RETURNING {}", display_comma_separated(returning))?;
+                }
+                Ok(())
             }
             Statement::Cache {
                 table_name,

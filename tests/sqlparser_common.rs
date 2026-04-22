@@ -7426,6 +7426,7 @@ fn parse_merge() {
                 source,
                 on,
                 clauses,
+                returning: _,
             },
             Statement::Merge {
                 into: no_into,
@@ -7433,6 +7434,7 @@ fn parse_merge() {
                 source: source_no_into,
                 on: on_no_into,
                 clauses: clauses_no_into,
+                returning: _,
             },
         ) => {
             assert!(into);

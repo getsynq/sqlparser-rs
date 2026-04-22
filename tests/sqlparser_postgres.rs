@@ -4319,9 +4319,26 @@ fn test_postgres_rollback_to_savepoint() {
         match pg().parse_sql_statements(sql).unwrap().remove(0) {
             Statement::Rollback { chain, savepoint } => {
                 assert!(!chain);
-                assert_eq!(savepoint.as_ref().map(|i| i.value.clone()), Some(name.to_string()));
+                assert_eq!(
+                    savepoint.as_ref().map(|i| i.value.clone()),
+                    Some(name.to_string())
+                );
             }
             other => panic!("expected Rollback, got {other:?}"),
         }
+    }
+}
+
+#[test]
+fn test_postgres_merge_returning() {
+    // PostgreSQL 17+ MERGE supports a trailing RETURNING clause; the projections
+    // refer to the source/target tables and per-action metadata.
+    let sql = "MERGE INTO wines w USING wine_stock_changes s ON s.winename = w.winename WHEN NOT MATCHED THEN INSERT VALUES (s.winename, s.stock_delta) WHEN MATCHED THEN UPDATE SET stock = w.stock + s.stock_delta RETURNING merge_action(), w.winename, w.stock";
+    match pg().parse_sql_statements(sql).unwrap().remove(0) {
+        Statement::Merge { returning, .. } => {
+            assert!(returning.is_some());
+            assert_eq!(returning.unwrap().len(), 3);
+        }
+        other => panic!("expected Merge, got {other:?}"),
     }
 }
