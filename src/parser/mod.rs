@@ -4188,6 +4188,16 @@ impl<'a> Parser<'a> {
         let or_alter = self.parse_keywords(&[Keyword::OR, Keyword::ALTER]);
         let local = self.parse_one_of_keywords(&[Keyword::LOCAL]).is_some();
         let global = self.parse_one_of_keywords(&[Keyword::GLOBAL]).is_some();
+        // Snowflake `SECURE` modifier: precedes VIEW / MATERIALIZED VIEW / FUNCTION.
+        // It's not a reserved keyword, so peek for the word form before consuming.
+        let secure = matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.keyword == Keyword::NoKeyword
+                && w.value.eq_ignore_ascii_case("SECURE")
+        ) && {
+            self.next_token();
+            true
+        };
         let transient = self.parse_one_of_keywords(&[Keyword::TRANSIENT]).is_some();
         let global: Option<bool> = if global {
             Some(true)
@@ -4208,7 +4218,7 @@ impl<'a> Parser<'a> {
             }
         } else if self.parse_keyword(Keyword::MATERIALIZED) || self.parse_keyword(Keyword::VIEW) {
             self.prev_token();
-            self.parse_create_view(or_replace)
+            self.parse_create_view(or_replace, secure)
         } else if self.parse_keyword(Keyword::EXTERNAL) {
             if self.parse_keyword(Keyword::FUNCTION) {
                 // Snowflake: CREATE EXTERNAL FUNCTION
@@ -5033,7 +5043,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_create_view(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+    pub fn parse_create_view(
+        &mut self,
+        or_replace: bool,
+        secure: bool,
+    ) -> Result<Statement, ParserError> {
         let materialized = self.parse_keyword(Keyword::MATERIALIZED);
         self.expect_keyword(Keyword::VIEW)?;
         let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
@@ -5337,6 +5351,7 @@ impl<'a> Parser<'a> {
             view_options,
             copy_grants,
             view_security,
+            secure,
         })
     }
 

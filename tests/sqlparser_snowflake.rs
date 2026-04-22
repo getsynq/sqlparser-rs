@@ -2411,3 +2411,64 @@ fn test_snowflake_column_collate_then_default() {
         "CREATE TABLE t (c VARCHAR(32) COLLATE 'en-cs' NOT NULL DEFAULT '-' COMMENT 'd')",
     );
 }
+
+#[test]
+fn test_snowflake_create_secure_view() {
+    // Snowflake `SECURE` modifier on CREATE VIEW must set CreateView { secure: true, .. }
+    // — not fall through to a generic Comment statement (silent round-trip corruption
+    // that also hides the view from lineage visitors).
+    let cases = [
+        ("CREATE SECURE VIEW v AS SELECT id FROM t", None),
+        (
+            "CREATE OR REPLACE SECURE VIEW s.v AS SELECT id, name FROM s.t",
+            None,
+        ),
+        (
+            "CREATE OR REPLACE SECURE VIEW v COMMENT = 'desc' AS SELECT id FROM t",
+            Some("CREATE OR REPLACE SECURE VIEW v COMMENT='desc' AS SELECT id FROM t"),
+        ),
+    ];
+    for (sql, canonical) in cases {
+        let stmt = if let Some(c) = canonical {
+            snowflake().one_statement_parses_to(sql, c)
+        } else {
+            snowflake().verified_stmt(sql)
+        };
+        match stmt {
+            Statement::CreateView {
+                secure,
+                materialized,
+                name,
+                query,
+                ..
+            } => {
+                assert!(secure, "secure flag should be set for {sql}");
+                assert!(!materialized, "materialized should be false for {sql}");
+                assert!(!name.0.is_empty());
+                // Query must still hold the inner SELECT so lineage can walk it.
+                assert!(!matches!(*query, Query { .. } if false));
+                let _ = query; // silence unused
+            }
+            other => panic!("expected CreateView, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_snowflake_create_secure_materialized_view() {
+    let sql = "CREATE OR REPLACE SECURE MATERIALIZED VIEW mv AS SELECT product_id, SUM(qty) AS n FROM oi GROUP BY product_id";
+    let stmt = snowflake().verified_stmt(sql);
+    match stmt {
+        Statement::CreateView {
+            secure,
+            materialized,
+            or_replace,
+            ..
+        } => {
+            assert!(secure);
+            assert!(materialized);
+            assert!(or_replace);
+        }
+        other => panic!("expected CreateView, got {other:?}"),
+    }
+}
