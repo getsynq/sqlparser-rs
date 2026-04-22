@@ -6,19 +6,22 @@ You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/
 
 **Only work on real customer SQL.** We care about what customers actually run in their warehouses, not theoretical syntax the DWH docs say is legal. The corpus directories are tiered accordingly:
 
-1. **ONLY tier worth fixing — customer query logs & real customer SQL definitions:**
+0. **Highest priority — explicitly requested SQL (overrides the hard rule below):** If the user points at a specific SQL construct, file, or repo path (e.g. "fix SECURE VIEW from dwhtesting", "this query from a customer ticket doesn't parse"), treat it as tier-0 and fix it **even if the corpus has zero failures for that pattern**. Write a focused unit test instead of relying on corpus delta to prove the fix. Also tier-0: SQL emitted by SYNQ / Coalesce Quality internal tooling — the `dev-infra/dwhtesting` seed scripts, fixtures from `kernel-cll` test suites, and any query the product itself generates against customer warehouses. If it runs in our own stack or our own tests, it must parse.
+1. **Main loop tier — customer query logs & real customer SQL definitions:**
    - `unparsed_snowflake`, `unparsed_bigquery`, `unparsed_redshift`, `unparsed_trino` (raw query logs)
    - `customer_snowflake`, `customer_bigquery`, `customer_redshift`, `customer_clickhouse`, `customer_databricks`, `customer_postgres`, etc. (real customer model/view definitions)
-2. **Skip unless tier 1 is empty — first-party upstream fixtures:**
+2. **Skip unless tier 0 / tier 1 is empty — first-party upstream fixtures:**
    - `snowflake`, `bigquery`, `redshift`, `databricks`, `clickhouse`, `postgres`, `mysql`, `mssql`, `duckdb`, `hive`, `sqlite`, `ansi`, `generic`, `trino`
 3. **Always skip — synthetic/third-party fixtures:**
    - `sqlglot_*`, `synq_*`, etc.
 
-**Hard rule:** if the chosen error pattern has **zero tier-1 files**, do not fix it — pick a different pattern. If every top candidate is tier-2/tier-3 only, stop the iteration without a commit. A fix that only helps theoretical queries adds AST surface and regression risk for no customer benefit.
+**Hard rule (autonomous loop only):** when running unattended, if the chosen error pattern has **zero tier-1 files**, do not fix it — pick a different pattern. If every top candidate is tier-2/tier-3 only, stop the iteration without a commit. A fix that only helps theoretical queries adds AST surface and regression risk for no customer benefit.
+
+**Tier-0 overrides the hard rule.** When the user has explicitly asked for a fix, or the gap blocks SYNQ / Coalesce Quality internal SQL, commit the fix even with zero corpus delta — the value is proven by the request, not the corpus. Add a regression test (unit test or a new corpus file contributed upstream to `kernel-cll-corpus`) so future loop runs catch it.
 
 **Dialect priority order (within tier 1):** Snowflake > Redshift > BigQuery > Databricks > ClickHouse > Postgres > everything else.
 
-When picking which failure to fix, maximize tier-1 file count, then prefer higher-priority dialects.
+When picking which failure to fix, maximize tier-1 file count, then prefer higher-priority dialects. Tier-0 (user-directed / SYNQ / Coalesce) always jumps the queue.
 
 ## Dialect strategy
 
