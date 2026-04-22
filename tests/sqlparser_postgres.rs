@@ -4265,3 +4265,27 @@ fn parse_with_delete() {
     );
     pg_and_generic().verified_stmt("WITH t AS (DELETE FROM foo) DELETE FROM bar");
 }
+
+#[test]
+fn test_postgres_insert_table_alias() {
+    // PostgreSQL allows `INSERT INTO t AS alias (cols) VALUES (...)`. The alias is
+    // referenced in ON CONFLICT DO UPDATE predicates.
+    let sql = "INSERT INTO distributors AS d (did, dname) VALUES (8, 'Anvil Distribution') ON CONFLICT(did) DO UPDATE SET dname = EXCLUDED.dname WHERE d.zipcode <> '21201'";
+    let stmts = pg().parse_sql_statements(sql).unwrap();
+    match &stmts[0] {
+        Statement::Insert {
+            table_name,
+            table_alias,
+            columns,
+            ..
+        } => {
+            assert_eq!(table_name.to_string(), "distributors");
+            assert_eq!(
+                table_alias.as_ref().map(|i| i.value.clone()),
+                Some("d".to_string())
+            );
+            assert_eq!(columns.len(), 2);
+        }
+        other => panic!("expected Insert, got {other:?}"),
+    }
+}
