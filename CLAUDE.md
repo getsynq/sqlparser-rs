@@ -110,6 +110,15 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - **Corpus files are symlinked** from `kernel-cll-corpus` repo — commit corpus changes there, not in sqlparser-rs
 - Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
 - **Always rebuild before corpus run**: `cargo build --release --bin corpus-runner` — stale binary produces stale reports
+- **Refresh baseline after each accepted commit**: `cp target/corpus-report.json target/corpus-report-baseline.json`. Otherwise `compare-corpus-reports.js` credits old deltas and can hide fresh regressions.
+- **This repo is PUBLIC** (`getsynq/sqlparser-rs`, a fork of `apache/datafusion-sqlparser-rs`). Never put customer names, workspace IDs, or internal codenames into commit messages, branch names, PR titles, file names, or function names — even anonymized SQL content must be attributed generically. Every push is mirrored into GH Archive's permanent public dataset, which force-push cannot undo.
+- **Pulling real SQL from production Clickhouse for regression coverage**: `SELECT sql FROM schema.latest_sql_definitions FINAL WHERE workspace='<name>' AND asset_type IN (...)`. `asset_type` codes from `proto/core/types/v1/asset_type.proto` that carry SQL bodies parseable by this library:
+  - Snowflake: 508 view, 510 dynamic table, 511 task, 513 materialized view, 514 procedure, 515 function
+  - Redshift: 805 view, 806 procedure, 807 function
+  - BigQuery: 105 view
+  - Databricks: 1805 view · ClickHouse: 1305 view · Postgres: 1605 view · MySQL: 1705 view · MSSQL: 3405 view · Oracle: 3505 view · DuckDB: 2005 view · Trino: 2105 view
+
+  Anonymize schemas, tables, columns, function names, and string literals before landing anything as a test file; test file and function names must also be generic (no customer identifier).
 
 **Development workflow:**
 - Use corpus-runner for fast feedback (6.7s vs 2+ hours)
