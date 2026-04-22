@@ -4306,3 +4306,22 @@ fn test_postgres_function_anonymous_custom_type_args() {
     let sql = "CREATE FUNCTION myfunc(refcursor, refcursor) RETURNS SETOF refcursor AS $$ BEGIN OPEN $1 FOR SELECT 1; END; $$ LANGUAGE plpgsql";
     pg().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn test_postgres_rollback_to_savepoint() {
+    // `ROLLBACK TO [SAVEPOINT] <name>` rolls back to a named savepoint
+    // within a transaction. Both forms are accepted.
+    let cases = [
+        ("ROLLBACK TO sp1", "sp1"),
+        ("ROLLBACK TO SAVEPOINT my_savepoint", "my_savepoint"),
+    ];
+    for (sql, name) in cases {
+        match pg().parse_sql_statements(sql).unwrap().remove(0) {
+            Statement::Rollback { chain, savepoint } => {
+                assert!(!chain);
+                assert_eq!(savepoint.as_ref().map(|i| i.value.clone()), Some(name.to_string()));
+            }
+            other => panic!("expected Rollback, got {other:?}"),
+        }
+    }
+}

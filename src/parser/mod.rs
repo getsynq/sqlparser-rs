@@ -14234,9 +14234,15 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_rollback(&mut self) -> Result<Statement, ParserError> {
-        Ok(Statement::Rollback {
-            chain: self.parse_commit_rollback_chain()?,
-        })
+        let chain = self.parse_commit_rollback_chain()?;
+        // PostgreSQL: `ROLLBACK TO [SAVEPOINT] <name>`
+        let savepoint = if self.parse_keyword(Keyword::TO) {
+            let _ = self.parse_keyword(Keyword::SAVEPOINT);
+            Some(self.parse_identifier(false)?.unwrap())
+        } else {
+            None
+        };
+        Ok(Statement::Rollback { chain, savepoint })
     }
 
     pub fn parse_commit_rollback_chain(&mut self) -> Result<bool, ParserError> {

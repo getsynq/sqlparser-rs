@@ -7058,12 +7058,18 @@ fn parse_commit() {
 #[test]
 fn parse_rollback() {
     match verified_stmt("ROLLBACK") {
-        Statement::Rollback { chain: false } => (),
+        Statement::Rollback {
+            chain: false,
+            savepoint: None,
+        } => (),
         _ => unreachable!(),
     }
 
     match verified_stmt("ROLLBACK AND CHAIN") {
-        Statement::Rollback { chain: true } => (),
+        Statement::Rollback {
+            chain: true,
+            savepoint: None,
+        } => (),
         _ => unreachable!(),
     }
 
