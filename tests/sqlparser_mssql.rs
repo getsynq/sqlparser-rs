@@ -90,6 +90,7 @@ fn parse_create_procedure() {
         ms().verified_stmt(sql),
         Statement::CreateProcedure {
             or_alter: true,
+            body_definition: None,
             body: vec![Statement::Query(Box::new(Query {
                 with: None,
                 limit: None,

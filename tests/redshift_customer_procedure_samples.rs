@@ -5,12 +5,62 @@
 //! refcursors, RAISE EXCEPTION — are preserved so that regressions in
 //! how we tokenize or parse these constructs will fail loudly.
 
+use sqlparser::ast::{FunctionDefinition, Statement};
 use sqlparser::dialect::RedshiftSqlDialect;
 use sqlparser::parser::Parser;
 
 fn assert_parses(sql: &str) {
     Parser::parse_sql(&RedshiftSqlDialect {}, sql)
         .unwrap_or_else(|e| panic!("parse failed: {e}\nSQL:\n{sql}"));
+}
+
+#[test]
+fn redshift_plpgsql_procedure_preserves_body_definition() {
+    // The parser cannot walk plpgsql, but it must preserve the raw dollar-
+    // quoted body string in `CreateProcedure.body_definition` so downstream
+    // consumers (lineage extractors) can re-parse it.
+    let sql = r#"CREATE OR REPLACE PROCEDURE analytics.load_daily()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO analytics.daily SELECT * FROM staging.daily;
+END;
+$$;"#;
+    let mut stmts = Parser::parse_sql(&RedshiftSqlDialect {}, sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    match stmts.pop().unwrap() {
+        Statement::CreateProcedure {
+            body,
+            body_definition,
+            ..
+        } => {
+            assert!(body.is_empty(), "plpgsql body is opaque, body should be empty");
+            let def = body_definition.expect("body_definition should carry the $$..$$ string");
+            let raw = match def {
+                FunctionDefinition::DoubleDollarDef(s) => s,
+                other => panic!("expected DoubleDollarDef, got {other:?}"),
+            };
+            assert!(raw.contains("INSERT INTO analytics.daily"));
+            assert!(raw.contains("FROM staging.daily"));
+        }
+        other => panic!("expected CreateProcedure, got {other:?}"),
+    }
+}
+
+#[test]
+fn redshift_plpgsql_procedure_single_quoted_body_preserved() {
+    // Single-quoted body variant — rarer but legal in PostgreSQL/Redshift.
+    let sql = "CREATE OR REPLACE PROCEDURE analytics.noop() LANGUAGE plpgsql AS 'BEGIN NULL; END;';";
+    let mut stmts = Parser::parse_sql(&RedshiftSqlDialect {}, sql).unwrap();
+    match stmts.pop().unwrap() {
+        Statement::CreateProcedure {
+            body_definition: Some(FunctionDefinition::SingleQuotedDef(s)),
+            ..
+        } => {
+            assert!(s.contains("BEGIN"));
+        }
+        other => panic!("expected CreateProcedure with SingleQuotedDef, got {other:?}"),
+    }
 }
 
 #[test]
