@@ -134,8 +134,22 @@ Signs the SQL is probably invalid:
 When you conclude SQL is invalid:
 1. Do **not** modify the parser to accept it.
 2. Do **not** modify or delete the corpus file (corpus is a symlink to `kernel-cll-corpus` and not owned by this repo).
-3. Report the path and a one-line reason in your final message (so it can later be pruned from `kernel-cll-corpus`), and pick a different failure pattern for this iteration.
+3. Add the hash(es) to `kernel-cll-corpus/excluded_hashes.txt` with a one-line reason; they drop on the next `make process`.
 4. If *every* candidate failure in the top tier looks invalid, report that and stop the iteration without a commit — the loop's no-commit timer will end the run.
+
+#### Before extending the grammar: cite the docs
+
+Every fix that makes the parser accept **new** syntax must be justified by a primary-source grammar snippet (BigQuery / Snowflake / Postgres / Redshift / etc. docs), not by corpus files alone. If the only evidence is "two customer files fail on X," that is the anti-signal, not the signal — SQL generators produce broken output, and tailoring the parser to match those bugs is a silent regression for every other user.
+
+Concretely, before writing the fix:
+
+1. Find the primary-source grammar fragment that permits the construct.
+2. Paste the URL and snippet into the commit body.
+3. If you can't produce one after a focused search, treat it as invalid SQL — add the hash(es) to `excluded_hashes.txt` and move on.
+
+The anti-pattern this rule exists for: observing a failing customer file, rationalizing "their query presumably runs, so the docs must be incomplete," and extending the parser to match. Precedent it would have caught: `GROUP BY ALL <col_list>` — BigQuery's grammar is explicitly `GROUP BY { expression [, …] | ROLLUP(...) | ALL }`, so ALL and an expression list are mutually exclusive and the failing files were just generator bugs.
+
+Reorderings and permutations of otherwise-valid clauses **don't** need a grammar citation — those are genuinely under-documented and dialect parsers routinely accept them (e.g. `FOR UPDATE LIMIT n`, `COLLATE` before vs. after `NOT NULL`). The bar applies to new *constructs* and new *keyword combinations*, not to accepting options in a different order.
 
 ### Step 3: Implement the fix
 **Rules:**
