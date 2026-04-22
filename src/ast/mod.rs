@@ -50,8 +50,8 @@ pub use self::query::{
     JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NamedWindowExpr,
     NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query,
     RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto,
-    SelectItem, SelectionCount, SetExpr, SetOperator, SetQuantifier, Setting, Table, TableAlias,
-    TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top, UnpivotInValue,
+    SelectItem, SelectionCount, SetExpr, SetOperator, SetPrefix, SetQuantifier, Setting, Table,
+    TableAlias, TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top, UnpivotInValue,
     UnpivotNullHandling, ValueTableMode, Values, WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{

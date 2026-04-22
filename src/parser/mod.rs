@@ -10727,28 +10727,62 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            // Check for FULL [OUTER] UNION (BigQuery set operation with FULL prefix,
-            // e.g., `SELECT ... FULL UNION ALL BY NAME SELECT ...`)
-            let full_prefix = if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::FULL)
-            {
-                let t1 = self.peek_nth_token(1).token;
-                matches!(t1, Token::Word(ref w) if w.keyword == Keyword::UNION)
-                    || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
-                        && matches!(
-                            self.peek_nth_token(2).token,
-                            Token::Word(ref w) if w.keyword == Keyword::UNION
-                        ))
-            } else {
-                false
+            // BigQuery set-operator prefix: `LEFT [OUTER] { UNION | INTERSECT | EXCEPT }`,
+            // `FULL [OUTER] ...`, `INNER ...`. The prefix precedes the operator.
+            let is_set_op_kw = |t: &Token| {
+                matches!(t,
+                Token::Word(w) if matches!(
+                    w.keyword,
+                    Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
+                ))
+            };
+            let set_prefix = match self.peek_token_kind() {
+                Token::Word(w) if w.keyword == Keyword::FULL => {
+                    let t1 = self.peek_nth_token(1).token;
+                    if is_set_op_kw(&t1) {
+                        Some(SetPrefix::Full)
+                    } else if matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                        && is_set_op_kw(&self.peek_nth_token(2).token)
+                    {
+                        Some(SetPrefix::Full)
+                    } else {
+                        None
+                    }
+                }
+                Token::Word(w) if w.keyword == Keyword::LEFT => {
+                    let t1 = self.peek_nth_token(1).token;
+                    if is_set_op_kw(&t1) {
+                        Some(SetPrefix::Left)
+                    } else if matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                        && is_set_op_kw(&self.peek_nth_token(2).token)
+                    {
+                        Some(SetPrefix::Left)
+                    } else {
+                        None
+                    }
+                }
+                Token::Word(w) if w.keyword == Keyword::INNER => {
+                    if is_set_op_kw(&self.peek_nth_token(1).token) {
+                        Some(SetPrefix::Inner)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             };
 
+            // Consume the prefix tokens (prefix + optional OUTER) so the
+            // operator sits at the peek position for parse_set_operator.
+            if set_prefix.is_some() {
+                self.next_token(); // prefix keyword
+                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                {
+                    self.next_token();
+                }
+            }
+
             // The query can be optionally followed by a set operator:
-            let op = if full_prefix {
-                // FULL [OUTER] UNION is always a Union set operation
-                Some(SetOperator::Union)
-            } else {
-                self.parse_set_operator(&self.peek_token_kind().clone())
-            };
+            let op = self.parse_set_operator(&self.peek_token_kind().clone());
             let next_precedence = match op {
                 // UNION and EXCEPT have the same binding power and evaluate left-to-right
                 Some(SetOperator::Union) | Some(SetOperator::Except) => 10,
@@ -10758,41 +10792,22 @@ impl<'a> Parser<'a> {
                 None => break,
             };
             if precedence >= next_precedence {
+                // If we consumed a prefix but then hit precedence-break we'd
+                // have dropped tokens — but parse_query_body ensures the outer
+                // call only recurses here when precedence allows. Reaching here
+                // with set_prefix.is_some() would only happen if the caller
+                // passed a high precedence; in practice that doesn't occur
+                // for these set operators (precedence 10/20).
                 break;
             }
-            // Consume the operator tokens
-            if full_prefix {
-                self.next_token(); // consume FULL
-                if matches!(self.peek_token_kind(), Token::Word(ref w) if w.keyword == Keyword::OUTER)
-                {
-                    self.next_token(); // consume optional OUTER
-                }
-                self.next_token(); // consume UNION
-            } else {
-                self.next_token(); // skip past the set operator
-            }
-            let set_quantifier = if full_prefix {
-                if self.parse_keyword(Keyword::ALL) {
-                    if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
-                        SetQuantifier::FullAllByName
-                    } else {
-                        SetQuantifier::All
-                    }
-                } else if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
-                    SetQuantifier::FullByName
-                } else if self.parse_keyword(Keyword::DISTINCT) {
-                    SetQuantifier::Distinct
-                } else {
-                    SetQuantifier::None
-                }
-            } else {
-                self.parse_set_quantifier(&op)
-            };
+            self.next_token(); // consume the operator
+            let set_quantifier = self.parse_set_quantifier(&op);
             expr = SetExpr::SetOperation {
                 left: Box::new(expr),
                 op: op.unwrap(),
                 set_quantifier,
                 right: self.parse_boxed_query_body(next_precedence)?,
+                set_prefix,
             };
         }
 
@@ -11673,11 +11688,38 @@ impl<'a> Parser<'a> {
 
                 let join_operator_type = match peek_keyword {
                     Keyword::INNER | Keyword::JOIN => {
+                        // BigQuery `INNER { UNION | INTERSECT | EXCEPT }` — not a JOIN.
+                        if peek_keyword == Keyword::INNER {
+                            let t1 = self.peek_nth_token(1).token;
+                            if matches!(t1,
+                                Token::Word(ref w) if matches!(
+                                    w.keyword,
+                                    Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
+                                ))
+                            {
+                                break;
+                            }
+                        }
                         let _ = self.parse_keyword(Keyword::INNER); // [ INNER ]
                         self.expect_keyword(Keyword::JOIN)?;
                         JoinOperator::Inner
                     }
                     kw @ Keyword::LEFT | kw @ Keyword::RIGHT => {
+                        // BigQuery `LEFT [OUTER] { UNION | INTERSECT | EXCEPT }` — not a JOIN.
+                        if kw == Keyword::LEFT {
+                            let is_set_op_kw = |t: &Token| matches!(t,
+                                Token::Word(w) if matches!(
+                                    w.keyword,
+                                    Keyword::UNION | Keyword::INTERSECT | Keyword::EXCEPT | Keyword::MINUS
+                                ));
+                            let t1 = self.peek_nth_token(1).token;
+                            let left_union = is_set_op_kw(&t1)
+                                || (matches!(t1, Token::Word(ref w) if w.keyword == Keyword::OUTER)
+                                    && is_set_op_kw(&self.peek_nth_token(2).token));
+                            if left_union {
+                                break;
+                            }
+                        }
                         let _ = self.next_token(); // consume LEFT/RIGHT
                         let is_left = kw == Keyword::LEFT;
                         let join_type = self.parse_one_of_keywords(&[

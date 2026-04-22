@@ -2335,6 +2335,7 @@ fn parse_array_subquery_expr() {
             body: Box::new(SetExpr::SetOperation {
                 op: SetOperator::Union,
                 set_quantifier: SetQuantifier::None,
+                set_prefix: None,
                 left: Box::new(SetExpr::Select(Box::new(Select {
                     distinct: None,
                     top: None,
