@@ -416,6 +416,12 @@ This is a known Xcode Instruments issue on some macOS versions. Use samply inste
 - Measure complete runs, not just initial progress reports
 - Use `time` command to verify total execution time matches reported rate
 
+## Automated fix loop (`scripts/fix-corpus-loop.sh`)
+
+- Exits cleanly after 5 minutes without a new commit (interpreted as "no viable tier-1 fix left", not a bug). Restart manually to resume.
+- Commits land **locally only** — CI (`corpus.yml`) and the PR corpus-report comment refresh only when someone pushes the branch.
+- Prompt lives in `.claude/fix-corpus-loop.md`; tier-1 = `unparsed_*` + `customer_*` only, tier-2/3 patterns are explicitly out of scope.
+
 ## Related Documentation
 
 - [Custom SQL Parser Guide](docs/custom_sql_parser.md) - How to write dialect extensions
