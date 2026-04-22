@@ -866,6 +866,8 @@ pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
     Keyword::END,
     // for MYSQL PARTITION SELECTION
     Keyword::PARTITION,
+    // `FOR UPDATE` / `FOR SHARE` locking clauses
+    Keyword::FOR,
     // for Snowflake TABLESAMPLE
     Keyword::TABLESAMPLE,
     Keyword::SAMPLE,
@@ -914,6 +916,8 @@ pub const RESERVED_FOR_COLUMN_ALIAS: &[Keyword] = &[
     Keyword::INTERSECT,
     Keyword::CLUSTER,
     Keyword::DISTRIBUTE,
+    // `FOR UPDATE` / `FOR SHARE` locking clauses
+    Keyword::FOR,
     // Reserved only as a column alias in the `SELECT` clause
     Keyword::FROM,
     Keyword::INTO,
