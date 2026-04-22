@@ -4199,6 +4199,48 @@ impl<'a> Parser<'a> {
             true
         };
         let transient = self.parse_one_of_keywords(&[Keyword::TRANSIENT]).is_some();
+        // Snowflake words that front TABLE: DYNAMIC (reserved keyword),
+        // HYBRID, ICEBERG (non-reserved). `DYNAMIC [ICEBERG] TABLE`,
+        // `HYBRID TABLE`, `ICEBERG TABLE`.
+        let peek_word_eq = |p: &mut Self, word: &str| -> bool {
+            matches!(
+                p.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case(word)
+            )
+        };
+        let mut dynamic = false;
+        let mut hybrid = false;
+        let mut iceberg = false;
+        // Only consume these modifiers if TABLE follows (directly, or
+        // after ICEBERG for `DYNAMIC ICEBERG TABLE`).
+        let is_table_modifier = |p: &mut Self, word: &str, extra: bool| -> bool {
+            if !peek_word_eq(p, word) {
+                return false;
+            }
+            let n1 = p.peek_nth_token(1).token;
+            let table_next = matches!(&n1, Token::Word(w) if w.keyword == Keyword::TABLE);
+            if table_next {
+                return true;
+            }
+            if extra && matches!(&n1, Token::Word(w) if w.value.eq_ignore_ascii_case("ICEBERG")) {
+                let n2 = p.peek_nth_token(2).token;
+                return matches!(&n2, Token::Word(w) if w.keyword == Keyword::TABLE);
+            }
+            false
+        };
+        if is_table_modifier(self, "DYNAMIC", true) {
+            self.next_token();
+            dynamic = true;
+        } else if is_table_modifier(self, "HYBRID", false) {
+            self.next_token();
+            hybrid = true;
+        }
+        if peek_word_eq(self, "ICEBERG")
+            && matches!(self.peek_nth_token(1).token, Token::Word(ref w) if w.keyword == Keyword::TABLE)
+        {
+            self.next_token();
+            iceberg = true;
+        }
         let global: Option<bool> = if global {
             Some(true)
         } else if local {
@@ -4214,7 +4256,9 @@ impl<'a> Parser<'a> {
                 // CREATE TABLE FUNCTION (BigQuery table-valued function)
                 self.parse_create_function(or_replace, temporary, true)
             } else {
-                self.parse_create_table(or_replace, temporary, global, transient)
+                self.parse_create_table_inner(
+                    or_replace, temporary, global, transient, dynamic, iceberg, hybrid,
+                )
             }
         } else if self.parse_keyword(Keyword::MATERIALIZED) || self.parse_keyword(Keyword::VIEW) {
             self.prev_token();
@@ -6007,6 +6051,21 @@ impl<'a> Parser<'a> {
         global: Option<bool>,
         transient: bool,
     ) -> Result<Statement, ParserError> {
+        self.parse_create_table_inner(
+            or_replace, temporary, global, transient, false, false, false,
+        )
+    }
+
+    pub fn parse_create_table_inner(
+        &mut self,
+        or_replace: bool,
+        temporary: bool,
+        global: Option<bool>,
+        transient: bool,
+        dynamic: bool,
+        iceberg: bool,
+        hybrid: bool,
+    ) -> Result<Statement, ParserError> {
         let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
         let table_name = self.parse_object_name(true)?;
 
@@ -6441,7 +6500,11 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // KEY = VALUE dialect-specific options (DEFAULT_DDL_COLLATION, etc.)
+            // KEY = VALUE dialect-specific options (TARGET_LAG, WAREHOUSE,
+            // REFRESH_MODE, INITIALIZE, EXTERNAL_VOLUME, CATALOG, BASE_LOCATION,
+            // DEFAULT_DDL_COLLATION, etc.). Preserved into `table_options` so
+            // consumers (visitors / lineage) can read the referenced warehouse
+            // or catalog.
             if matches!(self.peek_token_kind().clone(), Token::Word(_))
                 && self.peek_nth_token(1).token == Token::Eq
                 // Don't consume AS = ... which could be something else
@@ -6450,7 +6513,11 @@ impl<'a> Parser<'a> {
                     Token::Word(ref w) if w.keyword == Keyword::AS
                 )
             {
-                self.next_token(); // keyword
+                let name_tok = self.next_token();
+                let key = match name_tok.token {
+                    Token::Word(w) => w.value,
+                    _ => unreachable!(),
+                };
                 self.next_token(); // =
                 if self.consume_token(&Token::LParen) {
                     let mut depth = 1i32;
@@ -6462,8 +6529,40 @@ impl<'a> Parser<'a> {
                             _ => {}
                         }
                     }
-                } else {
-                    let _ = self.parse_expr();
+                    // Value was a paren group; skip preserving since we don't have AST for it.
+                } else if let Ok(value) = self.parse_expr() {
+                    table_options.push(SqlOption {
+                        name: ObjectName(vec![Ident::new(key)]),
+                        value,
+                    });
+                }
+                continue;
+            }
+
+            // Snowflake Dynamic Table: REQUIRE USER (no value) and
+            // IMMUTABLE WHERE (<expr>). Consume but don't fail.
+            if dynamic
+                && matches!(
+                    self.peek_token_kind(),
+                    Token::Word(w) if w.value.eq_ignore_ascii_case("REQUIRE")
+                )
+            {
+                self.next_token(); // REQUIRE
+                let _ = self.next_token(); // USER/role
+                continue;
+            }
+            if dynamic && self.parse_keyword(Keyword::IMMUTABLE) {
+                if self.parse_keyword(Keyword::WHERE) {
+                    self.expect_token(&Token::LParen)?;
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
                 }
                 continue;
             }
@@ -6574,6 +6673,24 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Snowflake: trailing `COPY GRANTS` after the `AS <query>` body.
+        if !copy_grants && self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]) {
+            copy_grants = true;
+        }
+        // If the query parser absorbed `COPY` as a table alias (it's not a
+        // reserved alias keyword), we'll be sitting on GRANTS now — treat that
+        // as the trailing COPY GRANTS modifier. The alias stays on the AST
+        // (harmless for lineage) but the statement parses cleanly.
+        if !copy_grants
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::GRANTS
+            )
+        {
+            self.next_token();
+            copy_grants = true;
+        }
+
         Ok(CreateTableBuilder::new(table_name)
             .temporary(temporary)
             .columns(columns)
@@ -6583,6 +6700,9 @@ impl<'a> Parser<'a> {
             .or_replace(or_replace)
             .if_not_exists(if_not_exists)
             .transient(transient)
+            .dynamic(dynamic)
+            .iceberg(iceberg)
+            .hybrid(hybrid)
             .hive_distribution(hive_distribution)
             .hive_formats(Some(hive_formats))
             .dist_style(dist_style)
@@ -6718,11 +6838,31 @@ impl<'a> Parser<'a> {
 
     pub fn parse_column_def(&mut self) -> Result<ColumnDef, ParserError> {
         let name = self.parse_identifier(false)?;
-        // Handle missing data type (e.g., `ADD COLUMN id;`)
+        // Handle missing data type (e.g., `ADD COLUMN id;`, or Snowflake
+        // `CREATE DYNAMIC TABLE t (col COMMENT '...', col TAG (...))` which lists
+        // bare column names with optional COMMENT/TAG but no type).
+        let next_kw_implies_no_type = matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if matches!(
+                w.keyword,
+                Keyword::COMMENT
+                    | Keyword::TAG
+                    | Keyword::DEFAULT
+                    | Keyword::NOT
+                    | Keyword::NULL
+                    | Keyword::CONSTRAINT
+                    | Keyword::PRIMARY
+                    | Keyword::UNIQUE
+                    | Keyword::REFERENCES
+                    | Keyword::CHECK
+                    | Keyword::COLLATE
+            )
+        );
         let data_type = if self.peek_token_is(&Token::SemiColon)
             || self.peek_token_is(&Token::EOF)
             || self.peek_token().token == Token::Comma
             || self.peek_token().token == Token::RParen
+            || next_kw_implies_no_type
         {
             DataType::Unspecified
         } else {

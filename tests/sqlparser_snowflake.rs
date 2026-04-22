@@ -2492,3 +2492,82 @@ fn test_snowflake_create_secure_function() {
         other => panic!("expected CreateFunction, got {other:?}"),
     }
 }
+
+#[test]
+fn test_snowflake_create_dynamic_table() {
+    // CREATE DYNAMIC TABLE must route through CreateTable (not silently
+    // become a Comment statement) and preserve TARGET_LAG / WAREHOUSE so
+    // visitors can see the referenced warehouse.
+    let sql = "CREATE OR REPLACE DYNAMIC TABLE d TARGET_LAG = '30 minutes' WAREHOUSE = wh AS SELECT a, b FROM t";
+    let stmt = snowflake().parse_sql_statements(sql).unwrap().remove(0);
+    match stmt {
+        Statement::CreateTable {
+            dynamic,
+            iceberg,
+            hybrid,
+            or_replace,
+            name,
+            query,
+            table_options,
+            ..
+        } => {
+            assert!(dynamic);
+            assert!(!iceberg);
+            assert!(!hybrid);
+            assert!(or_replace);
+            assert_eq!(name.to_string(), "d");
+            assert!(query.is_some());
+            let keys: Vec<String> = table_options
+                .iter()
+                .map(|o| o.name.to_string().to_uppercase())
+                .collect();
+            assert!(keys.iter().any(|k| k == "TARGET_LAG"), "keys={keys:?}");
+            assert!(keys.iter().any(|k| k == "WAREHOUSE"), "keys={keys:?}");
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_snowflake_create_dynamic_table_full_options() {
+    let sql = "CREATE DYNAMIC TABLE d TARGET_LAG = DOWNSTREAM WAREHOUSE = wh REFRESH_MODE = INCREMENTAL INITIALIZE = ON_CREATE AS SELECT * FROM t";
+    let stmt = snowflake().parse_sql_statements(sql).unwrap().remove(0);
+    match stmt {
+        Statement::CreateTable {
+            dynamic,
+            table_options,
+            ..
+        } => {
+            assert!(dynamic);
+            let keys: Vec<String> = table_options
+                .iter()
+                .map(|o| o.name.to_string().to_uppercase())
+                .collect();
+            for k in ["TARGET_LAG", "WAREHOUSE", "REFRESH_MODE", "INITIALIZE"] {
+                assert!(keys.iter().any(|x| x == k), "missing {k} in {keys:?}");
+            }
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_snowflake_create_hybrid_table() {
+    let sql = "CREATE HYBRID TABLE prefs (customer_id INT NOT NULL, pref_key VARCHAR(64) NOT NULL, PRIMARY KEY (customer_id, pref_key))";
+    let stmt = snowflake().parse_sql_statements(sql).unwrap().remove(0);
+    match stmt {
+        Statement::CreateTable {
+            hybrid,
+            dynamic,
+            name,
+            columns,
+            ..
+        } => {
+            assert!(hybrid);
+            assert!(!dynamic);
+            assert_eq!(name.to_string(), "prefs");
+            assert!(!columns.is_empty());
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}

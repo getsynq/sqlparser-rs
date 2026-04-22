@@ -1828,6 +1828,14 @@ pub enum Statement {
         global: Option<bool>,
         if_not_exists: bool,
         transient: bool,
+        /// Snowflake `CREATE DYNAMIC TABLE`. Dynamic tables carry their own option set
+        /// (TARGET_LAG, WAREHOUSE, REFRESH_MODE, INITIALIZE, …) surfaced in
+        /// `table_options` so visitors see the referenced warehouse / source tables.
+        dynamic: bool,
+        /// Snowflake `CREATE ICEBERG TABLE` or `CREATE DYNAMIC ICEBERG TABLE`.
+        iceberg: bool,
+        /// Snowflake Unistore `CREATE HYBRID TABLE`.
+        hybrid: bool,
         /// Table name
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         name: ObjectName,
@@ -3215,6 +3223,9 @@ impl fmt::Display for Statement {
                 inherits,
                 partition_of,
                 partition_bound,
+                dynamic,
+                iceberg,
+                hybrid,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3225,7 +3236,7 @@ impl fmt::Display for Statement {
                 //   `CREATE TABLE t (a INT) AS SELECT a from t2`
                 write!(
                     f,
-                    "CREATE {or_replace}{external}{global}{temporary}{transient}TABLE {if_not_exists}{name}",
+                    "CREATE {or_replace}{external}{global}{temporary}{transient}{dynamic}{hybrid}{iceberg}TABLE {if_not_exists}{name}",
                     or_replace = if *or_replace { "OR REPLACE " } else { "" },
                     external = if *external { "EXTERNAL " } else { "" },
                     global = global
@@ -3240,6 +3251,9 @@ impl fmt::Display for Statement {
                     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                     temporary = if *temporary { "TEMPORARY " } else { "" },
                     transient = if *transient { "TRANSIENT " } else { "" },
+                    dynamic = if *dynamic { "DYNAMIC " } else { "" },
+                    hybrid = if *hybrid { "HYBRID " } else { "" },
+                    iceberg = if *iceberg { "ICEBERG " } else { "" },
                     name = name,
                 )?;
                 if let Some(on_cluster) = on_cluster {
