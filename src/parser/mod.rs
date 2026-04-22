@@ -11640,6 +11640,15 @@ impl<'a> Parser<'a> {
 
     pub fn parse_table_and_joins(&mut self) -> Result<TableWithJoins, ParserError> {
         let relation = self.parse_table_factor()?;
+        // Redshift PartiQL array unnest: `<array_column> AS <elem> AT <index>`
+        // binds the zero-based position to `<index>`. The index alias is not
+        // preserved in the AST — the array column reference in `relation`
+        // already carries the lineage we care about.
+        if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+            && self.parse_keyword(Keyword::AT)
+        {
+            let _ = self.parse_identifier(false)?;
+        }
         // Note that for keywords to be properly handled here, they need to be
         // added to `RESERVED_FOR_TABLE_ALIAS`, otherwise they may be parsed as
         // a table alias.
