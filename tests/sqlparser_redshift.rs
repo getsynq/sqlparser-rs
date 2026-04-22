@@ -656,6 +656,18 @@ fn test_redshift_create_procedure_trailing_clauses() {
 }
 
 #[test]
+fn test_redshift_create_procedure_argname_before_mode() {
+    // Redshift allows the argument mode (IN/OUT/INOUT) to appear *after* the
+    // parameter name: `argname argmode argtype`. Postgres puts the mode first.
+    // Both orders should parse.
+    let sql = "CREATE OR REPLACE PROCEDURE select_into_null(return_webpage OUT VARCHAR(256)) AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql";
+    redshift().parse_sql_statements(sql).unwrap();
+
+    let sql = "CREATE OR REPLACE PROCEDURE sp_get_credentials(userid INT, o_creds OUT VARCHAR) AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql";
+    redshift().parse_sql_statements(sql).unwrap();
+}
+
+#[test]
 fn test_redshift_column_encode() {
     // Redshift: CREATE TABLE with per-column ENCODE <encoding>
     redshift().verified_stmt("CREATE TABLE t (a INT ENCODE AZ64, b VARCHAR(10) ENCODE LZO)");
