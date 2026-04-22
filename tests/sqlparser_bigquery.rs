@@ -2148,3 +2148,18 @@ fn test_bigquery_expr_wildcard_after_subscript() {
         other => panic!("expected Query, got {other:?}"),
     }
 }
+
+#[test]
+fn test_bigquery_group_by_all_with_expr_list() {
+    // Some SQL generators emit `GROUP BY ALL <col_list>` alongside the
+    // standalone `GROUP BY ALL`. Accept the mixed form so the referenced
+    // columns aren't silently dropped from lineage.
+    bigquery()
+        .parse_sql_statements("SELECT a, b FROM t GROUP BY ALL col_102")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements(
+            "SELECT a, b FROM t GROUP BY ALL col_102 UNION ALL BY NAME SELECT c, d FROM t2",
+        )
+        .unwrap();
+}
