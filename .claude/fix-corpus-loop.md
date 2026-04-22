@@ -21,7 +21,15 @@ You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/
 
 **Dialect priority order (within tier 1):** Snowflake > Redshift > BigQuery > Databricks > ClickHouse > Postgres > everything else.
 
-When picking which failure to fix, maximize tier-1 file count, then prefer higher-priority dialects. Tier-0 (user-directed / SYNQ / Coalesce) always jumps the queue.
+When picking which failure to fix, first maximize **lineage value** (see below), then tier-1 file count, then prefer higher-priority dialects. Tier-0 (user-directed / SYNQ / Coalesce) always jumps the queue.
+
+**Lineage value ordering.** This parser exists to feed CLL. Fixes that unlock table/column references for the visitor are strictly more valuable than fixes that only get "parse: ok" with no lineage payload. When two failure patterns tie on file count, prefer the one that, once parsed, exposes lineage:
+
+- **High value** — a view/table/procedure/function body containing a real query; INSERT/MERGE/COPY INTO targets and sources; CTEs; set operations; CREATE TABLE AS. These surface `in_tables` / `out_tables` to downstream visitors.
+- **Medium value** — DDL fragments that carry schema-shape information (column lists, types, constraints) even without a query body.
+- **Low value** — transaction-control statements (`BEGIN`/`COMMIT`/`ROLLBACK TO SAVEPOINT`), session settings (`SET …`), `EXECUTE`/`CALL` by name only, `PREPARE`/`DEALLOCATE`. Fix them only if they're blocking a multi-statement block whose other statements *do* carry lineage, or the volume is high enough that skipping is costing the corpus a lot.
+
+Of course, if a construct can't be parsed at all, its lineage is invisible — so "no lineage payload in this specific statement" is not a reason to reject the fix, only a reason to deprioritize it relative to queries that *do* carry lineage.
 
 ## Dialect strategy
 
