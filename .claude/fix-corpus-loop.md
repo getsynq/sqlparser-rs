@@ -15,7 +15,7 @@ You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/
 3. **Always skip — synthetic/third-party fixtures:**
    - `sqlglot_*`, `synq_*`, etc.
 
-**Hard rule (autonomous loop only):** when running unattended, if the chosen error pattern has **zero tier-1 files**, do not fix it — pick a different pattern. If every top candidate is tier-2/tier-3 only, stop the iteration without a commit. A fix that only helps theoretical queries adds AST surface and regression risk for no customer benefit.
+**Ordering rule:** prefer tier-1 patterns when they exist. When tier-1 is empty for the top-15 ranked list, fall through to tier-2 (first-party upstream fixtures) — these are still real dialect syntax and fixes there often transfer to tier-1 later. Only skip tier-3 (`sqlglot_*`, `synq_*`) outright. The guiding principle is still "no AST surface for theoretical syntax" — if a tier-2 pattern looks like invalid/dead SQL, skip it using the usual exit hatch.
 
 **Tier-0 overrides the hard rule.** When the user has explicitly asked for a fix, or the gap blocks SYNQ / Coalesce Quality internal SQL, commit the fix even with zero corpus delta — the value is proven by the request, not the corpus. Add a regression test (unit test or a new corpus file contributed upstream to `kernel-cll-corpus`) so future loop runs catch it.
 
@@ -110,7 +110,7 @@ for err, info in ranked[:15]:
 - Looks like a parser limitation (not garbage SQL)
 - You can actually fix without massive AST changes
 
-If the top-15 ranked list has no tier-1 candidates, stop the iteration without a commit — tier-2/3-only fixes are out of scope. Report that no tier-1 failures remain and exit.
+If the top-15 ranked list has no tier-1 candidates, fall through to tier-2 (first-party upstream fixtures) — pick the highest-count tier-2 pattern that passes the "is this real dialect syntax?" check. Always skip tier-3 (`sqlglot_*`, `synq_*`).
 
 Read 2-3 example SQL files from the tier-1 set for the chosen error pattern to understand what syntax is failing.
 
