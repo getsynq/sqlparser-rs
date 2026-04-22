@@ -2129,3 +2129,25 @@ fn test_bigquery_set_operator_prefix() {
         }
     }
 }
+
+#[test]
+fn test_bigquery_expr_wildcard_after_subscript() {
+    // BigQuery allows `ARRAY_AGG(...)[OFFSET(0)].*` — struct wildcard expansion
+    // after a subscripted aggregate. Previously the post-subscript `.` was
+    // greedily consumed as a Snowflake-style JSON path, eating the `*` and
+    // leaving the parser confused at the next `,`.
+    let sql = "SELECT ARRAY_AGG(x ORDER BY y DESC LIMIT 1)[OFFSET(0)].*, col_2 FROM t";
+    let stmts = bigquery().parse_sql_statements(sql).unwrap();
+    match &stmts[0] {
+        Statement::Query(q) => match q.body.as_ref() {
+            SetExpr::Select(s) => {
+                assert!(matches!(
+                    &*s.projection[0],
+                    SelectItem::ExprWildcard { .. }
+                ));
+            }
+            other => panic!("expected Select, got {other:?}"),
+        },
+        other => panic!("expected Query, got {other:?}"),
+    }
+}
