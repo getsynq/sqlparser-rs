@@ -40,25 +40,113 @@ mod alter;
 
 /// Wrapper for parser error messages with optional backtrace.
 ///
-/// When `RUST_BACKTRACE=1` is set, captures a backtrace at the point where
-/// the error is created. The backtrace is ignored for equality comparisons
-/// so existing test assertions work unchanged.
+/// When `SQLPARSER_BACKTRACE=1` (or `=full`) is set, captures a backtrace at
+/// the point where the error is created. The backtrace is ignored for equality
+/// comparisons so existing test assertions work unchanged.
+///
+/// # Cost model
+///
+/// The parser is recursive-descent with many speculative try-parse paths
+/// (e.g. [`Parser::maybe_parse`], [`Parser::try_parse_clickhouse_cte`]).
+/// Those paths *expect* errors — they fail, get discarded, and the parser
+/// backtracks. Capturing and symbolicating a backtrace for every one of
+/// those expected errors is wasted work: nobody ever sees them. In one real
+/// production profile of kernel-cll, eager backtrace capture during
+/// speculative parsing accounted for ~90% of CPU when `RUST_BACKTRACE=full`
+/// was set (for panic diagnostics).
+///
+/// Two mitigations:
+///
+///   1. Capture is gated on a dedicated `SQLPARSER_BACKTRACE` env var — not
+///      `RUST_BACKTRACE` — so production can keep panic backtraces without
+///      paying the parser-error cost.
+///   2. While a speculative `maybe_parse` / `try_parse_*` scope is active,
+///      capture is suppressed via a thread-local counter. Errors that escape
+///      all such scopes (i.e. real, fatal errors) still get a backtrace.
+///      Suppression can be disabled with `SQLPARSER_BACKTRACE_SPECULATIVE=1`
+///      when debugging requires seeing backtraces inside try-parse branches
+///      too (off by default because it re-introduces the production cost).
+///
+/// The captured `Backtrace` is stored directly rather than pre-stringified;
+/// symbol resolution happens lazily on `Display`, so even when capture is
+/// enabled we don't pay for demangling unless the backtrace is actually
+/// printed.
 pub struct ParserErrorMessage {
     pub message: String,
-    backtrace: Option<String>,
+    backtrace: Option<std::sync::Arc<std::backtrace::Backtrace>>,
 }
 
 impl ParserErrorMessage {
     /// Returns the captured backtrace, if any.
-    pub fn backtrace(&self) -> Option<&str> {
+    pub fn backtrace(&self) -> Option<&std::backtrace::Backtrace> {
         self.backtrace.as_deref()
     }
 
-    fn capture_backtrace() -> Option<String> {
+    fn capture_backtrace() -> Option<std::sync::Arc<std::backtrace::Backtrace>> {
+        if !backtrace_enabled() {
+            return None;
+        }
+        if speculative_scope::is_active() && !speculative_backtrace_enabled() {
+            return None;
+        }
         let bt = std::backtrace::Backtrace::capture();
         match bt.status() {
-            std::backtrace::BacktraceStatus::Captured => Some(bt.to_string()),
+            std::backtrace::BacktraceStatus::Captured => Some(std::sync::Arc::new(bt)),
             _ => None,
+        }
+    }
+}
+
+fn env_flag_enabled(name: &'static str) -> bool {
+    match std::env::var(name) {
+        Ok(v) => !v.is_empty() && v != "0",
+        Err(_) => false,
+    }
+}
+
+fn backtrace_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| env_flag_enabled("SQLPARSER_BACKTRACE"))
+}
+
+/// When set, [`ParserErrorMessage`] also captures a backtrace inside
+/// speculative `maybe_parse` / `try_parse_*` scopes. Off by default because
+/// it re-introduces the ~90% production CPU cost this module's cost model
+/// exists to avoid — only turn on when you specifically need to see the
+/// parse path of a *discarded* error. Requires `SQLPARSER_BACKTRACE` to also
+/// be set; otherwise no backtrace is captured at all.
+fn speculative_backtrace_enabled() -> bool {
+    use std::sync::OnceLock;
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| env_flag_enabled("SQLPARSER_BACKTRACE_SPECULATIVE"))
+}
+
+/// Marks a scope whose errors will be discarded (speculative parsing).
+/// Error construction inside such a scope skips backtrace capture.
+mod speculative_scope {
+    use std::cell::Cell;
+
+    thread_local! {
+        static DEPTH: Cell<u32> = const { Cell::new(0) };
+    }
+
+    pub(super) fn is_active() -> bool {
+        DEPTH.with(|d| d.get() > 0)
+    }
+
+    pub(super) struct Guard;
+
+    impl Guard {
+        pub(super) fn enter() -> Self {
+            DEPTH.with(|d| d.set(d.get().saturating_add(1)));
+            Self
+        }
+    }
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
         }
     }
 }
@@ -4046,12 +4134,17 @@ impl<'a> Parser<'a> {
 
     /// Run a parser method `f`, reverting back to the current position
     /// if unsuccessful.
+    ///
+    /// Errors produced inside `f` are discarded on the failure branch, so we
+    /// mark the scope as speculative to skip backtrace capture for the
+    /// wasted work (see [`ParserErrorMessage`]).
     #[must_use]
     fn maybe_parse<T, F>(&mut self, mut f: F) -> Option<T>
     where
         F: FnMut(&mut Parser) -> Result<T, ParserError>,
     {
         let index = self.index;
+        let _guard = speculative_scope::Guard::enter();
         if let Ok(t) = f(self) {
             Some(t)
         } else {
@@ -10175,6 +10268,7 @@ impl<'a> Parser<'a> {
         // comes before AS. Try to detect and parse this case.
         if dialect_of!(self is ClickHouseDialect | GenericDialect) {
             let idx = self.index;
+            let _guard = speculative_scope::Guard::enter();
             if let Ok(cte) = self.try_parse_clickhouse_cte() {
                 return Ok(cte);
             }
