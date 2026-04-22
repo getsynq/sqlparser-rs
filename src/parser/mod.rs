@@ -1657,6 +1657,41 @@ impl<'a> Parser<'a> {
 
     /// parse a group by expr. a group by expr can be one of group sets, roll up, cube, or simple
     /// expr.
+    /// Return true if the next token looks like the start of a GROUP BY expression
+    /// (identifier, number, literal, or `(`), i.e. not a clause terminator such
+    /// as HAVING / ORDER / LIMIT / UNION / `)` / `;` / EOF. Used to detect the
+    /// generator quirk of `GROUP BY ALL <col_list>` where ALL is followed by an
+    /// explicit column list.
+    fn looks_like_group_by_expr_start(&self) -> bool {
+        match self.peek_token_kind() {
+            Token::Word(w) => !matches!(
+                w.keyword,
+                Keyword::HAVING
+                    | Keyword::ORDER
+                    | Keyword::LIMIT
+                    | Keyword::OFFSET
+                    | Keyword::FETCH
+                    | Keyword::UNION
+                    | Keyword::INTERSECT
+                    | Keyword::EXCEPT
+                    | Keyword::MINUS
+                    | Keyword::WITH
+                    | Keyword::QUALIFY
+                    | Keyword::WINDOW
+                    | Keyword::FORMAT
+                    | Keyword::SETTINGS
+                    | Keyword::FOR
+                    | Keyword::CLUSTER
+                    | Keyword::DISTRIBUTE
+                    | Keyword::SORT
+                    | Keyword::INTO
+                    | Keyword::GROUPING
+            ),
+            Token::LParen | Token::Number(_, _) => true,
+            _ => false,
+        }
+    }
+
     fn parse_group_by_expr(&mut self) -> Result<Expr, ParserError> {
         if self.dialect.supports_group_by_expr() {
             if self.parse_keywords(&[Keyword::GROUPING, Keyword::SETS]) {
@@ -10985,8 +11020,18 @@ impl<'a> Parser<'a> {
 
         let group_by = if self.parse_keywords(&[Keyword::GROUP, Keyword::BY]) {
             if self.parse_keyword(Keyword::ALL) {
-                let modifiers = self.parse_group_by_with_modifiers()?;
-                GroupByExpr::All(modifiers)
+                // Some SQL generators emit `GROUP BY ALL <col_list>` alongside
+                // the standalone `GROUP BY ALL`. If expressions follow, fold
+                // them into the group-by list so the column references aren't
+                // silently dropped from lineage.
+                if self.looks_like_group_by_expr_start() {
+                    let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
+                    let modifiers = self.parse_group_by_with_modifiers()?;
+                    GroupByExpr::Expressions(exprs, modifiers)
+                } else {
+                    let modifiers = self.parse_group_by_with_modifiers()?;
+                    GroupByExpr::All(modifiers)
+                }
             } else {
                 let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
                 let modifiers = self.parse_group_by_with_modifiers()?;
@@ -11091,8 +11136,14 @@ impl<'a> Parser<'a> {
 
         let group_by = if self.parse_keywords(&[Keyword::GROUP, Keyword::BY]) {
             if self.parse_keyword(Keyword::ALL) {
-                let modifiers = self.parse_group_by_with_modifiers()?;
-                GroupByExpr::All(modifiers)
+                if self.looks_like_group_by_expr_start() {
+                    let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
+                    let modifiers = self.parse_group_by_with_modifiers()?;
+                    GroupByExpr::Expressions(exprs, modifiers)
+                } else {
+                    let modifiers = self.parse_group_by_with_modifiers()?;
+                    GroupByExpr::All(modifiers)
+                }
             } else {
                 let exprs = self.parse_comma_separated(Parser::parse_group_by_expr)?;
                 let modifiers = self.parse_group_by_with_modifiers()?;
