@@ -27,3 +27,6 @@ jobs:
         run: cargo nextest run --all-features
         env:
           RUST_MIN_STACK: 8388608
+          # Attach parser call-chain backtraces to ParserError so test output
+          # points at the exact parse_* path that failed.
+          SQLPARSER_BACKTRACE: "1"

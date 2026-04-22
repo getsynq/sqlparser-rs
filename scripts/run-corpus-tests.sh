@@ -23,7 +23,10 @@ mkdir -p "$RESULTS_DIR"
 
 # Build and run the standalone corpus-runner binary (replaces old libtest-mimic harness)
 cargo build --release --bin corpus-runner 2>&1 | tee "$RESULTS_DIR/corpus-run-$TIMESTAMP.log"
-RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 \
+# SQLPARSER_BACKTRACE=1 attaches the parse_* call chain to ParserError so
+# corpus failures point at the exact parse path that broke. RUST_BACKTRACE=1
+# stays set for panic diagnostics.
+RUST_MIN_STACK=8388608 RUST_BACKTRACE=1 SQLPARSER_BACKTRACE=1 \
     "$REPO_ROOT/target/release/corpus-runner" "$REPO_ROOT/tests/corpus" 2>&1 \
     | tee -a "$RESULTS_DIR/corpus-run-$TIMESTAMP.log" || true
 

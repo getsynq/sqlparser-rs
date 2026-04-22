@@ -1,0 +1,6 @@
+[env]
+# Attach parser call-chain backtraces to ParserError so `cargo test` / nextest
+# / corpus-runner output points at the exact parse_* path that failed.
+# Kept off in production (kernel-cll's main.libsonnet does not set this) to
+# avoid paying the capture cost on every parser error under `RUST_BACKTRACE`.
+SQLPARSER_BACKTRACE = "1"

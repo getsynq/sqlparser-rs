@@ -47,6 +47,8 @@ jobs:
         env:
           # Increase stack size to 4MB to handle deeply nested queries without excessive memory
           RUST_MIN_STACK: 4194304
+          # Attach parser call-chain backtraces to corpus failures for easier triage.
+          SQLPARSER_BACKTRACE: "1"
         run: target/release/corpus-runner tests/corpus
 
       - name: Create fallback report if tests crashed
