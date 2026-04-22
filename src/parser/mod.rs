@@ -14280,8 +14280,18 @@ impl<'a> Parser<'a> {
 
         // EXECUTE IMMEDIATE 'sql' [USING p1 [AS n1], p2 [AS n2]] — Trino, Oracle, DB2,
         // Databricks, etc. Databricks allows `AS name` aliases that bind to named
-        // parameter markers (`:name`) in the SQL string.
+        // parameter markers (`:name`) in the SQL string. Snowflake also accepts
+        // `EXECUTE IMMEDIATE FROM <path>` to run SQL from a stage file.
         if self.parse_keyword(Keyword::IMMEDIATE) {
+            if self.parse_keyword(Keyword::FROM) {
+                let path = self.parse_expr()?;
+                return Ok(Statement::Execute {
+                    name: Ident::new("").empty_span(),
+                    parameters: vec![],
+                    immediate: Some(path),
+                    using: vec![],
+                });
+            }
             let immediate = self.parse_expr()?;
             let using = if self.parse_keyword(Keyword::USING) {
                 self.parse_comma_separated(|p| {
