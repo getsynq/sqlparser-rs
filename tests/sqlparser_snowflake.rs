@@ -2072,6 +2072,21 @@ fn parse_create_table_with_row_access_policy() {
 }
 
 #[test]
+fn parse_snowflake_show_parameters_then_merge() {
+    // SHOW PARAMETERS uses the loose parse_identifiers, which previously
+    // consumed tokens across statement boundaries until it hit `=`. That
+    // swallowed the trailing MERGE in dbt-emitted multi-statement bodies.
+    // The fix: parse_identifiers stops at `;` in addition to `=` / EOF.
+    let sql = "show parameters like 'query_tag' in session; \
+               merge into t as dst using s as src on (dst.k = src.k) \
+               when matched then update set \"c1\" = src.\"c1\"";
+    let stmts = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 2);
+    assert!(matches!(stmts[0], sqlparser::ast::Statement::ShowVariable { .. }));
+    assert!(matches!(stmts[1], sqlparser::ast::Statement::Merge { .. }));
+}
+
+#[test]
 fn parse_snowflake_scripting_declare_block() {
     // Snowflake scripting DECLARE with typed variables and CURSOR FOR.
     // https://docs.snowflake.com/en/sql-reference/snowflake-scripting/declare
