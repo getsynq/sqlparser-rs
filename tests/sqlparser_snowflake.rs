@@ -2049,6 +2049,29 @@ fn parse_create_view_with_masking_policy() {
 }
 
 #[test]
+fn parse_create_table_with_row_access_policy() {
+    // Snowflake CREATE TABLE trailing [WITH] ROW ACCESS POLICY <name> ON (cols)
+    // and [WITH] TAG (...). The WITH prefix is optional per
+    // https://docs.snowflake.com/en/sql-reference/sql/create-table
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR, dept VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
+        "CREATE TABLE t1 (id VARCHAR, dept VARCHAR)",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY p1 ON (id)",
+        "CREATE TABLE t1 (id VARCHAR)",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id) WITH TAG (k = 'v')",
+        "CREATE TABLE t1 (id VARCHAR)",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR) WITH TAG (k = 'v') WITH ROW ACCESS POLICY p1 ON (id)",
+        "CREATE TABLE t1 (id VARCHAR)",
+    );
+}
+
+#[test]
 fn parse_column_comment_after_masking_policy() {
     // Column COMMENT after MASKING POLICY in CREATE TABLE
     // Display outputs COMMENT before MASKING POLICY (options before policy)
