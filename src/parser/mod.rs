@@ -4123,20 +4123,42 @@ impl<'a> Parser<'a> {
                 Token::Word(ref kw)
                     if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&kw.keyword) =>
                 {
-                    // Check the token after the reserved keyword to decide if this
-                    // is a trailing comma or a column named with a reserved word.
-                    match &self.peek_nth_token_ref(1).token {
-                        // `format(...)` - function call, not trailing comma
-                        Token::LParen => false,
-                        // `format, col2` - column name followed by more columns
-                        Token::Comma => false,
-                        // `sample FROM t` - column name followed by clause keyword
-                        Token::Word(w2)
-                            if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&w2.keyword) =>
-                        {
-                            false
+                    // Clause keywords that are never function names — a trailing
+                    // `,` followed by one of these always ends the projection
+                    // list, regardless of what follows (e.g. `FROM (SELECT ...)`).
+                    let is_clause_only = matches!(
+                        kw.keyword,
+                        Keyword::FROM
+                            | Keyword::WHERE
+                            | Keyword::GROUP
+                            | Keyword::HAVING
+                            | Keyword::ORDER
+                            | Keyword::LIMIT
+                            | Keyword::OFFSET
+                            | Keyword::QUALIFY
+                            | Keyword::WINDOW
+                            | Keyword::UNION
+                            | Keyword::INTERSECT
+                            | Keyword::EXCEPT
+                    );
+                    if is_clause_only {
+                        true
+                    } else {
+                        // Check the token after the reserved keyword to decide if this
+                        // is a trailing comma or a column named with a reserved word.
+                        match &self.peek_nth_token_ref(1).token {
+                            // `format(...)` - function call, not trailing comma
+                            Token::LParen => false,
+                            // `format, col2` - column name followed by more columns
+                            Token::Comma => false,
+                            // `sample FROM t` - column name followed by clause keyword
+                            Token::Word(w2)
+                                if keywords::RESERVED_FOR_COLUMN_ALIAS.contains(&w2.keyword) =>
+                            {
+                                false
+                            }
+                            _ => true,
                         }
-                        _ => true,
                     }
                 }
                 Token::RParen | Token::SemiColon | Token::EOF | Token::RBracket | Token::RBrace => {

@@ -2082,7 +2082,10 @@ fn parse_snowflake_show_parameters_then_merge() {
                when matched then update set \"c1\" = src.\"c1\"";
     let stmts = snowflake().parse_sql_statements(sql).unwrap();
     assert_eq!(stmts.len(), 2);
-    assert!(matches!(stmts[0], sqlparser::ast::Statement::ShowVariable { .. }));
+    assert!(matches!(
+        stmts[0],
+        sqlparser::ast::Statement::ShowVariable { .. }
+    ));
     assert!(matches!(stmts[1], sqlparser::ast::Statement::Merge { .. }));
 }
 
