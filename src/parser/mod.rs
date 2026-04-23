@@ -765,7 +765,42 @@ impl<'a> Parser<'a> {
                 // `BEGIN` is a nonstandard but common alias for the
                 // standard `START TRANSACTION` statement. It is supported
                 // by at least PostgreSQL and MySQL.
-                Keyword::BEGIN => Ok(self.parse_begin()?),
+                Keyword::BEGIN => {
+                    // Snowflake scripting: `BEGIN <stmt>; ... END` (no DECLARE).
+                    // Distinguish from SQL `BEGIN [TRANSACTION|WORK]` by peeking.
+                    if dialect_of!(self is SnowflakeDialect) {
+                        let next = self.peek_token_kind().clone();
+                        let is_tx = matches!(
+                            next,
+                            Token::EOF
+                                | Token::SemiColon
+                                | Token::Word(Word {
+                                    keyword: Keyword::TRANSACTION,
+                                    ..
+                                })
+                                | Token::Word(Word {
+                                    keyword: Keyword::WORK,
+                                    ..
+                                })
+                                | Token::Word(Word {
+                                    keyword: Keyword::READ,
+                                    ..
+                                })
+                                | Token::Word(Word {
+                                    keyword: Keyword::ISOLATION,
+                                    ..
+                                })
+                                | Token::Word(Word {
+                                    keyword: Keyword::NOT,
+                                    ..
+                                })
+                        );
+                        if !is_tx {
+                            return self.parse_snowflake_block(false);
+                        }
+                    }
+                    Ok(self.parse_begin()?)
+                }
                 Keyword::REMOVE => Ok(self.parse_stage_file_operation("REMOVE")?),
                 Keyword::PUT => Ok(self.parse_stage_file_operation("PUT")?),
                 Keyword::SAVEPOINT => Ok(self.parse_savepoint()?),
@@ -5857,6 +5892,13 @@ impl<'a> Parser<'a> {
     ///     CURSOR [ { WITH | WITHOUT } HOLD ] FOR query
     /// ```
     pub fn parse_declare(&mut self) -> Result<Statement, ParserError> {
+        // Snowflake scripting: DECLARE may start a block containing multiple
+        // variable / cursor / resultset / exception declarations, terminated
+        // by BEGIN ... [EXCEPTION ...] END.
+        // https://docs.snowflake.com/en/sql-reference/snowflake-scripting/declare
+        if dialect_of!(self is SnowflakeDialect) {
+            return self.parse_snowflake_block(true);
+        }
         let name = self.parse_identifier(false)?.unwrap();
 
         // BigQuery-style: DECLARE var [, ...] type [DEFAULT expr]
@@ -14732,6 +14774,146 @@ impl<'a> Parser<'a> {
                 is_eq: false,
             })
         }
+    }
+
+    /// Parse a Snowflake scripting block starting at either `DECLARE` or `BEGIN`.
+    /// `saw_declare` must be true when called immediately after consuming DECLARE.
+    /// The block ends at the matching END keyword.
+    fn parse_snowflake_block(&mut self, saw_declare: bool) -> Result<Statement, ParserError> {
+        let mut declarations: Vec<SnowflakeBlockDeclaration> = Vec::new();
+        if saw_declare {
+            // Parse declarations until BEGIN is seen.
+            while !matches!(self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::BEGIN)
+            {
+                if matches!(self.peek_token_kind(), Token::EOF) {
+                    break;
+                }
+                // consume any stray semicolons
+                if self.consume_token(&Token::SemiColon) {
+                    continue;
+                }
+                declarations.push(self.parse_snowflake_block_declaration()?);
+            }
+            self.expect_keyword(Keyword::BEGIN)?;
+        }
+        // Parse body statements until END / EXCEPTION. Snowflake scripting has
+        // control-flow verbs (OPEN, RETURN, IF, WHILE, ...) that the parser
+        // doesn't model; for those we fall back to consuming tokens until the
+        // next `;` so the surrounding block still parses. Real SQL statements
+        // (INSERT, UPDATE, MERGE, SELECT, CALL, ...) still go through
+        // parse_statement and retain their full AST for lineage.
+        let mut body: Vec<Statement> = Vec::new();
+        loop {
+            while self.consume_token(&Token::SemiColon) {}
+            match self.peek_token_kind().clone() {
+                Token::EOF => break,
+                Token::Word(w) if w.keyword == Keyword::END || w.keyword == Keyword::EXCEPTION => {
+                    break
+                }
+                _ => {}
+            }
+            let save = self.index;
+            match self.parse_statement() {
+                Ok(stmt) => body.push(stmt),
+                Err(_) => {
+                    self.index = save;
+                    let raw = self.consume_until_semicolon_or_begin();
+                    body.push(Statement::StageFileOperation {
+                        command: "SCRIPTING".to_string(),
+                        body: raw,
+                    });
+                }
+            }
+        }
+        // Optional EXCEPTION handlers — captured as raw tokens up to END.
+        let exception = if matches!(self.peek_token_kind(),
+            Token::Word(w) if w.keyword == Keyword::EXCEPTION)
+        {
+            self.next_token();
+            let mut parts: Vec<String> = Vec::new();
+            loop {
+                match self.peek_token_kind() {
+                    Token::EOF => break,
+                    Token::Word(w) if w.keyword == Keyword::END => break,
+                    _ => parts.push(self.next_token().token.to_string()),
+                }
+            }
+            Some(parts.join(" "))
+        } else {
+            None
+        };
+        self.expect_keyword(Keyword::END)?;
+        Ok(Statement::SnowflakeBlock {
+            declarations,
+            body,
+            exception,
+        })
+    }
+
+    /// Parse one declaration inside a Snowflake scripting block, stopping at `;`.
+    fn parse_snowflake_block_declaration(
+        &mut self,
+    ) -> Result<SnowflakeBlockDeclaration, ParserError> {
+        let start = self.index;
+        // Peek name.
+        let name = match self.parse_identifier(false) {
+            Ok(id) => id.unwrap(),
+            Err(_) => {
+                // Fallback: consume raw until ';' to avoid getting stuck.
+                self.index = start;
+                let raw = self.consume_until_semicolon_or_begin();
+                return Ok(SnowflakeBlockDeclaration::Raw(raw));
+            }
+        };
+        // Peek next keyword: CURSOR | RESULTSET | others (treat as typed var).
+        let save = self.index;
+        if self.parse_keyword(Keyword::CURSOR) {
+            self.expect_keyword(Keyword::FOR)?;
+            let query = self.parse_boxed_query()?;
+            let _ = self.consume_token(&Token::SemiColon);
+            return Ok(SnowflakeBlockDeclaration::Cursor { name, query });
+        }
+        if self.parse_keyword(Keyword::RESULTSET) {
+            // Optional `:= ( <query> )` or `DEFAULT ( <query> )`.
+            let query = if self.consume_token(&Token::DuckAssignment)
+                || self.parse_keyword(Keyword::DEFAULT)
+            {
+                self.expect_token(&Token::LParen)?;
+                let q = self.parse_boxed_query()?;
+                self.expect_token(&Token::RParen)?;
+                Some(q)
+            } else {
+                None
+            };
+            let _ = self.consume_token(&Token::SemiColon);
+            return Ok(SnowflakeBlockDeclaration::Resultset { name, query });
+        }
+        // Plain typed variable or EXCEPTION — consume tokens up to `;` as raw.
+        self.index = save;
+        let tail = self.consume_until_semicolon_or_begin();
+        let mut raw = name.value;
+        if !tail.is_empty() {
+            raw.push(' ');
+            raw.push_str(&tail);
+        }
+        Ok(SnowflakeBlockDeclaration::Raw(raw))
+    }
+
+    fn consume_until_semicolon_or_begin(&mut self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        loop {
+            match self.peek_token_kind() {
+                Token::SemiColon => {
+                    self.next_token();
+                    break;
+                }
+                Token::EOF => break,
+                Token::Word(w) if w.keyword == Keyword::BEGIN => break,
+                _ => parts.push(self.next_token().token.to_string()),
+            }
+        }
+        parts.join(" ")
     }
 
     /// Parse a Snowflake stage file-management statement (`REMOVE`, `PUT`).

@@ -2072,12 +2072,66 @@ fn parse_create_table_with_row_access_policy() {
 }
 
 #[test]
+fn parse_snowflake_scripting_declare_block() {
+    // Snowflake scripting DECLARE with typed variables and CURSOR FOR.
+    // https://docs.snowflake.com/en/sql-reference/snowflake-scripting/declare
+    let sql = "declare \
+               sql_text string; \
+               batches cursor for (SELECT DISTINCT seq FROM src); \
+               res resultset; \
+               begin \
+               insert into tgt select 1; \
+               end";
+    let stmts = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    match &stmts[0] {
+        sqlparser::ast::Statement::SnowflakeBlock {
+            declarations, body, ..
+        } => {
+            assert_eq!(declarations.len(), 3);
+            match &declarations[1] {
+                sqlparser::ast::SnowflakeBlockDeclaration::Cursor { name, query } => {
+                    assert_eq!(name.value, "batches");
+                    let q = format!("{query}");
+                    assert!(q.contains("SELECT"));
+                    assert!(q.contains("src"));
+                }
+                d => panic!("expected cursor declaration, got {:?}", d),
+            }
+            match &declarations[2] {
+                sqlparser::ast::SnowflakeBlockDeclaration::Resultset { name, .. } => {
+                    assert_eq!(name.value, "res");
+                }
+                d => panic!("expected resultset declaration, got {:?}", d),
+            }
+            assert_eq!(body.len(), 1);
+            assert!(matches!(body[0], sqlparser::ast::Statement::Insert { .. }));
+        }
+        _ => panic!("expected SnowflakeBlock, got {:?}", stmts[0]),
+    }
+}
+
+#[test]
+fn parse_snowflake_begin_end_block_no_declare() {
+    // Top-level BEGIN ... END without DECLARE (Snowflake scripting).
+    let sql = "begin insert into tgt select 1; end";
+    let stmts = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    assert!(matches!(
+        stmts[0],
+        sqlparser::ast::Statement::SnowflakeBlock { .. }
+    ));
+}
+
+#[test]
 fn parse_snowflake_stage_file_operations() {
     // Snowflake file-management commands against internal stages.
     // Parsed but the body is opaque — no lineage payload.
     // https://docs.snowflake.com/en/sql-reference/sql/remove
     // https://docs.snowflake.com/en/sql-reference/sql/put
-    let stmt = snowflake().parse_sql_statements("REMOVE @~/staging_dir/").unwrap();
+    let stmt = snowflake()
+        .parse_sql_statements("REMOVE @~/staging_dir/")
+        .unwrap();
     assert_eq!(stmt.len(), 1);
     match &stmt[0] {
         sqlparser::ast::Statement::StageFileOperation { command, body } => {
@@ -2087,7 +2141,9 @@ fn parse_snowflake_stage_file_operations() {
         _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
     }
 
-    let stmt = snowflake().parse_sql_statements("PUT file:///tmp/data.csv @mystage").unwrap();
+    let stmt = snowflake()
+        .parse_sql_statements("PUT file:///tmp/data.csv @mystage")
+        .unwrap();
     assert_eq!(stmt.len(), 1);
     match &stmt[0] {
         sqlparser::ast::Statement::StageFileOperation { command, .. } => {
