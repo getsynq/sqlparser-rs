@@ -817,11 +817,15 @@ impl<'a> Tokenizer<'a> {
 
                     Ok(Some(Token::SingleQuotedString(s)))
                 }
-                // double quoted string
+                // double quoted string (BigQuery: also triple-quoted """...""")
                 '\"' if !self.dialect.is_delimited_identifier_start(ch)
                     && !self.dialect.is_identifier_start(ch) =>
                 {
-                    let s = self.tokenize_quoted_string(chars, '"')?;
+                    let s = if dialect_of!(self is BigQueryDialect) {
+                        self.tokenize_possibly_triple_quoted_string_ex(chars, '"', true)?
+                    } else {
+                        self.tokenize_quoted_string(chars, '"')?
+                    };
 
                     Ok(Some(Token::DoubleQuotedString(s)))
                 }
@@ -1502,11 +1506,23 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Try to tokenize a triple-quoted string ("""...""" or '''...'''), falling
-    /// back to a regular quoted string if not triple-quoted.
+    /// back to a regular quoted string if not triple-quoted. Backslash escapes
+    /// are recognized in the fallback branch for non-raw strings on the
+    /// dialects that treat `\` as an escape character. Callers that pass
+    /// `allow_backslash_escape = false` (raw string literals) skip that step.
     fn tokenize_possibly_triple_quoted_string(
         &self,
         chars: &mut State,
         quote_style: char,
+    ) -> Result<String, TokenizerError> {
+        self.tokenize_possibly_triple_quoted_string_ex(chars, quote_style, false)
+    }
+
+    fn tokenize_possibly_triple_quoted_string_ex(
+        &self,
+        chars: &mut State,
+        quote_style: char,
+        allow_backslash_escape: bool,
     ) -> Result<String, TokenizerError> {
         let error_loc = chars.location();
 
@@ -1528,7 +1544,9 @@ impl<'a> Tokenizer<'a> {
         }
 
         // Not triple-quoted, tokenize as a regular quoted string
-        // (opening quote already consumed, so we manually do the loop)
+        // (opening quote already consumed, so we manually do the loop).
+        // Mirrors the backslash-escape handling in tokenize_quoted_string for
+        // MySQL/BigQuery/Redshift/Databricks/Snowflake/ClickHouse dialects.
         let mut s = String::new();
         while let Some(&ch) = chars.peek() {
             match ch {
@@ -1542,6 +1560,49 @@ impl<'a> Tokenizer<'a> {
                         chars.next();
                     } else {
                         return Ok(s);
+                    }
+                }
+                '\\' if allow_backslash_escape => {
+                    chars.next();
+                    if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect | ClickHouseDialect)
+                    {
+                        let next_char = chars.peek();
+                        match next_char {
+                            Some(next_ch) => {
+                                let next_ch = *next_ch;
+                                if self.unescape {
+                                    let unescaped = match next_ch {
+                                        '0' => Some('\0'),
+                                        'a' => Some('\u{07}'),
+                                        'b' => Some('\u{08}'),
+                                        'f' => Some('\u{0C}'),
+                                        'n' => Some('\n'),
+                                        'r' => Some('\r'),
+                                        't' => Some('\t'),
+                                        'v' => Some('\u{0B}'),
+                                        '\\' => Some('\\'),
+                                        '\'' => Some('\''),
+                                        '"' => Some('"'),
+                                        _ => None,
+                                    };
+                                    if let Some(u) = unescaped {
+                                        chars.next();
+                                        s.push(u);
+                                    } else {
+                                        s.push(ch);
+                                    }
+                                } else {
+                                    s.push(ch);
+                                    s.push(next_ch);
+                                    chars.next();
+                                }
+                            }
+                            None => {
+                                s.push(ch);
+                            }
+                        }
+                    } else {
+                        s.push(ch);
                     }
                 }
                 _ => {

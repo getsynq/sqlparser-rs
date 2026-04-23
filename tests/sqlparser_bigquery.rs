@@ -1615,8 +1615,8 @@ fn test_create_table_cluster_by() {
 #[test]
 fn test_create_table_cluster_by_no_parens() {
     bigquery().one_statement_parses_to(
-        "CREATE OR REPLACE TABLE `ebury-business-intelligence`.`core_dimensional`.`dimaccount` CLUSTER BY account_number OPTIONS (description = \"\"\"contains all accounts from SF. Accounts can be from companies or individuals\"\"\") AS (SELECT 1)",
-        "CREATE OR REPLACE TABLE `ebury-business-intelligence`.`core_dimensional`.`dimaccount` CLUSTER BY (account_number) OPTIONS (description = \"\"\"contains all accounts from SF. Accounts can be from companies or individuals\"\"\") AS (SELECT 1)"
+        "CREATE OR REPLACE TABLE `proj`.`ds`.`tbl` CLUSTER BY account_number OPTIONS (description = \"\"\"summary\"\"\") AS (SELECT 1)",
+        "CREATE OR REPLACE TABLE `proj`.`ds`.`tbl` CLUSTER BY (account_number) OPTIONS (description = \"summary\") AS (SELECT 1)"
     );
 }
 
@@ -1636,8 +1636,18 @@ fn test_options_expression() {
 
 #[test]
 fn test_create_table_options_expression() {
-    bigquery().verified_stmt(
-        "CREATE OR REPLACE TABLE `myproject`.`mydataset`.`mytable` OPTIONS (description = \"\"\"Project entity stream base\"\"\") AS (SELECT * FROM `myproject`.`mydataset`.`othertable`)",
+    // BigQuery allows triple-quoted string literals (`"""..."""`) in OPTIONS.
+    // The tokenizer recognizes them as a single literal and Display normalizes
+    // to the plain double-quoted form when the body contains no literal quotes.
+    bigquery().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE `proj`.`ds`.`tbl` OPTIONS (description = \"\"\"Stream base\"\"\") AS (SELECT * FROM `proj`.`ds`.`other`)",
+        "CREATE OR REPLACE TABLE `proj`.`ds`.`tbl` OPTIONS (description = \"Stream base\") AS (SELECT * FROM `proj`.`ds`.`other`)",
+    );
+    // Triple-quoted with embedded double quotes survives the roundtrip through
+    // escape_double_quote_string (which doubles embedded `"`).
+    bigquery().one_statement_parses_to(
+        r#"CREATE TABLE t (a INT64) OPTIONS (description = """has "q" inside""")"#,
+        r#"CREATE TABLE t (a INT64) OPTIONS (description = "has ""q"" inside")"#,
     );
 }
 
