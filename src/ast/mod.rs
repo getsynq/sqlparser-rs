@@ -2555,6 +2555,20 @@ pub enum Statement {
         value: Option<Value>,
         is_eq: bool,
     },
+    /// Snowflake stage file-management commands like
+    /// `REMOVE @<stage>/<path> [PATTERN = '<regex>']` and
+    /// `PUT file://<local_path> @<stage> [option = value]...`.
+    /// These are client/server operations against internal stages that
+    /// neither read nor write table data, so the body is captured as an
+    /// opaque string — no lineage payload exists to preserve.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/remove>
+    /// <https://docs.snowflake.com/en/sql-reference/sql/put>
+    StageFileOperation {
+        /// Command keyword as written, e.g. `REMOVE` or `PUT`.
+        command: String,
+        /// Remaining tokens of the statement, joined with single spaces.
+        body: String,
+    },
     /// ```sql
     /// LOCK TABLES <table_name> [READ [LOCAL] | [LOW_PRIORITY] WRITE]
     /// ```
@@ -4343,6 +4357,13 @@ impl fmt::Display for Statement {
                     }
                 }
                 Ok(())
+            }
+            Statement::StageFileOperation { command, body } => {
+                if body.is_empty() {
+                    write!(f, "{command}")
+                } else {
+                    write!(f, "{command} {body}")
+                }
             }
             Statement::LockTables { tables } => {
                 write!(f, "LOCK TABLES {}", display_comma_separated(tables))
