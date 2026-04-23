@@ -2036,6 +2036,16 @@ fn parse_create_view_with_masking_policy() {
         "CREATE VIEW v1 (col1 MASKING POLICY db1.sch1.pol1) AS SELECT * FROM t1",
         "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
     );
+
+    // WITH prefix on MASKING POLICY, PROJECTION POLICY and TAG (Snowflake view column clauses)
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1, col2 WITH MASKING POLICY p1, col3 WITH TAG (t1 = 'v1')) AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1, col2, col3) AS SELECT * FROM t1",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 (col1 WITH MASKING POLICY p1 USING (col1, col2) WITH PROJECTION POLICY p2 WITH TAG (t1 = 'v1') COMMENT 'c') AS SELECT * FROM t1",
+        "CREATE VIEW v1 (col1) AS SELECT * FROM t1",
+    );
 }
 
 #[test]

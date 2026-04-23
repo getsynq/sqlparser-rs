@@ -9773,30 +9773,46 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a column identifier with optional Snowflake view column clauses.
-    /// Handles: `col_name [MASKING POLICY name [USING (...)]] [TAG (...)] [COMMENT 'str']`
+    /// Handles: `col_name [[WITH] MASKING POLICY name [USING (...)]]
+    ///                    [[WITH] PROJECTION POLICY name]
+    ///                    [[WITH] TAG (...)]
+    ///                    [COMMENT 'str']`
     pub fn parse_column_identifier_with_optional_comment(
         &mut self,
     ) -> Result<WithSpan<Ident>, ParserError> {
         let ident = self.parse_identifier(false)?;
-        // Skip MASKING POLICY clause if present
-        if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
-            // Consume policy name (may be a qualified name like db.schema.policy)
-            let _ = self.parse_object_name(false)?;
-            // Skip optional USING (col, ...)
-            if self.parse_keyword(Keyword::USING) {
-                self.expect_token(&Token::LParen)?;
-                let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                self.expect_token(&Token::RParen)?;
+        let mut consumed_policy_or_tag = false;
+        loop {
+            let with = self.parse_keyword(Keyword::WITH);
+            if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+                let _ = self.parse_object_name(false)?;
+                if self.parse_keyword(Keyword::USING) {
+                    self.expect_token(&Token::LParen)?;
+                    let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                    self.expect_token(&Token::RParen)?;
+                }
+                consumed_policy_or_tag = true;
+            } else if self.parse_keywords(&[Keyword::PROJECTION, Keyword::POLICY]) {
+                let _ = self.parse_object_name(false)?;
+                consumed_policy_or_tag = true;
+            } else if self.parse_optional_tag_clause() {
+                consumed_policy_or_tag = true;
+            } else {
+                if with {
+                    self.prev_token();
+                }
+                break;
             }
-        } else {
+        }
+        if !consumed_policy_or_tag {
             // Optionally skip data type for PostgreSQL/Redshift table function column definitions.
             // e.g. FROM func() alias(col_name data_type, ...) where data_type is `name`, `varchar`, `int`, etc.
-            // Do not attempt if next token is a column annotation keyword (COMMENT, TAG)
-            // since those serve a different purpose and are handled below.
+            // Do not attempt if next token is a column annotation keyword (COMMENT)
+            // since that serves a different purpose and is handled below.
             let is_annotation_keyword = matches!(
                 self.peek_token_kind(),
                 Token::Word(Word {
-                    keyword: Keyword::COMMENT | Keyword::TAG,
+                    keyword: Keyword::COMMENT,
                     ..
                 })
             );
@@ -9804,8 +9820,6 @@ impl<'a> Parser<'a> {
                 let _ = self.maybe_parse(|p| p.parse_data_type());
             }
         }
-        // Skip TAG clause if present
-        self.parse_optional_tag_clause();
         // Skip COMMENT clause if present
         if self.parse_keyword(Keyword::COMMENT) {
             self.parse_literal_string()?;
