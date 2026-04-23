@@ -2072,6 +2072,24 @@ fn parse_create_table_with_row_access_policy() {
 }
 
 #[test]
+fn parse_create_view_with_tag_and_row_access_policy() {
+    // Snowflake CREATE VIEW allows WITH TAG (...) and WITH ROW ACCESS POLICY before AS.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-view
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW v1 WITH TAG (dept = 'finance') AS SELECT 1",
+        "CREATE OR REPLACE VIEW v1 AS SELECT 1",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW v1 (col1, col2) WITH TAG (dept = 'finance') AS SELECT 1, 2",
+        "CREATE OR REPLACE VIEW v1 (col1, col2) AS SELECT 1, 2",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW v1 WITH ROW ACCESS POLICY p1 ON (id) AS SELECT id FROM t",
+        "CREATE OR REPLACE VIEW v1 AS SELECT id FROM t",
+    );
+}
+
+#[test]
 fn parse_column_comment_after_masking_policy() {
     // Column COMMENT after MASKING POLICY in CREATE TABLE
     // Display outputs COMMENT before MASKING POLICY (options before policy)

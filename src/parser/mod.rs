@@ -5197,6 +5197,34 @@ impl<'a> Parser<'a> {
             )
         };
 
+        // Snowflake view-level `WITH TAG (...)` before the regular WITH (...) options —
+        // https://docs.snowflake.com/en/sql-reference/sql/create-view
+        if self.parse_keywords(&[Keyword::WITH, Keyword::TAG]) {
+            self.expect_token(&Token::LParen)?;
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => break,
+                    _ => {}
+                }
+            }
+        }
+        // Snowflake view-level `WITH ROW ACCESS POLICY <name> ON (cols)`.
+        if self.parse_keywords(&[
+            Keyword::WITH,
+            Keyword::ROW,
+            Keyword::ACCESS,
+            Keyword::POLICY,
+        ]) {
+            let _ = self.parse_object_name(false)?;
+            self.expect_keyword(Keyword::ON)?;
+            self.expect_token(&Token::LParen)?;
+            let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+            self.expect_token(&Token::RParen)?;
+        }
+
         let with_options = self.parse_options(Keyword::WITH)?;
 
         let engine = if self.parse_keyword(Keyword::ENGINE) {
