@@ -766,6 +766,8 @@ impl<'a> Parser<'a> {
                 // standard `START TRANSACTION` statement. It is supported
                 // by at least PostgreSQL and MySQL.
                 Keyword::BEGIN => Ok(self.parse_begin()?),
+                Keyword::REMOVE => Ok(self.parse_stage_file_operation("REMOVE")?),
+                Keyword::PUT => Ok(self.parse_stage_file_operation("PUT")?),
                 Keyword::SAVEPOINT => Ok(self.parse_savepoint()?),
                 Keyword::COMMIT => Ok(self.parse_commit()?),
                 Keyword::ROLLBACK => Ok(self.parse_rollback()?),
@@ -14730,6 +14732,26 @@ impl<'a> Parser<'a> {
                 is_eq: false,
             })
         }
+    }
+
+    /// Parse a Snowflake stage file-management statement (`REMOVE`, `PUT`).
+    /// The body has no lineage payload, so tokens are consumed to end-of-statement
+    /// and joined as a string for roundtrip display.
+    pub fn parse_stage_file_operation(&mut self, command: &str) -> Result<Statement, ParserError> {
+        let mut parts: Vec<String> = Vec::new();
+        loop {
+            match self.peek_token().token {
+                Token::SemiColon | Token::EOF => break,
+                _ => {
+                    let tok = self.next_token();
+                    parts.push(tok.token.to_string());
+                }
+            }
+        }
+        Ok(Statement::StageFileOperation {
+            command: command.to_string(),
+            body: parts.join(" "),
+        })
     }
 
     /// `INSTALL [extension_name]`

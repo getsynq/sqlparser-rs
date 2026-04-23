@@ -2072,6 +2072,32 @@ fn parse_create_table_with_row_access_policy() {
 }
 
 #[test]
+fn parse_snowflake_stage_file_operations() {
+    // Snowflake file-management commands against internal stages.
+    // Parsed but the body is opaque — no lineage payload.
+    // https://docs.snowflake.com/en/sql-reference/sql/remove
+    // https://docs.snowflake.com/en/sql-reference/sql/put
+    let stmt = snowflake().parse_sql_statements("REMOVE @~/staging_dir/").unwrap();
+    assert_eq!(stmt.len(), 1);
+    match &stmt[0] {
+        sqlparser::ast::Statement::StageFileOperation { command, body } => {
+            assert_eq!(command, "REMOVE");
+            assert!(body.starts_with("@"));
+        }
+        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
+    }
+
+    let stmt = snowflake().parse_sql_statements("PUT file:///tmp/data.csv @mystage").unwrap();
+    assert_eq!(stmt.len(), 1);
+    match &stmt[0] {
+        sqlparser::ast::Statement::StageFileOperation { command, .. } => {
+            assert_eq!(command, "PUT");
+        }
+        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
+    }
+}
+
+#[test]
 fn parse_create_view_with_tag_and_row_access_policy() {
     // Snowflake CREATE VIEW allows WITH TAG (...) and WITH ROW ACCESS POLICY before AS.
     // https://docs.snowflake.com/en/sql-reference/sql/create-view

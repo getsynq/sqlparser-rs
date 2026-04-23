@@ -580,6 +580,7 @@ define_keywords!(
     PROGRAM,
     PROJECTION,
     PURGE,
+    PUT,
     QUALIFY,
     QUARTER,
     QUERY,
