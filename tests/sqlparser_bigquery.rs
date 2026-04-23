@@ -1003,6 +1003,17 @@ fn parse_trailing_comma() {
         ("SELECT a, b, FROM t", "SELECT a, b FROM t"),
         ("SELECT a, b, LIMIT 1", "SELECT a, b LIMIT 1"),
         ("SELECT a, (SELECT 1, )", "SELECT a, (SELECT 1)"),
+        // Clause keywords after a trailing comma must terminate the projection
+        // list even when immediately followed by `(` (subquery in FROM).
+        // PR-7170: dbt-generated BigQuery `SELECT a, FROM (SELECT ...)`
+        (
+            "SELECT a, FROM (SELECT 1 AS a, 2 AS b)",
+            "SELECT a FROM (SELECT 1 AS a, 2 AS b)",
+        ),
+        (
+            "SELECT *, FROM (SELECT 1 AS a)",
+            "SELECT * FROM (SELECT 1 AS a)",
+        ),
     ] {
         bigquery().one_statement_parses_to(sql, canonical);
     }
