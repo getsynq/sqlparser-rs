@@ -5936,18 +5936,12 @@ pub enum FunctionDefinition {
     /// re-serialises the parsed expression) `body_start` falls back to
     /// `Location::default()` (line 0), which [`Location::is_valid`]
     /// reports as invalid.
-    SingleQuotedDef {
-        value: String,
-        body_start: Location,
-    },
+    SingleQuotedDef { value: String, body_start: Location },
     /// `AS $$...$$` (or tagged `$tag$...$tag$`) — dollar-quoted routine body.
     ///
     /// `body_start` is the location of the first character of `value`,
     /// i.e. the character immediately after the opening `$$` / `$tag$`.
-    DoubleDollarDef {
-        value: String,
-        body_start: Location,
-    },
+    DoubleDollarDef { value: String, body_start: Location },
 }
 
 impl FunctionDefinition {

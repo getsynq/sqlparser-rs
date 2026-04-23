@@ -6065,6 +6065,13 @@ impl<'a> Parser<'a> {
     pub fn parse_hive_formats(&mut self) -> Result<HiveFormat, ParserError> {
         let mut hive_format = HiveFormat::default();
         loop {
+            // Avoid swallowing Snowflake `ROW ACCESS POLICY ...`: hive `ROW FORMAT` is the
+            // only legitimate match, so only consume ROW when it's actually followed by FORMAT.
+            if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ROW)
+                && !matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::FORMAT)
+            {
+                break;
+            }
             match self.parse_one_of_keywords(&[Keyword::ROW, Keyword::STORED, Keyword::LOCATION]) {
                 Some(Keyword::ROW) => {
                     hive_format.row_format = Some(self.parse_row_format()?);
@@ -6334,6 +6341,34 @@ impl<'a> Parser<'a> {
         let mut inherits: Option<Vec<ObjectName>> = None;
 
         loop {
+            // [WITH] ROW ACCESS POLICY <policy_name> ON (<col>, ...) (Snowflake)
+            // and [WITH] TAG (...). Handled before WITH (...) options so the
+            // WITH prefix doesn't force parse_options to consume LParen.
+            // https://docs.snowflake.com/en/sql-reference/sql/create-table
+            if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+                let _policy = self.parse_object_name(false)?;
+                self.expect_keyword(Keyword::ON)?;
+                self.expect_token(&Token::LParen)?;
+                let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+                continue;
+            }
+            {
+                let with = self.parse_keyword(Keyword::WITH);
+                if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+                    let _policy = self.parse_object_name(false)?;
+                    self.expect_keyword(Keyword::ON)?;
+                    self.expect_token(&Token::LParen)?;
+                    let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                    self.expect_token(&Token::RParen)?;
+                    continue;
+                } else if with && self.parse_optional_tag_clause() {
+                    continue;
+                } else if with {
+                    self.prev_token();
+                }
+            }
+
             // WITH (...) options
             if with_options.is_empty() {
                 let opts = self.parse_options(Keyword::WITH)?;
