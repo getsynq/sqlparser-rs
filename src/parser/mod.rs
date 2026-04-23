@@ -9683,7 +9683,9 @@ impl<'a> Parser<'a> {
                 Token::Word(w) => {
                     idents.push(w.to_ident());
                 }
-                Token::EOF | Token::Eq => break,
+                // Stop at statement boundaries and `=` (callers such as
+                // parse_assignment rely on `=` terminating the identifier run).
+                Token::EOF | Token::Eq | Token::SemiColon => break,
                 _ => {}
             }
             self.next_token();
