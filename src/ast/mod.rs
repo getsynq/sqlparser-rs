@@ -2078,6 +2078,22 @@ pub enum Statement {
         hold: Option<bool>,
         query: Box<Query>,
     },
+    /// Snowflake scripting block:
+    /// `[DECLARE <declaration>; ...] BEGIN <statement>; ... [EXCEPTION <handler>] END;`
+    /// <https://docs.snowflake.com/en/sql-reference/snowflake-scripting/declare>
+    /// <https://docs.snowflake.com/en/sql-reference/snowflake-scripting/begin>
+    ///
+    /// Each variable / cursor / resultset declaration is captured so lineage
+    /// visitors can reach the query bodies of CURSOR FOR and RESULTSET := (...).
+    /// Non-lineage declarations (plain typed variables, EXCEPTION) are stored as
+    /// the raw token sequence because they have no table/column references.
+    SnowflakeBlock {
+        declarations: Vec<SnowflakeBlockDeclaration>,
+        body: Vec<Statement>,
+        /// Raw text for the optional `EXCEPTION` handler section. Handlers are
+        /// procedural and rarely carry lineage; captured verbatim for roundtrip.
+        exception: Option<String>,
+    },
     /// FETCH - retrieve rows from a query using a cursor
     ///
     /// Note: this is a PostgreSQL-specific statement,
@@ -4358,6 +4374,30 @@ impl fmt::Display for Statement {
                 }
                 Ok(())
             }
+            Statement::SnowflakeBlock {
+                declarations,
+                body,
+                exception,
+            } => {
+                if !declarations.is_empty() {
+                    write!(f, "DECLARE ")?;
+                    for (i, d) in declarations.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, " ")?;
+                        }
+                        write!(f, "{d};")?;
+                    }
+                    write!(f, " ")?;
+                }
+                write!(f, "BEGIN ")?;
+                for stmt in body {
+                    write!(f, "{stmt}; ")?;
+                }
+                if let Some(exc) = exception {
+                    write!(f, "EXCEPTION {exc} ")?;
+                }
+                write!(f, "END")
+            }
             Statement::StageFileOperation { command, body } => {
                 if body.is_empty() {
                     write!(f, "{command}")
@@ -4921,6 +4961,42 @@ impl fmt::Display for FunctionArg {
 pub enum CloseCursor {
     All,
     Specific { name: Ident },
+}
+
+/// One declaration inside a Snowflake `DECLARE ... BEGIN` block.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SnowflakeBlockDeclaration {
+    /// `<name> CURSOR FOR <query>`
+    Cursor { name: Ident, query: Box<Query> },
+    /// `<name> RESULTSET [:= ( <query> )]`
+    Resultset {
+        name: Ident,
+        query: Option<Box<Query>>,
+    },
+    /// Plain typed variable, `<name> <type> [DEFAULT <expr>]`, or EXCEPTION declaration.
+    /// Captured as raw text (tokens joined with single spaces) because there is
+    /// no table/column lineage to preserve.
+    Raw(String),
+}
+
+impl fmt::Display for SnowflakeBlockDeclaration {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SnowflakeBlockDeclaration::Cursor { name, query } => {
+                write!(f, "{name} CURSOR FOR {query}")
+            }
+            SnowflakeBlockDeclaration::Resultset { name, query } => {
+                write!(f, "{name} RESULTSET")?;
+                if let Some(q) = query {
+                    write!(f, " := ({q})")?;
+                }
+                Ok(())
+            }
+            SnowflakeBlockDeclaration::Raw(s) => f.write_str(s),
+        }
+    }
 }
 
 impl fmt::Display for CloseCursor {
