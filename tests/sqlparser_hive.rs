@@ -256,9 +256,11 @@ fn parse_create_function() {
             assert_eq!(
                 params,
                 CreateFunctionBody {
-                    as_: Some(FunctionDefinition::SingleQuotedDef(
-                        "org.random.class.Name".to_string()
-                    )),
+                    as_: Some(FunctionDefinition::SingleQuotedDef {
+                        value: "org.random.class.Name".to_string(),
+                        // Ignored by PartialEq; any value works.
+                        body_start: Default::default(),
+                    }),
                     using: Some(CreateFunctionUsing::Jar(
                         "hdfs://somewhere.com:8020/very/far".to_string()
                     )),

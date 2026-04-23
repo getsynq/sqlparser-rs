@@ -97,6 +97,45 @@ impl ParserErrorMessage {
     }
 }
 
+/// Returns the source `Location` of the first body character inside a
+/// dollar-quoted string. Given the token's starting `Location` (the `$` of
+/// the opening `$[tag]$`) and the token's parsed tag, the body follows the
+/// opening tag on the same line.
+///
+/// The opening delimiter is `$$` (tag absent) or `$tag$` (tag present); its
+/// length is therefore `tag.len() + 2` code points on the starting line.
+fn dollar_quoted_body_start(
+    open_start: Location,
+    dollar: &crate::ast::DollarQuotedString,
+) -> Location {
+    let tag_len = dollar.tag.as_deref().map(str::len).unwrap_or(0) as u64;
+    Location {
+        line: open_start.line,
+        column: open_start.column.saturating_add(tag_len + 2),
+    }
+}
+
+/// Returns the source `Location` of the first body character for a
+/// single-quoted / double-quoted string literal (or a bare identifier used
+/// as a literal). For quoted strings the body starts one column after the
+/// opening quote; for an un-quoted identifier the body *is* the token, so
+/// `body_start == peek.span.start`.
+fn literal_string_body_start(peek: &TokenWithLocation) -> Location {
+    let start = peek.span.start;
+    let offset: u64 = match &peek.token {
+        Token::SingleQuotedString(_)
+        | Token::DoubleQuotedString(_)
+        | Token::EscapedStringLiteral(_)
+        | Token::NationalStringLiteral(_)
+        | Token::HexStringLiteral(_) => 1,
+        _ => 0,
+    };
+    Location {
+        line: start.line,
+        column: start.column.saturating_add(offset),
+    }
+}
+
 fn env_flag_enabled(name: &'static str) -> bool {
     match std::env::var(name) {
         Ok(v) => !v.is_empty() && v != "0",
@@ -4740,8 +4779,13 @@ impl<'a> Parser<'a> {
             let name = self.parse_object_name(false)?;
             self.expect_keyword(Keyword::AS)?;
             let expr = self.parse_expr()?;
+            // ClickHouse synthesises the "body" from a parsed expression, so we
+            // don't have a source-faithful starting location for it.
             let params = CreateFunctionBody {
-                as_: Some(FunctionDefinition::SingleQuotedDef(expr.to_string())),
+                as_: Some(FunctionDefinition::SingleQuotedDef {
+                    value: expr.to_string(),
+                    body_start: Location::default(),
+                }),
                 ..Default::default()
             };
             Ok(Statement::CreateFunction {
@@ -8852,20 +8896,32 @@ impl<'a> Parser<'a> {
     pub fn parse_function_definition(&mut self) -> Result<FunctionDefinition, ParserError> {
         let peek_token = self.peek_token();
         match peek_token.token {
-            Token::DollarQuotedString(value) => {
+            Token::DollarQuotedString(ref value) => {
+                let body_start = dollar_quoted_body_start(peek_token.span.start, value);
                 self.next_token();
-                Ok(FunctionDefinition::DoubleDollarDef(value.value))
+                Ok(FunctionDefinition::DoubleDollarDef {
+                    value: value.value.clone(),
+                    body_start,
+                })
             }
             Token::LParen => {
-                // BigQuery/Snowflake: AS (expr)
+                // BigQuery/Snowflake: AS (expr) — synthesized body, no
+                // source-faithful start location.
                 self.expect_token(&Token::LParen)?;
                 let expr = self.parse_expr()?;
                 self.expect_token(&Token::RParen)?;
-                Ok(FunctionDefinition::SingleQuotedDef(expr.to_string()))
+                Ok(FunctionDefinition::SingleQuotedDef {
+                    value: expr.to_string(),
+                    body_start: Location::default(),
+                })
             }
-            _ => Ok(FunctionDefinition::SingleQuotedDef(
-                self.parse_literal_string()?,
-            )),
+            _ => {
+                let body_start = literal_string_body_start(&peek_token);
+                Ok(FunctionDefinition::SingleQuotedDef {
+                    value: self.parse_literal_string()?,
+                    body_start,
+                })
+            }
         }
     }
     /// Parse a literal string
@@ -14851,18 +14907,33 @@ impl<'a> Parser<'a> {
             // or another expression. Capture the raw definition string so
             // downstream consumers (lineage extractors) can re-parse it, then
             // skip the remainder of the statement.
-            let body_definition = match self.peek_token().token.clone() {
-                Token::DollarQuotedString(s) => {
-                    self.next_token();
-                    Some(FunctionDefinition::DoubleDollarDef(s.value))
-                }
-                Token::SingleQuotedString(s) => {
-                    self.next_token();
-                    Some(FunctionDefinition::SingleQuotedDef(s))
-                }
-                _ => {
-                    let _ = self.parse_expr();
-                    None
+            let body_definition = {
+                let peek = self.peek_token();
+                match peek.token.clone() {
+                    Token::DollarQuotedString(s) => {
+                        let body_start = dollar_quoted_body_start(peek.span.start, &s);
+                        self.next_token();
+                        Some(FunctionDefinition::DoubleDollarDef {
+                            value: s.value,
+                            body_start,
+                        })
+                    }
+                    Token::SingleQuotedString(s) => {
+                        // Opening `'` sits at peek.span.start; body follows it.
+                        let body_start = Location {
+                            line: peek.span.start.line,
+                            column: peek.span.start.column.saturating_add(1),
+                        };
+                        self.next_token();
+                        Some(FunctionDefinition::SingleQuotedDef {
+                            value: s,
+                            body_start,
+                        })
+                    }
+                    _ => {
+                        let _ = self.parse_expr();
+                        None
+                    }
                 }
             };
             // Consume trailing clauses like `LANGUAGE plpgsql`, `SECURITY INVOKER`,

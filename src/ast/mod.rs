@@ -62,7 +62,7 @@ pub use self::value::{
 use crate::ast::helpers::stmt_data_loading::{
     DataLoadingOptions, StageLoadSelectItem, StageParamsObject,
 };
-use crate::tokenizer::Span;
+use crate::tokenizer::{Location, Span};
 #[cfg(feature = "visitor")]
 pub use visitor::*;
 
@@ -5920,21 +5920,122 @@ impl fmt::Display for FunctionBehavior {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum FunctionDefinition {
-    SingleQuotedDef(String),
-    DoubleDollarDef(String),
+    /// `AS '...'` — single-quoted routine body.
+    ///
+    /// `body_start` is the location (1-based line + column) of the first
+    /// character of `value` in the outer SQL source — i.e. the character
+    /// immediately after the opening `'`. Consumers that re-parse routine
+    /// bodies (e.g. plpgsql lineage extraction) use this to remap
+    /// body-relative token spans back to the outer SQL.
+    ///
+    /// When the body is synthesized (e.g. ClickHouse `AS (expr) -> ...`
+    /// re-serialises the parsed expression) `body_start` falls back to
+    /// `Location::default()` (line 0), which [`Location::is_valid`]
+    /// reports as invalid.
+    SingleQuotedDef {
+        value: String,
+        body_start: Location,
+    },
+    /// `AS $$...$$` (or tagged `$tag$...$tag$`) — dollar-quoted routine body.
+    ///
+    /// `body_start` is the location of the first character of `value`,
+    /// i.e. the character immediately after the opening `$$` / `$tag$`.
+    DoubleDollarDef {
+        value: String,
+        body_start: Location,
+    },
+}
+
+impl FunctionDefinition {
+    /// Raw body text, without surrounding quotes / dollar-tags.
+    pub fn value(&self) -> &str {
+        match self {
+            FunctionDefinition::SingleQuotedDef { value, .. }
+            | FunctionDefinition::DoubleDollarDef { value, .. } => value,
+        }
+    }
+
+    /// Location of the first character of the body in the outer SQL.
+    /// Returns `Location::default()` (invalid) when not known — e.g. when
+    /// the body was synthesized from a parsed AST rather than copied
+    /// verbatim from the source.
+    pub fn body_start(&self) -> Location {
+        match self {
+            FunctionDefinition::SingleQuotedDef { body_start, .. }
+            | FunctionDefinition::DoubleDollarDef { body_start, .. } => *body_start,
+        }
+    }
 }
 
 impl fmt::Display for FunctionDefinition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FunctionDefinition::SingleQuotedDef(s) => write!(f, "'{s}'")?,
-            FunctionDefinition::DoubleDollarDef(s) => write!(f, "$${s}$$")?,
+            FunctionDefinition::SingleQuotedDef { value, .. } => write!(f, "'{value}'")?,
+            FunctionDefinition::DoubleDollarDef { value, .. } => write!(f, "$${value}$$")?,
         }
         Ok(())
+    }
+}
+
+// Custom equality / ordering / hashing: `body_start` is a *source
+// position*, not semantic information, so two ASTs that differ only in
+// where the body physically sat in their respective source strings must
+// still be considered equal. This matters most for round-trip tests
+// that parse → Display → re-parse (the canonical form starts the body
+// at a different column than the original).
+#[allow(clippy::derived_hash_with_manual_eq)]
+impl PartialEq for FunctionDefinition {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                FunctionDefinition::SingleQuotedDef { value: a, .. },
+                FunctionDefinition::SingleQuotedDef { value: b, .. },
+            ) => a == b,
+            (
+                FunctionDefinition::DoubleDollarDef { value: a, .. },
+                FunctionDefinition::DoubleDollarDef { value: b, .. },
+            ) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for FunctionDefinition {}
+
+impl PartialOrd for FunctionDefinition {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FunctionDefinition {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        fn key(d: &FunctionDefinition) -> (u8, &str) {
+            match d {
+                FunctionDefinition::SingleQuotedDef { value, .. } => (0, value.as_str()),
+                FunctionDefinition::DoubleDollarDef { value, .. } => (1, value.as_str()),
+            }
+        }
+        key(self).cmp(&key(other))
+    }
+}
+
+impl core::hash::Hash for FunctionDefinition {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            FunctionDefinition::SingleQuotedDef { value, .. } => {
+                0u8.hash(state);
+                value.hash(state);
+            }
+            FunctionDefinition::DoubleDollarDef { value, .. } => {
+                1u8.hash(state);
+                value.hash(state);
+            }
+        }
     }
 }
 

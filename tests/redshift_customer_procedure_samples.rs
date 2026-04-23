@@ -8,6 +8,22 @@
 use sqlparser::ast::{FunctionDefinition, Statement};
 use sqlparser::dialect::RedshiftSqlDialect;
 use sqlparser::parser::Parser;
+use sqlparser::tokenizer::{Location, Tokenizer};
+
+/// Parse preserving token spans — [`Parser::parse_sql`] strips locations
+/// via [`Tokenizer::tokenize`] for backwards compatibility, which zeros out
+/// every `Span`. Tests that assert on source positions must feed the parser
+/// via `tokenize_with_location` + `with_tokens_with_locations`.
+fn parse_sql_with_locations(sql: &str) -> Vec<Statement> {
+    let dialect = RedshiftSqlDialect {};
+    let tokens = Tokenizer::new(&dialect, sql)
+        .tokenize_with_location()
+        .unwrap();
+    Parser::new(&dialect)
+        .with_tokens_with_locations(tokens)
+        .parse_statements()
+        .unwrap()
+}
 
 fn assert_parses(sql: &str) {
     Parser::parse_sql(&RedshiftSqlDialect {}, sql)
@@ -37,7 +53,7 @@ $$;"#;
             assert!(body.is_empty(), "plpgsql body is opaque, body should be empty");
             let def = body_definition.expect("body_definition should carry the $$..$$ string");
             let raw = match def {
-                FunctionDefinition::DoubleDollarDef(s) => s,
+                FunctionDefinition::DoubleDollarDef { value, .. } => value,
                 other => panic!("expected DoubleDollarDef, got {other:?}"),
             };
             assert!(raw.contains("INSERT INTO analytics.daily"));
@@ -48,16 +64,95 @@ $$;"#;
 }
 
 #[test]
+fn function_definition_records_body_start_for_dollar_quoted_body() {
+    // Body starts at the first character after the opening `$$`. For
+    //   line 3:  `AS $$\n`
+    //   line 4:  `BEGIN\n`
+    // the opening `$$` begins at column 4 on line 3, so `body_start` must
+    // point at line 3, column 6 (the newline immediately after `$$`).
+    let sql = "CREATE OR REPLACE PROCEDURE analytics.load()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NULL;
+END;
+$$;";
+    let mut stmts = parse_sql_with_locations(sql);
+    let def = match stmts.pop().unwrap() {
+        Statement::CreateProcedure {
+            body_definition: Some(def),
+            ..
+        } => def,
+        other => panic!("expected CreateProcedure with body_definition, got {other:?}"),
+    };
+    match def {
+        FunctionDefinition::DoubleDollarDef { value, body_start } => {
+            assert!(value.contains("BEGIN"));
+            assert_eq!(
+                body_start,
+                Location { line: 3, column: 6 },
+                "body_start should point at the first character after `AS $$`"
+            );
+        }
+        other => panic!("expected DoubleDollarDef, got {other:?}"),
+    }
+}
+
+#[test]
+fn function_definition_records_body_start_for_tagged_dollar_body() {
+    // `$tag$` opening is `tag.len() + 2` chars wide. For `AS $body$...$body$;`
+    // on line 1, the `$body$` opening starts at column 16 (the `$`), so the
+    // body's first character is at column 16 + len("body") + 2 = 22.
+    let sql = "CREATE FUNCTION f() RETURNS int LANGUAGE plpgsql AS $body$ BEGIN RETURN 1; END; $body$;";
+    let mut stmts = parse_sql_with_locations(sql);
+    let def = match stmts.pop().unwrap() {
+        Statement::CreateFunction { params, .. } => params.as_.expect("as_ must be set"),
+        other => panic!("expected CreateFunction, got {other:?}"),
+    };
+    match def {
+        FunctionDefinition::DoubleDollarDef { body_start, .. } => {
+            // Column of the opening `$` of `$body$` = 54 (1-based). Opening
+            // delimiter length = 6. body_start column = 54 + 6 = 60.
+            let open_col = sql.find("$body$").unwrap() as u64 + 1;
+            let expected_col = open_col + ("body".len() as u64) + 2;
+            assert_eq!(body_start, Location { line: 1, column: expected_col });
+        }
+        other => panic!("expected DoubleDollarDef, got {other:?}"),
+    }
+}
+
+#[test]
+fn function_definition_records_body_start_for_single_quoted_body() {
+    // Opening `'` at column 70; body starts at column 71.
+    let sql = "CREATE OR REPLACE PROCEDURE analytics.noop() LANGUAGE plpgsql AS 'BEGIN NULL; END;';";
+    let mut stmts = parse_sql_with_locations(sql);
+    let def = match stmts.pop().unwrap() {
+        Statement::CreateProcedure {
+            body_definition: Some(def),
+            ..
+        } => def,
+        other => panic!("expected CreateProcedure with body_definition, got {other:?}"),
+    };
+    match def {
+        FunctionDefinition::SingleQuotedDef { body_start, .. } => {
+            let open_col = sql.find('\'').unwrap() as u64 + 1;
+            assert_eq!(body_start, Location { line: 1, column: open_col + 1 });
+        }
+        other => panic!("expected SingleQuotedDef, got {other:?}"),
+    }
+}
+
+#[test]
 fn redshift_plpgsql_procedure_single_quoted_body_preserved() {
     // Single-quoted body variant — rarer but legal in PostgreSQL/Redshift.
     let sql = "CREATE OR REPLACE PROCEDURE analytics.noop() LANGUAGE plpgsql AS 'BEGIN NULL; END;';";
     let mut stmts = Parser::parse_sql(&RedshiftSqlDialect {}, sql).unwrap();
     match stmts.pop().unwrap() {
         Statement::CreateProcedure {
-            body_definition: Some(FunctionDefinition::SingleQuotedDef(s)),
+            body_definition: Some(FunctionDefinition::SingleQuotedDef { value, .. }),
             ..
         } => {
-            assert!(s.contains("BEGIN"));
+            assert!(value.contains("BEGIN"));
         }
         other => panic!("expected CreateProcedure with SingleQuotedDef, got {other:?}"),
     }

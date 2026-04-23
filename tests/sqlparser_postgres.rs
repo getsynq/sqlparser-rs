@@ -3549,9 +3549,10 @@ fn parse_create_function() {
             params: CreateFunctionBody {
                 language: Some("SQL".into()),
                 behavior: Some(FunctionBehavior::Immutable),
-                as_: Some(FunctionDefinition::SingleQuotedDef(
-                    "select $1 + $2;".into()
-                )),
+                as_: Some(FunctionDefinition::SingleQuotedDef {
+                    value: "select $1 + $2;".into(),
+                    body_start: Default::default(),
+                }),
                 ..Default::default()
             },
             secure: false,
@@ -3610,9 +3611,10 @@ fn parse_create_function() {
                 behavior: None,
                 return_: None,
                 return_select_: None,
-                as_: Some(FunctionDefinition::DoubleDollarDef(
-                    " BEGIN RETURN i + 1; END; ".into()
-                )),
+                as_: Some(FunctionDefinition::DoubleDollarDef {
+                    value: " BEGIN RETURN i + 1; END; ".into(),
+                    body_start: Default::default(),
+                }),
                 as_query: None,
                 using: None,
                 strict: false,
