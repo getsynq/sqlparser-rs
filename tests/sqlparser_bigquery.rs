@@ -1986,6 +1986,20 @@ fn test_bigquery_window_named_ref() {
 }
 
 #[test]
+fn test_bigquery_window_order_by_offset_alias() {
+    // BigQuery's `UNNEST(arr) WITH OFFSET AS offset` introduces a column named
+    // `offset` (overlapping the OFFSET keyword). The window spec's ORDER BY
+    // must accept it as a regular identifier — previously the trailing-comma
+    // logic left over from BigQuery projections treated `, offset` as a
+    // trailing-comma terminator and looked for a window frame instead.
+    bigquery().verified_stmt(
+        "SELECT ROW_NUMBER() OVER (PARTITION BY ticket_id ORDER BY version_index, offset ASC) AS version_index FROM t",
+    );
+    // Same alias used in PARTITION BY.
+    bigquery().verified_stmt("SELECT SUM(x) OVER (PARTITION BY id, offset ORDER BY x) FROM t");
+}
+
+#[test]
 fn parse_bigquery_full_union_by_name() {
     // FULL UNION ALL BY NAME - BigQuery set operation matching columns by name with outer-join semantics
     bigquery().verified_query("SELECT * FROM t1 FULL UNION ALL BY NAME SELECT * FROM t2");

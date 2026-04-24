@@ -15304,6 +15304,13 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // Inside PARTITION BY / ORDER BY of a window spec, the surrounding `)`
+        // already delimits the list. Disable trailing-comma "clause keyword"
+        // termination so that columns named after reserved keywords (e.g.
+        // BigQuery's `WITH OFFSET AS offset` alias) don't trip
+        // `is_parse_comma_separated_end`.
+        let old_trailing = self.options.trailing_commas;
+        self.options.trailing_commas = false;
         let partition_by = if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
             self.parse_comma_separated(Parser::parse_expr)?
         } else {
@@ -15314,6 +15321,7 @@ impl<'a> Parser<'a> {
         } else {
             vec![]
         };
+        self.options.trailing_commas = old_trailing;
         let window_frame = if !self.consume_token(&Token::RParen) {
             let window_frame = self.parse_window_frame()?;
             self.expect_token(&Token::RParen)?;
