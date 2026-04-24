@@ -1969,7 +1969,12 @@ impl<'a> Parser<'a> {
     pub fn parse_extract_expr(&mut self) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
         let field = self.parse_date_time_field()?;
-        self.expect_keyword(Keyword::FROM)?;
+        // Standard form is `EXTRACT(<part> FROM <expr>)`; Snowflake also
+        // supports the comma form `EXTRACT(<part>, <expr>)`.
+        // https://docs.snowflake.com/en/sql-reference/functions/extract
+        if !self.consume_token(&Token::Comma) {
+            self.expect_keyword(Keyword::FROM)?;
+        }
         let expr = self.parse_expr()?;
         self.expect_token(&Token::RParen)?;
         Ok(Expr::Extract {

@@ -1648,6 +1648,18 @@ fn parse_extract_custom_part() {
 }
 
 #[test]
+fn parse_extract_comma_form() {
+    // Snowflake also accepts the comma form `EXTRACT(<part>, <expr>)` as a
+    // shorthand for the standard `EXTRACT(<part> FROM <expr>)`.
+    // https://docs.snowflake.com/en/sql-reference/functions/extract
+    let select = snowflake().one_statement_parses_to(
+        "SELECT extract(year, birthdate) AS year_of_birth FROM t",
+        "SELECT EXTRACT(YEAR FROM birthdate) AS year_of_birth FROM t",
+    );
+    assert!(matches!(select, Statement::Query(_)));
+}
+
+#[test]
 fn parse_create_table_comment() {
     snowflake().verified_stmt("CREATE TABLE my_table (my_column STRING COMMENT 'column comment')");
     snowflake().one_statement_parses_to(
