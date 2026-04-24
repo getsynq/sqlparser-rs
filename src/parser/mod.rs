@@ -7157,8 +7157,14 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Skip optional TAG (...) clause on columns (Snowflake)
-        self.parse_optional_tag_clause();
+        // Skip optional [WITH] TAG (...) clause on columns (Snowflake)
+        if self.parse_keyword(Keyword::WITH) {
+            if !self.parse_optional_tag_clause() {
+                self.prev_token();
+            }
+        } else {
+            self.parse_optional_tag_clause();
+        }
 
         // COMMENT may appear after MASKING POLICY / TAG (Snowflake)
         if self.parse_keyword(Keyword::COMMENT) {
