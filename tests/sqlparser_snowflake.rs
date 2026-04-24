@@ -1852,6 +1852,26 @@ fn test_table_with_tag() {
 }
 
 #[test]
+fn test_column_with_tag() {
+    // Column-level WITH TAG (...) — Snowflake docs allow `[ WITH ] TAG (...)` on columns,
+    // same shape as the table-level form.
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t (col NUMBER(18, 4) WITH TAG (a.b.c = 'True'))",
+        "CREATE TABLE t (col NUMBER(18, 4))",
+    );
+    // Multiple columns, mixed with regular options.
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t (id INT, amt NUMBER(18, 4) WITH TAG (schema.tag = 'val'), name VARCHAR)",
+        "CREATE TABLE t (id INT, amt NUMBER(18, 4), name VARCHAR)",
+    );
+    // Bare TAG (no WITH) still works (existing behavior).
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t (col NUMBER(18, 4) TAG (a.b = 'v'))",
+        "CREATE TABLE t (col NUMBER(18, 4))",
+    );
+}
+
+#[test]
 fn test_describe_table() {
     snowflake().verified_stmt(r#"DESCRIBE TABLE "DW_PROD"."SCH"."TBL""#);
 }
