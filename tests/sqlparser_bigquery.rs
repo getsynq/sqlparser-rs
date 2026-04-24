@@ -1986,6 +1986,25 @@ fn test_bigquery_window_named_ref() {
 }
 
 #[test]
+fn test_bigquery_cluster_as_identifier() {
+    // CLUSTER is reserved only because of `CLUSTER BY` (Hive/Spark SELECT
+    // clause and BigQuery DDL). When the next token isn't BY it should parse
+    // as a regular alias — real-world: customers name JOIN aliases / columns
+    // `cluster`.
+    bigquery().one_statement_parses_to(
+        "SELECT * FROM t LEFT JOIN budgets cluster ON budgets.x = cluster.y",
+        "SELECT * FROM t LEFT JOIN budgets AS cluster ON budgets.x = cluster.y",
+    );
+    bigquery().verified_stmt("SELECT cluster.x AS cluster FROM (SELECT 1 AS x) AS cluster");
+    // CLUSTER BY in Hive/Spark must still be recognized as the keyword.
+    sqlparser::test_utils::TestedDialects {
+        dialects: vec![Box::new(sqlparser::dialect::HiveDialect {})],
+        options: None,
+    }
+    .verified_stmt("SELECT * FROM t CLUSTER BY x");
+}
+
+#[test]
 fn test_bigquery_window_order_by_offset_alias() {
     // BigQuery's `UNNEST(arr) WITH OFFSET AS offset` introduces a column named
     // `offset` (overlapping the OFFSET keyword). The window spec's ORDER BY

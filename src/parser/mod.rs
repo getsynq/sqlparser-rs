@@ -9561,6 +9561,19 @@ impl<'a> Parser<'a> {
             Token::Word(w) if after_as || !reserved_kwds.contains(&w.keyword) => {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
+            // CLUSTER is reserved only because of `CLUSTER BY` (Hive/Spark
+            // SELECT-level clause and Snowflake/BigQuery DDL clause). When the
+            // following token is not BY, the keyword is being used as a regular
+            // identifier alias — e.g. BigQuery `JOIN tbl cluster ON ...`.
+            Token::Word(w)
+                if w.keyword == Keyword::CLUSTER
+                    && !matches!(
+                        self.peek_token_kind(),
+                        Token::Word(next) if next.keyword == Keyword::BY,
+                    ) =>
+            {
+                Ok(Some(w.to_ident().spanning(next_token.span)))
+            }
             // MSSQL supports single-quoted strings as aliases for columns
             // We accept them as table aliases too, although MSSQL does not.
             //
