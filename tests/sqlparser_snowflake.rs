@@ -2089,6 +2089,20 @@ fn parse_create_table_with_row_access_policy() {
         "CREATE TABLE t1 (id VARCHAR) WITH TAG (k = 'v') WITH ROW ACCESS POLICY p1 ON (id)",
         "CREATE TABLE t1 (id VARCHAR)",
     );
+    // Snowflake's GET_DDL omits `ON (cols)` when the caller lacks privilege to
+    // see the policy — it returns `WITH ROW ACCESS POLICY unknown_policy` only.
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY unknown_policy",
+        "CREATE TABLE t1 (id VARCHAR)",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY unknown_policy",
+        "CREATE TABLE t1 (id VARCHAR)",
+    );
+    snowflake().one_statement_parses_to(
+        "CREATE VIEW v1 WITH ROW ACCESS POLICY unknown_policy AS SELECT * FROM t1",
+        "CREATE VIEW v1 AS SELECT * FROM t1",
+    );
 }
 
 #[test]
