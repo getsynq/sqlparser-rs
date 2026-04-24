@@ -4162,6 +4162,10 @@ impl<'a> Parser<'a> {
                             {
                                 false
                             }
+                            // `cluster AS alias` — column with explicit alias.
+                            Token::Word(w2) if w2.keyword == Keyword::AS => false,
+                            // `cluster.x` — qualified column reference.
+                            Token::Period => false,
                             _ => true,
                         }
                     }
