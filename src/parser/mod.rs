@@ -5278,10 +5278,13 @@ impl<'a> Parser<'a> {
             Keyword::POLICY,
         ]) {
             let _ = self.parse_object_name(false)?;
-            self.expect_keyword(Keyword::ON)?;
-            self.expect_token(&Token::LParen)?;
-            let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-            self.expect_token(&Token::RParen)?;
+            // ON (cols) is optional — Snowflake's GET_DDL omits it when the caller
+            // lacks privilege to see the policy.
+            if self.parse_keyword(Keyword::ON) {
+                self.expect_token(&Token::LParen)?;
+                let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+            }
         }
 
         let with_options = self.parse_options(Keyword::WITH)?;
@@ -6441,20 +6444,24 @@ impl<'a> Parser<'a> {
             // https://docs.snowflake.com/en/sql-reference/sql/create-table
             if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
                 let _policy = self.parse_object_name(false)?;
-                self.expect_keyword(Keyword::ON)?;
-                self.expect_token(&Token::LParen)?;
-                let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                self.expect_token(&Token::RParen)?;
+                // ON (cols) is optional — Snowflake's GET_DDL omits it when the caller
+                // lacks privilege to see the policy ("WITH ROW ACCESS POLICY unknown_policy").
+                if self.parse_keyword(Keyword::ON) {
+                    self.expect_token(&Token::LParen)?;
+                    let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                    self.expect_token(&Token::RParen)?;
+                }
                 continue;
             }
             {
                 let with = self.parse_keyword(Keyword::WITH);
                 if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
                     let _policy = self.parse_object_name(false)?;
-                    self.expect_keyword(Keyword::ON)?;
-                    self.expect_token(&Token::LParen)?;
-                    let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                    self.expect_token(&Token::RParen)?;
+                    if self.parse_keyword(Keyword::ON) {
+                        self.expect_token(&Token::LParen)?;
+                        let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                        self.expect_token(&Token::RParen)?;
+                    }
                     continue;
                 } else if with && self.parse_optional_tag_clause() {
                     continue;
