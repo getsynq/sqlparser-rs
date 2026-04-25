@@ -1660,6 +1660,24 @@ fn parse_extract_comma_form() {
 }
 
 #[test]
+fn parse_pg_cast_with_collate() {
+    // Snowflake's COPY-loaded INSERT/SELECT bodies routinely emit
+    //   $1::VARCHAR(255) COLLATE 'spec'
+    // The COLLATE suffix on a `::` cast wasn't being consumed because `::`
+    // is parsed as an infix in `parse_subexpr`, after `parse_prefix`'s
+    // trailing-COLLATE check. `parse_pg_cast` now accepts an optional
+    // COLLATE clause and wraps the cast in `Expr::Collate`.
+    snowflake().one_statement_parses_to(
+        "INSERT INTO t (a) (SELECT $1::VARCHAR(255) COLLATE 'spec' AS a FROM s)",
+        "INSERT INTO t (a) (SELECT CAST($1 AS VARCHAR(255)) COLLATE 'spec' AS a FROM s)",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT col::TEXT COLLATE 'spec' FROM t",
+        "SELECT CAST(col AS TEXT) COLLATE 'spec' FROM t",
+    );
+}
+
+#[test]
 fn parse_create_table_comment() {
     snowflake().verified_stmt("CREATE TABLE my_table (my_column STRING COMMENT 'column comment')");
     snowflake().one_statement_parses_to(

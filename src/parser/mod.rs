@@ -3546,11 +3546,24 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_pg_cast(&mut self, expr: Expr) -> Result<Expr, ParserError> {
-        Ok(Expr::Cast {
+        let cast = Expr::Cast {
             expr: Box::new(expr),
             data_type: self.parse_data_type()?,
             format: None,
-        })
+        };
+        // Snowflake / Postgres allow a trailing COLLATE clause on a cast:
+        //   $1::VARCHAR(255) COLLATE 'en-cs'
+        // The COLLATE suffix is normally picked up by `parse_prefix`'s tail,
+        // but `::` is parsed as an infix in `parse_subexpr`, so the suffix
+        // never gets a chance there. Consume it here.
+        if self.parse_keyword(Keyword::COLLATE) {
+            Ok(Expr::Collate {
+                expr: Box::new(cast),
+                collation: self.parse_collation_name()?,
+            })
+        } else {
+            Ok(cast)
+        }
     }
 
     /// Parse a try cast operator in the form of `expr?::datatype` (e.g., Databricks)
