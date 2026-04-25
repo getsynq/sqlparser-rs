@@ -147,10 +147,18 @@ pub enum Token {
     Tilde,
     /// `~*` , a case insensitive match regular expression operator in PostgreSQL
     TildeAsterisk,
+    /// `~~`, a case sensitive match (LIKE) operator in PostgreSQL/Redshift
+    DoubleTilde,
+    /// `~~*`, a case insensitive match (ILIKE) operator in PostgreSQL/Redshift
+    DoubleTildeAsterisk,
     /// `!~` , a case sensitive not match regular expression operator in PostgreSQL
     ExclamationMarkTilde,
     /// `!~*` , a case insensitive not match regular expression operator in PostgreSQL
     ExclamationMarkTildeAsterisk,
+    /// `!~~`, a case sensitive not match (NOT LIKE) operator in PostgreSQL/Redshift
+    ExclamationMarkDoubleTilde,
+    /// `!~~*`, a case insensitive not match (NOT ILIKE) operator in PostgreSQL/Redshift
+    ExclamationMarkDoubleTildeAsterisk,
     /// `<<`, a bitwise shift left operator in PostgreSQL
     ShiftLeft,
     /// `>>`, a bitwise shift right operator in PostgreSQL
@@ -253,8 +261,12 @@ impl fmt::Display for Token {
             Token::DoubleExclamationMark => f.write_str("!!"),
             Token::Tilde => f.write_str("~"),
             Token::TildeAsterisk => f.write_str("~*"),
+            Token::DoubleTilde => f.write_str("~~"),
+            Token::DoubleTildeAsterisk => f.write_str("~~*"),
             Token::ExclamationMarkTilde => f.write_str("!~"),
             Token::ExclamationMarkTildeAsterisk => f.write_str("!~*"),
+            Token::ExclamationMarkDoubleTilde => f.write_str("!~~"),
+            Token::ExclamationMarkDoubleTildeAsterisk => f.write_str("!~~*"),
             Token::AtSign => f.write_str("@"),
             Token::ShiftLeft => f.write_str("<<"),
             Token::ShiftRight => f.write_str(">>"),
@@ -1090,6 +1102,16 @@ impl<'a> Tokenizer<'a> {
                             match chars.peek() {
                                 Some('*') => self
                                     .consume_and_return(chars, Token::ExclamationMarkTildeAsterisk),
+                                Some('~') => {
+                                    chars.next();
+                                    match chars.peek() {
+                                        Some('*') => self.consume_and_return(
+                                            chars,
+                                            Token::ExclamationMarkDoubleTildeAsterisk,
+                                        ),
+                                        _ => Ok(Some(Token::ExclamationMarkDoubleTilde)),
+                                    }
+                                }
                                 _ => Ok(Some(Token::ExclamationMarkTilde)),
                             }
                         }
@@ -1154,6 +1176,15 @@ impl<'a> Tokenizer<'a> {
                     chars.next(); // consume
                     match chars.peek() {
                         Some('*') => self.consume_and_return(chars, Token::TildeAsterisk),
+                        Some('~') => {
+                            chars.next();
+                            match chars.peek() {
+                                Some('*') => {
+                                    self.consume_and_return(chars, Token::DoubleTildeAsterisk)
+                                }
+                                _ => Ok(Some(Token::DoubleTilde)),
+                            }
+                        }
                         _ => Ok(Some(Token::Tilde)),
                     }
                 }

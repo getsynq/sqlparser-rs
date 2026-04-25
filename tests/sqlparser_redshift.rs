@@ -317,6 +317,18 @@ fn redshift() -> TestedDialects {
     }
 }
 
+#[test]
+fn parse_pg_like_match_ops_in_view_body() {
+    // `pg_get_viewdef` / `SHOW VIEW` in Redshift normalize ILIKE / NOT ILIKE
+    // to their operator-form aliases `~~*` and `!~~*` (and LIKE / NOT LIKE to
+    // `~~` and `!~~`). Reparsing exported view DDL therefore requires accepting
+    // these tokens. See:
+    // https://docs.aws.amazon.com/redshift/latest/dg/pattern-matching-conditions-like.html
+    let sql = "SELECT * FROM t WHERE \
+        (t.a ~~ 'a%') AND (t.b ~~* 'b%') AND (t.c !~~ 'c%') AND (t.d !~~* 'd%')";
+    redshift().verified_stmt(sql);
+}
+
 fn redshift_unescaped() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(RedshiftSqlDialect {})],

@@ -1970,6 +1970,36 @@ fn parse_pg_regex_match_ops() {
 }
 
 #[test]
+fn parse_pg_like_match_ops() {
+    // Operator-form aliases for LIKE / ILIKE / NOT LIKE / NOT ILIKE.
+    // Postgres docs: https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-LIKE
+    // Redshift docs: https://docs.aws.amazon.com/redshift/latest/dg/pattern-matching-conditions-like.html
+    // Both engines emit these forms from `pg_get_viewdef` / `SHOW VIEW`,
+    // so any reparser that round-trips view definitions must accept them.
+    let pg_like_match_ops = &[
+        ("~~", BinaryOperator::PGLikeMatch),
+        ("~~*", BinaryOperator::PGILikeMatch),
+        ("!~~", BinaryOperator::PGNotLikeMatch),
+        ("!~~*", BinaryOperator::PGNotILikeMatch),
+    ];
+
+    for (str_op, op) in pg_like_match_ops {
+        let select = pg().verified_only_select(&format!("SELECT 'abc' {} 'a%'", &str_op));
+        assert_eq!(
+            SelectItem::UnnamedExpr(
+                Expr::BinaryOp {
+                    left: Box::new(Expr::Value(Value::SingleQuotedString("abc".into()))),
+                    op: op.clone(),
+                    right: Box::new(Expr::Value(Value::SingleQuotedString("a%".into()))),
+                }
+                .empty_span()
+            ),
+            select.projection[0].clone().unwrap(),
+        );
+    }
+}
+
+#[test]
 fn parse_array_index_expr() {
     let num: Vec<Expr> = (0..=10)
         .map(|s| Expr::Value(number(&s.to_string())))
