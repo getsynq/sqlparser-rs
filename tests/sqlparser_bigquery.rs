@@ -2204,6 +2204,49 @@ fn test_bigquery_expr_wildcard_after_subscript() {
 }
 
 #[test]
+fn test_bigquery_create_procedure_begin_end_body() {
+    // BigQuery procedure bodies start with `BEGIN` directly — no `AS` keyword
+    // before the body. The parser must populate `body: Vec<Statement>` so
+    // downstream consumers (lineage, syntax-check tools) can walk the body.
+    // Reference: https://cloud.google.com/bigquery/docs/procedures
+    let sql = "CREATE OR REPLACE PROCEDURE proj.ds.p() BEGIN \
+               CREATE TEMP TABLE t AS SELECT id FROM proj.ds.src; \
+               INSERT INTO proj.ds.dst (id) SELECT id FROM t; \
+               END";
+    let stmts = bigquery().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    match &stmts[0] {
+        Statement::CreateProcedure { body, body_definition, .. } => {
+            assert!(body_definition.is_none(), "expected BEGIN/END body, not string");
+            assert_eq!(
+                body.len(),
+                2,
+                "expected 2 inner statements (CREATE TEMP TABLE + INSERT), got {body:?}"
+            );
+            assert!(matches!(body[0], Statement::CreateTable { .. }));
+            assert!(matches!(body[1], Statement::Insert { .. }));
+        }
+        other => panic!("expected CreateProcedure, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_bigquery_create_procedure_empty_body() {
+    // BigQuery procedure with no body (OPTIONS-only or trailing `;`) should
+    // still parse successfully with `body: vec![]`.
+    let sql = "CREATE PROCEDURE proj.ds.p()";
+    let stmts = bigquery().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    match &stmts[0] {
+        Statement::CreateProcedure { body, body_definition, .. } => {
+            assert!(body.is_empty());
+            assert!(body_definition.is_none());
+        }
+        other => panic!("expected CreateProcedure, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_bigquery_materialized_view_unparenthesized_cluster_by() {
     // BigQuery `CREATE MATERIALIZED VIEW ... CLUSTER BY col` lists the
     // clustering columns without parentheses, unlike ClickHouse.
