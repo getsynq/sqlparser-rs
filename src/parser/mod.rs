@@ -15223,10 +15223,17 @@ impl<'a> Parser<'a> {
         // Skip optional clauses until AS keyword (LANGUAGE, EXECUTE AS CALLER, etc.).
         // Snowflake procedures may omit the body entirely when using HANDLER +
         // IMPORTS — allow EOF / `;` as a clean exit with no body.
+        // BigQuery procedure bodies start with `BEGIN` directly (no `AS`
+        // keyword), so treat a leading `BEGIN` as an implicit body start when
+        // the AS keyword has not been seen.
         let mut has_body = false;
         loop {
             match self.peek_token_kind() {
                 Token::EOF | Token::SemiColon => break,
+                Token::Word(w) if w.keyword == Keyword::BEGIN => {
+                    has_body = true;
+                    break;
+                }
                 _ => {}
             }
             if self.parse_keywords(&[Keyword::EXECUTE, Keyword::AS]) {
