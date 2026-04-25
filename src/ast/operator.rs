@@ -139,6 +139,14 @@ pub enum BinaryOperator {
     PGRegexNotMatch,
     /// String does not match regular expression (case insensitively), e.g. `a !~* b` (PostgreSQL-specific)
     PGRegexNotIMatch,
+    /// String LIKE match, e.g. `a ~~ b` — operator alias for `LIKE` (PostgreSQL/Redshift-specific)
+    PGLikeMatch,
+    /// String ILIKE match, e.g. `a ~~* b` — operator alias for `ILIKE` (PostgreSQL/Redshift-specific)
+    PGILikeMatch,
+    /// String NOT LIKE match, e.g. `a !~~ b` — operator alias for `NOT LIKE` (PostgreSQL/Redshift-specific)
+    PGNotLikeMatch,
+    /// String NOT ILIKE match, e.g. `a !~~* b` — operator alias for `NOT ILIKE` (PostgreSQL/Redshift-specific)
+    PGNotILikeMatch,
     /// PostgreSQL-specific custom operator.
     ///
     /// See [CREATE OPERATOR](https://www.postgresql.org/docs/current/sql-createoperator.html)
@@ -188,6 +196,10 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::PGRegexIMatch => f.write_str("~*"),
             BinaryOperator::PGRegexNotMatch => f.write_str("!~"),
             BinaryOperator::PGRegexNotIMatch => f.write_str("!~*"),
+            BinaryOperator::PGLikeMatch => f.write_str("~~"),
+            BinaryOperator::PGILikeMatch => f.write_str("~~*"),
+            BinaryOperator::PGNotLikeMatch => f.write_str("!~~"),
+            BinaryOperator::PGNotILikeMatch => f.write_str("!~~*"),
             BinaryOperator::PGCustomBinaryOperator(idents) => {
                 write!(f, "OPERATOR({})", display_separated(idents, "."))
             }

@@ -3035,8 +3035,12 @@ impl<'a> Parser<'a> {
             }
             Token::Tilde => Some(BinaryOperator::PGRegexMatch),
             Token::TildeAsterisk => Some(BinaryOperator::PGRegexIMatch),
+            Token::DoubleTilde => Some(BinaryOperator::PGLikeMatch),
+            Token::DoubleTildeAsterisk => Some(BinaryOperator::PGILikeMatch),
             Token::ExclamationMarkTilde => Some(BinaryOperator::PGRegexNotMatch),
             Token::ExclamationMarkTildeAsterisk => Some(BinaryOperator::PGRegexNotIMatch),
+            Token::ExclamationMarkDoubleTilde => Some(BinaryOperator::PGNotLikeMatch),
+            Token::ExclamationMarkDoubleTildeAsterisk => Some(BinaryOperator::PGNotILikeMatch),
             Token::Word(w) => match w.keyword {
                 Keyword::AND => Some(BinaryOperator::And),
                 Keyword::OR => Some(BinaryOperator::Or),
@@ -3667,8 +3671,12 @@ impl<'a> Parser<'a> {
             | Token::DoubleEq
             | Token::Tilde
             | Token::TildeAsterisk
+            | Token::DoubleTilde
+            | Token::DoubleTildeAsterisk
             | Token::ExclamationMarkTilde
             | Token::ExclamationMarkTildeAsterisk
+            | Token::ExclamationMarkDoubleTilde
+            | Token::ExclamationMarkDoubleTildeAsterisk
             | Token::Spaceship => Ok(20),
             Token::Gt => {
                 // Two consecutive > tokens form >> (shift right) at higher precedence
