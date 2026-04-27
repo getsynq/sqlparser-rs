@@ -2851,3 +2851,17 @@ fn test_snowflake_at_as_table_alias() {
         .parse_sql_statements("SELECT * FROM t AT (TIMESTAMP => '2024-01-01'::TIMESTAMP)")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_offset_as_column_name() {
+    // OFFSET never appears as a clause keyword immediately after a SELECT
+    // projection — LIMIT/FETCH/FROM always come first — so accept it as a
+    // column name in the projection list. Real customer pattern:
+    //   SELECT a, offset AS pagination_offset FROM t
+    snowflake()
+        .parse_sql_statements("SELECT a, offset AS pagination_offset FROM t")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("SELECT (SELECT a, offset FROM t)")
+        .unwrap();
+}
