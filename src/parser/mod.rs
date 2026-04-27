@@ -1243,6 +1243,11 @@ impl<'a> Parser<'a> {
                     {
                         let name = ObjectName(vec![Ident::new("extract")]);
                         self.parse_function(name)
+                    } else if !self.peek_token_is(&Token::LParen) {
+                        // Bare identifier `extract` used as a column reference,
+                        // e.g. `nullif(extract, '')` — Redshift/Postgres allow
+                        // EXTRACT as a column name when not followed by `(`.
+                        Ok(Expr::Identifier(w.to_ident().spanning(next_token.span)))
                     } else {
                         self.parse_extract_expr()
                     }
