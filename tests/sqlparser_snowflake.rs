@@ -2874,3 +2874,19 @@ fn test_snowflake_union_distinct_by_name() {
         .parse_sql_statements("SELECT a FROM t1 UNION DISTINCT BY NAME SELECT a FROM t2")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_varchar_char_byte_length_units() {
+    // Snowflake (Oracle-style) accepts CHAR / BYTE as the length unit on
+    // character types in addition to the SQL-standard CHARACTERS / OCTETS.
+    // https://docs.snowflake.com/en/sql-reference/data-types-text
+    snowflake()
+        .parse_sql_statements("SELECT CAST(NULL AS VARCHAR(25 CHAR))")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("SELECT CAST(NULL AS VARCHAR(255 BYTE))")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("SELECT CAST(NULL AS CHAR(10 CHAR))")
+        .unwrap();
+}
