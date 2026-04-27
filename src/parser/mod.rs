@@ -4152,6 +4152,11 @@ impl<'a> Parser<'a> {
                     // Clause keywords that are never function names — a trailing
                     // `,` followed by one of these always ends the projection
                     // list, regardless of what follows (e.g. `FROM (SELECT ...)`).
+                    // OFFSET is intentionally excluded — it never appears as
+                    // a top-level clause keyword *immediately* after a SELECT
+                    // projection (it always follows LIMIT / FETCH / FROM …),
+                    // and BigQuery/Snowflake legitimately use it as a column
+                    // name (`select a, offset as pagination_offset`).
                     let is_clause_only = matches!(
                         kw.keyword,
                         Keyword::FROM
@@ -4160,7 +4165,6 @@ impl<'a> Parser<'a> {
                             | Keyword::HAVING
                             | Keyword::ORDER
                             | Keyword::LIMIT
-                            | Keyword::OFFSET
                             | Keyword::QUALIFY
                             | Keyword::WINDOW
                             | Keyword::UNION
