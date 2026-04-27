@@ -12418,7 +12418,7 @@ impl<'a> Parser<'a> {
                     table_with_joins: Box::new(table_and_joins),
                     alias,
                 })
-            } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | BigQueryDialect | DuckDbDialect | AnsiDialect | GenericDialect)
+            } else if dialect_of!(self is SnowflakeDialect | DatabricksDialect | BigQueryDialect | DuckDbDialect | AnsiDialect | GenericDialect | PostgreSqlDialect | RedshiftSqlDialect)
             {
                 // Dialect-specific behavior: several dialects diverge from the
                 // standard and from most of the other implementations by
