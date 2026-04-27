@@ -9586,12 +9586,13 @@ impl<'a> Parser<'a> {
             Token::Word(w) if after_as || !reserved_kwds.contains(&w.keyword) => {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
-            // CLUSTER is reserved only because of `CLUSTER BY` (Hive/Spark
-            // SELECT-level clause and Snowflake/BigQuery DDL clause). When the
-            // following token is not BY, the keyword is being used as a regular
-            // identifier alias — e.g. BigQuery `JOIN tbl cluster ON ...`.
+            // CLUSTER / SORT are reserved only because of `CLUSTER BY` /
+            // `SORT BY` (Hive/Spark SELECT-level clauses and Snowflake/BigQuery
+            // DDL clauses). When the following token is not BY, the keyword
+            // is being used as a regular identifier alias — e.g. BigQuery
+            // `JOIN tbl cluster ON ...` or Snowflake `FROM t sort`.
             Token::Word(w)
-                if w.keyword == Keyword::CLUSTER
+                if (w.keyword == Keyword::CLUSTER || w.keyword == Keyword::SORT)
                     && !matches!(
                         self.peek_token_kind(),
                         Token::Word(next) if next.keyword == Keyword::BY,

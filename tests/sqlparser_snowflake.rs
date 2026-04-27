@@ -2797,3 +2797,16 @@ fn test_snowflake_execute_immediate_from() {
         .parse_sql_statements("EXECUTE IMMEDIATE FROM '@mystage/script.sql'")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_sort_as_table_alias() {
+    // SORT is reserved only because of `SORT BY` (Hive/Spark). In Snowflake
+    // and most other dialects, `sort` is a regular identifier and may be
+    // used as a table alias — e.g. `FROM t SORT` followed by `SORT.col`.
+    snowflake()
+        .parse_sql_statements("SELECT SORT.NAME AS SALES_ORDER_TYPE_NAME FROM t SORT")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("SELECT sort.id FROM (SELECT 1 AS id) AS sort")
+        .unwrap();
+}
