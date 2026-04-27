@@ -749,3 +749,16 @@ fn test_redshift_extract_as_identifier() {
         .parse_sql_statements("SELECT EXTRACT(YEAR FROM ts) FROM t")
         .unwrap();
 }
+
+#[test]
+fn test_redshift_postgres_bare_parens_around_table() {
+    // PostgreSQL / Redshift accept superfluous parentheses around a single
+    // FROM-clause table reference (e.g. `FROM (mytable)`), matching the
+    // permissive behaviour Snowflake/BigQuery already had.
+    redshift()
+        .parse_sql_statements("SELECT a FROM (mytable)")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("SELECT a FROM (mytable) AS m")
+        .unwrap();
+}
