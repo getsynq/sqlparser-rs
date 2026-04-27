@@ -4191,6 +4191,20 @@ impl<'a> Parser<'a> {
                             Token::Word(w2) if w2.keyword == Keyword::AS => false,
                             // `cluster.x` — qualified column reference.
                             Token::Period => false,
+                            // `offset + 1`, `offset - 1`, `offset * n`, etc.
+                            // — column being used in an arithmetic expression.
+                            Token::Plus
+                            | Token::Minus
+                            | Token::Mul
+                            | Token::Div
+                            | Token::Mod
+                            | Token::StringConcat
+                            | Token::Eq
+                            | Token::Neq
+                            | Token::Lt
+                            | Token::LtEq
+                            | Token::Gt
+                            | Token::GtEq => false,
                             _ => true,
                         }
                     }
