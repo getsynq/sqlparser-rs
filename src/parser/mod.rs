@@ -11173,7 +11173,13 @@ impl<'a> Parser<'a> {
                         SetQuantifier::All
                     }
                 } else if self.parse_keyword(Keyword::DISTINCT) {
-                    SetQuantifier::Distinct
+                    // `UNION DISTINCT BY NAME` (Snowflake/BigQuery) — DISTINCT
+                    // is the default for UNION, so the BY NAME modifier wins.
+                    if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
+                        SetQuantifier::ByName
+                    } else {
+                        SetQuantifier::Distinct
+                    }
                 } else {
                     SetQuantifier::None
                 }
