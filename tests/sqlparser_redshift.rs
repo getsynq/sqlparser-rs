@@ -732,3 +732,20 @@ fn test_redshift_final_as_table_alias() {
         .parse_sql_statements("SELECT final.id FROM (SELECT 1 AS id) AS final")
         .unwrap();
 }
+
+#[test]
+fn test_redshift_extract_as_identifier() {
+    // EXTRACT is the date-extract function only when followed by `(`. As a
+    // bare identifier (column name) it is allowed in Redshift / Postgres,
+    // and dbt-style projections expose it directly.
+    redshift()
+        .parse_sql_statements("SELECT NULLIF(extract, '')::VARCHAR(4096) AS extract FROM t")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("SELECT t.extract FROM t WHERE t.extract IS NOT NULL")
+        .unwrap();
+    // Real EXTRACT(field FROM expr) still parses.
+    redshift()
+        .parse_sql_statements("SELECT EXTRACT(YEAR FROM ts) FROM t")
+        .unwrap();
+}
