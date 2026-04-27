@@ -2832,3 +2832,22 @@ fn test_snowflake_view_column_comment_then_policy() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_at_as_table_alias() {
+    // Snowflake AT/BEFORE time travel must only be consumed when followed
+    // by `(`, otherwise `at` is a plain table alias — e.g.
+    // `INNER JOIN absencetype at ON at.id = ...`.
+    snowflake()
+        .parse_sql_statements(
+            "SELECT * FROM t1 INNER JOIN absencetype at ON at.id = t1.absencetype_id",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("SELECT * FROM t1 LEFT JOIN absencetype before ON before.id = t1.id")
+        .unwrap();
+    // Time travel still parses normally.
+    snowflake()
+        .parse_sql_statements("SELECT * FROM t AT (TIMESTAMP => '2024-01-01'::TIMESTAMP)")
+        .unwrap();
+}
