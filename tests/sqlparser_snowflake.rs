@@ -2810,3 +2810,25 @@ fn test_snowflake_sort_as_table_alias() {
         .parse_sql_statements("SELECT sort.id FROM (SELECT 1 AS id) AS sort")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_view_column_comment_then_policy() {
+    // Snowflake CREATE VIEW column list permits per-column annotations in any
+    // order: COMMENT '...', MASKING POLICY p [USING (...)], PROJECTION POLICY p,
+    // TAG (k='v', ...). Generators emit them after the COMMENT clause.
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE VIEW v (c1, c2 COMMENT 'x' MASKING POLICY p) AS SELECT a, b FROM t",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE VIEW v (c1 COMMENT 'a', c2 COMMENT 'b' WITH TAG (env = 'prod')) AS SELECT a, b FROM t",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE VIEW v (c1 MASKING POLICY p COMMENT 'a') AS SELECT a FROM t",
+        )
+        .unwrap();
+}
