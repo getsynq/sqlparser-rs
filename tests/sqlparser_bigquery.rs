@@ -2304,3 +2304,17 @@ fn test_bigquery_offset_in_arithmetic_projection() {
         .parse_sql_statements("SELECT a, offset >= 0 AS pos FROM t")
         .unwrap();
 }
+
+#[test]
+fn test_bigquery_raw_string_escaped_quote() {
+    // BigQuery raw string literals preserve backslashes literally, but
+    // `\'` (or `\"`) is a two-character sequence that does not terminate
+    // the string — typically used inside regex character classes.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
+    bigquery()
+        .parse_sql_statements(r"SELECT REGEXP_REPLACE(x, r'[^\p{L}{0-9} \'\.\-\/\(\)]', '') FROM t")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements(r#"SELECT r"escaped \" quote stays in string""#)
+        .unwrap();
+}

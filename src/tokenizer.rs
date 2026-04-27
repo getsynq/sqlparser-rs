@@ -1593,6 +1593,31 @@ impl<'a> Tokenizer<'a> {
                         return Ok(s);
                     }
                 }
+                // BigQuery raw strings (`r'...'`) preserve backslashes
+                // literally, but `\<quote>` is a two-character sequence that
+                // does not terminate the string — e.g. `r'[\']'` is the
+                // regex character class `[\']`. Only escape the quote
+                // itself; everything else (including `\\`) stays as-is so
+                // patterns like `r"\\foo\"` keep the original byte stream.
+                // See
+                // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
+                '\\' if !allow_backslash_escape
+                    && dialect_of!(self is BigQueryDialect | GenericDialect)
+                    && matches!(
+                        {
+                            let mut la = chars.peekable.clone();
+                            la.next();
+                            la.peek().copied()
+                        },
+                        Some(c) if c == quote_style,
+                    ) =>
+                {
+                    chars.next(); // consume the backslash
+                    s.push(ch);
+                    let next_ch = *chars.peek().unwrap();
+                    s.push(next_ch);
+                    chars.next();
+                }
                 '\\' if allow_backslash_escape => {
                     chars.next();
                     if dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect | ClickHouseDialect)
