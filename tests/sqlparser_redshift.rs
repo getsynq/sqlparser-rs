@@ -719,3 +719,16 @@ fn test_redshift_partiql_unnest_at_position() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_redshift_final_as_table_alias() {
+    // `final` is not a reserved keyword in Postgres/Redshift, so it must be
+    // accepted as a regular table alias. It is reserved only in ClickHouse
+    // (for `FROM t FINAL`).
+    redshift()
+        .parse_sql_statements("SELECT final.id FROM (SELECT 1 AS id) final")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("SELECT final.id FROM (SELECT 1 AS id) AS final")
+        .unwrap();
+}

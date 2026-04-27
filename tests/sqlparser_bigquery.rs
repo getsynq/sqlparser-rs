@@ -2216,8 +2216,15 @@ fn test_bigquery_create_procedure_begin_end_body() {
     let stmts = bigquery().parse_sql_statements(sql).unwrap();
     assert_eq!(stmts.len(), 1);
     match &stmts[0] {
-        Statement::CreateProcedure { body, body_definition, .. } => {
-            assert!(body_definition.is_none(), "expected BEGIN/END body, not string");
+        Statement::CreateProcedure {
+            body,
+            body_definition,
+            ..
+        } => {
+            assert!(
+                body_definition.is_none(),
+                "expected BEGIN/END body, not string"
+            );
             assert_eq!(
                 body.len(),
                 2,
@@ -2238,7 +2245,11 @@ fn test_bigquery_create_procedure_empty_body() {
     let stmts = bigquery().parse_sql_statements(sql).unwrap();
     assert_eq!(stmts.len(), 1);
     match &stmts[0] {
-        Statement::CreateProcedure { body, body_definition, .. } => {
+        Statement::CreateProcedure {
+            body,
+            body_definition,
+            ..
+        } => {
             assert!(body.is_empty());
             assert!(body_definition.is_none());
         }

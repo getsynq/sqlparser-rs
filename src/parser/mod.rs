@@ -9599,6 +9599,14 @@ impl<'a> Parser<'a> {
             {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
+            // FINAL is reserved only for ClickHouse's `FROM t FINAL` clause.
+            // In other dialects (Postgres/Redshift/Snowflake/BigQuery/...) it
+            // is a regular identifier — e.g. `FROM (...) final`.
+            Token::Word(w)
+                if w.keyword == Keyword::FINAL && !dialect_of!(self is ClickHouseDialect) =>
+            {
+                Ok(Some(w.to_ident().spanning(next_token.span)))
+            }
             // MSSQL supports single-quoted strings as aliases for columns
             // We accept them as table aliases too, although MSSQL does not.
             //
