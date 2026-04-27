@@ -2286,3 +2286,21 @@ fn test_bigquery_hyphenated_project_id_with_numeric_segment() {
         .parse_sql_statements("SELECT * FROM proj-228706.dataset.tbl")
         .unwrap();
 }
+
+#[test]
+fn test_bigquery_offset_in_arithmetic_projection() {
+    // BigQuery `WITH OFFSET` exposes `offset` as a column the projection
+    // can use. Ensure trailing-comma handling still parses
+    //   SELECT a, offset + 1 AS bar FROM t
+    // (and similar arithmetic / comparison shapes) where `offset` is the
+    // column on the left of an operator.
+    bigquery()
+        .parse_sql_statements("SELECT a, offset + 1 AS bar FROM t")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("SELECT a, offset - 1, offset * 2 FROM t")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("SELECT a, offset >= 0 AS pos FROM t")
+        .unwrap();
+}
