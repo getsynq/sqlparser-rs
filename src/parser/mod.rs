@@ -12663,11 +12663,17 @@ impl<'a> Parser<'a> {
                 // CHANGES is always followed by AT and optionally END
             }
             // Snowflake AT/BEFORE time travel:
-            // table AT(TIMESTAMP => expr) or table BEFORE(STATEMENT => 'id')
-            let is_at = self.parse_keyword(Keyword::AT);
+            // table AT(TIMESTAMP => expr) or table BEFORE(STATEMENT => 'id').
+            // Only consume the keyword when it is actually followed by `(` —
+            // otherwise it is being used as a regular table alias, e.g.
+            // `JOIN tbl at ON ...`.
+            let is_at = matches!(
+                self.peek_tokens(),
+                [Token::Word(w), Token::LParen] if w.keyword == Keyword::AT,
+            ) && self.parse_keyword(Keyword::AT);
             let is_before = if !is_at {
-                match self.peek_token_kind().clone() {
-                    Token::Word(w) if w.value.to_uppercase() == "BEFORE" => {
+                match self.peek_tokens() {
+                    [Token::Word(w), Token::LParen] if w.value.to_uppercase() == "BEFORE" => {
                         self.next_token();
                         true
                     }
