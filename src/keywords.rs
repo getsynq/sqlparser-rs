@@ -133,6 +133,7 @@ define_keywords!(
     BTREE,
     BY,
     BYPASSRLS,
+    BYTE,
     BYTEA,
     BYTES,
     CACHE,

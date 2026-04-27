@@ -10198,9 +10198,13 @@ impl<'a> Parser<'a> {
             return Ok(CharacterLength::Max);
         }
         let length = self.parse_literal_uint()?;
-        let unit = if self.parse_keyword(Keyword::CHARACTERS) {
+        // Standard SQL spells the length unit as CHARACTERS / OCTETS. Snowflake
+        // (and Oracle-style dialects) use CHAR / BYTE — accept both spellings
+        // and map to the same enum variants.
+        // https://docs.snowflake.com/en/sql-reference/data-types-text
+        let unit = if self.parse_keyword(Keyword::CHARACTERS) || self.parse_keyword(Keyword::CHAR) {
             Some(CharLengthUnits::Characters)
-        } else if self.parse_keyword(Keyword::OCTETS) {
+        } else if self.parse_keyword(Keyword::OCTETS) || self.parse_keyword(Keyword::BYTE) {
             Some(CharLengthUnits::Octets)
         } else {
             None
