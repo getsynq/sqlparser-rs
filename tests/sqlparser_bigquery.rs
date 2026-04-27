@@ -2272,3 +2272,17 @@ fn test_bigquery_materialized_view_unparenthesized_cluster_by() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_bigquery_hyphenated_project_id_with_numeric_segment() {
+    // BigQuery permits hyphen-separated segments in unquoted project IDs to
+    // be numeric, e.g. `root-rarity-166622.scores.ds`. The tokenizer folds
+    // the trailing `.` into the number (`166622.`); the table-clause path
+    // accepts that form and continues the dotted name parsing.
+    bigquery()
+        .parse_sql_statements("SELECT * FROM root-rarity-166622.scores.ds")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("SELECT * FROM proj-228706.dataset.tbl")
+        .unwrap();
+}

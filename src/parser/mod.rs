@@ -9911,6 +9911,27 @@ impl<'a> Parser<'a> {
                                 ident.value.push_str(&s);
                                 true
                             }
+                            // BigQuery accepts numeric segments as part of an
+                            // unquoted hyphenated project ID, e.g.
+                            // `root-rarity-166622.scores.ds`. The tokenizer
+                            // greedily folds the trailing `.` into the number
+                            // (yielding `Number("166622.")`); take the digit
+                            // prefix as the continuation and rewrite the
+                            // current token to a Period so the surrounding
+                            // `parse_object_name` loop continues with the
+                            // project/dataset separator.
+                            Token::Number(s, false)
+                                if s.ends_with('.')
+                                    && s[..s.len() - 1].chars().all(|c| c.is_ascii_digit()) =>
+                            {
+                                ident.value.push_str(&s[..s.len() - 1]);
+                                let idx = self.index - 1;
+                                if let Some(t) = self.tokens.get_mut(idx) {
+                                    t.token = Token::Period;
+                                }
+                                self.prev_token();
+                                false
+                            }
                             _ => {
                                 return self
                                     .expected("continuation of hyphenated identifier", token);
