@@ -2865,3 +2865,12 @@ fn test_snowflake_offset_as_column_name() {
         .parse_sql_statements("SELECT (SELECT a, offset FROM t)")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_union_distinct_by_name() {
+    // Snowflake/BigQuery accept `UNION DISTINCT BY NAME` — DISTINCT is
+    // already implicit, so the BY NAME modifier governs how columns line up.
+    snowflake()
+        .parse_sql_statements("SELECT a FROM t1 UNION DISTINCT BY NAME SELECT a FROM t2")
+        .unwrap();
+}
