@@ -2240,6 +2240,60 @@ fn test_bigquery_expr_wildcard_after_subscript() {
 }
 
 #[test]
+fn test_bigquery_struct_wildcard_on_parenthesized_expr() {
+    // BigQuery struct field-access wildcard applied to a parenthesized
+    // expression: `(struct_expr).*`, optionally followed by EXCEPT(...).
+    // Previously the `.` was greedily consumed as `CompositeAccess` and the
+    // parser failed at the trailing `*` with "Expected identifier".
+    // Reference: https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#select_modifiers
+    for sql in [
+        "SELECT (s).* FROM t",
+        "SELECT (s).* EXCEPT (x) FROM t",
+        "SELECT (s).* EXCEPT (x, y), col_2 FROM t",
+    ] {
+        let stmts = bigquery().parse_sql_statements(sql).unwrap();
+        match &stmts[0] {
+            Statement::Query(q) => match q.body.as_ref() {
+                SetExpr::Select(s) => {
+                    assert!(
+                        matches!(&*s.projection[0], SelectItem::ExprWildcard { .. }),
+                        "expected ExprWildcard for {sql}"
+                    );
+                }
+                other => panic!("expected Select, got {other:?}"),
+            },
+            other => panic!("expected Query, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_bigquery_struct_wildcard_on_window_function_with_except() {
+    // The real-world shape that surfaced the bug: a windowed LAST_VALUE wrapped
+    // in parens, then `.*EXCEPT(date)` to drop a column from the struct
+    // expansion. The query also exercises CTE chaining with QUALIFY,
+    // GENERATE_DATE_ARRAY, and UNNEST.
+    let sql = "WITH extractions AS (\
+        SELECT *, DATE(extraction_time) AS date \
+        FROM `aiven-dw-prod`.`entities_dw`.`employee_entity_stream_base` \
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY employee_id, DATE(extraction_time) ORDER BY extraction_time DESC) = 1\
+        ), \
+        dates AS (\
+        SELECT employee_id, GENERATE_DATE_ARRAY(MIN(date), MAX(date), INTERVAL 1 DAY) AS date_range \
+        FROM extractions GROUP BY employee_id\
+        ) \
+        SELECT \
+        (LAST_VALUE(IF(extractions.employee_id IS NOT NULL, extractions, NULL) IGNORE NULLS) \
+            OVER (PARTITION BY dates.employee_id ORDER BY date_range_date \
+                  RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\
+        ).* EXCEPT (date), \
+        date_range_date AS date \
+        FROM dates, UNNEST(dates.date_range) AS date_range_date \
+        LEFT JOIN extractions ON dates.employee_id = extractions.employee_id AND date_range_date = extractions.date";
+    bigquery().parse_sql_statements(sql).unwrap();
+}
+
+#[test]
 fn test_bigquery_create_procedure_begin_end_body() {
     // BigQuery procedure bodies start with `BEGIN` directly — no `AS` keyword
     // before the body. The parser must populate `body: Vec<Statement>` so
