@@ -762,3 +762,19 @@ fn test_redshift_postgres_bare_parens_around_table() {
         .parse_sql_statements("SELECT a FROM (mytable) AS m")
         .unwrap();
 }
+
+#[test]
+fn test_redshift_select_star_exclude() {
+    // Redshift supports `SELECT * EXCLUDE col` and `SELECT * EXCLUDE (col1, col2)`
+    // as well as `SELECT t.* EXCLUDE (col)`.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_SELECT_synopsis.html
+    redshift()
+        .parse_sql_statements("SELECT * EXCLUDE id FROM t")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("SELECT * EXCLUDE (id, name) FROM t")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("SELECT t.* EXCLUDE (id) FROM t")
+        .unwrap();
+}
