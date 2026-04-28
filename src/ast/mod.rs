@@ -50,10 +50,13 @@ pub use self::query::{
     JoinOperator, LateralView, LockClause, LockType, NamedWindowDefinition, NamedWindowExpr,
     NonBlock, Offset, OffsetRows, OrderBy, OrderByExpr, PivotValue, PivotValueSource, Query,
     RenameSelectItem, ReplaceSelectElement, ReplaceSelectItem, SamplingMethod, Select, SelectInto,
-    SelectItem, SelectionCount, SemanticViewClause, SetExpr, SetOperator, SetPrefix, SetQuantifier,
-    Setting, Table, TableAlias, TableFactor, TableSampleSeed, TableVersion, TableWithJoins, Top,
-    UnpivotInValue, UnpivotNullHandling, ValueTableMode, Values, WildcardAdditionalOptions, With,
-    WithFill,
+    SelectItem, SelectionCount, SemanticViewClause, SemanticViewCortexSearch,
+    SemanticViewExtension, SemanticViewLogicalTable, SemanticViewMember,
+    SemanticViewMemberModifier, SemanticViewRangeConstraint, SemanticViewRelTargetRef,
+    SemanticViewRelTargetRefItem, SemanticViewRelationship, SemanticViewVisibility, SetExpr,
+    SetOperator, SetPrefix, SetQuantifier, Setting, Table, TableAlias, TableFactor,
+    TableSampleSeed, TableVersion, TableWithJoins, Top, UnpivotInValue, UnpivotNullHandling,
+    ValueTableMode, Values, WildcardAdditionalOptions, With, WithFill,
 };
 pub use self::value::{
     escape_quoted_string, DateTimeField, DollarQuotedString, ObjectConstantKeyValue,
@@ -1874,6 +1877,23 @@ pub enum Statement {
         /// Snowflake `SECURE` modifier: `CREATE SECURE VIEW ...` / `CREATE SECURE MATERIALIZED VIEW ...`
         secure: bool,
     },
+    /// Snowflake `CREATE [OR REPLACE] SEMANTIC VIEW [IF NOT EXISTS] <name>`.
+    ///
+    /// See <https://docs.snowflake.com/en/sql-reference/sql/create-semantic-view>.
+    CreateSemanticView {
+        or_replace: bool,
+        if_not_exists: bool,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        name: ObjectName,
+        tables: Vec<SemanticViewLogicalTable>,
+        relationships: Vec<SemanticViewRelationship>,
+        facts: Vec<SemanticViewMember>,
+        dimensions: Vec<SemanticViewMember>,
+        metrics: Vec<SemanticViewMember>,
+        comment: Option<String>,
+        copy_grants: bool,
+        extensions: Vec<SemanticViewExtension>,
+    },
     /// ```sql
     /// CREATE TABLE
     /// ```
@@ -3213,6 +3233,58 @@ impl fmt::Display for Statement {
                 match definition {
                     MacroDefinition::Expr(expr) => write!(f, " AS {expr}")?,
                     MacroDefinition::Table(query) => write!(f, " AS TABLE {query}")?,
+                }
+                Ok(())
+            }
+            Statement::CreateSemanticView {
+                or_replace,
+                if_not_exists,
+                name,
+                tables,
+                relationships,
+                facts,
+                dimensions,
+                metrics,
+                comment,
+                copy_grants,
+                extensions,
+            } => {
+                f.write_str("CREATE ")?;
+                if *or_replace {
+                    f.write_str("OR REPLACE ")?;
+                }
+                f.write_str("SEMANTIC VIEW ")?;
+                if *if_not_exists {
+                    f.write_str("IF NOT EXISTS ")?;
+                }
+                write!(f, "{name}")?;
+                if !tables.is_empty() {
+                    write!(f, " TABLES ({})", display_comma_separated(tables))?;
+                }
+                if !relationships.is_empty() {
+                    write!(
+                        f,
+                        " RELATIONSHIPS ({})",
+                        display_comma_separated(relationships)
+                    )?;
+                }
+                if !facts.is_empty() {
+                    write!(f, " FACTS ({})", display_comma_separated(facts))?;
+                }
+                if !dimensions.is_empty() {
+                    write!(f, " DIMENSIONS ({})", display_comma_separated(dimensions))?;
+                }
+                if !metrics.is_empty() {
+                    write!(f, " METRICS ({})", display_comma_separated(metrics))?;
+                }
+                if let Some(c) = comment {
+                    write!(f, " COMMENT = '{}'", value::escape_single_quote_string(c))?;
+                }
+                if *copy_grants {
+                    f.write_str(" COPY GRANTS")?;
+                }
+                for ext in extensions {
+                    write!(f, " {ext}")?;
                 }
                 Ok(())
             }

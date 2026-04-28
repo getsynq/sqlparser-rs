@@ -3084,6 +3084,320 @@ fn parse_semantic_view_table_factor() {
     assert!(sql.contains("m.col_b"));
 }
 
+// === SEMANTIC_VIEW(...) query-side: every shape from the official docs ===
+// https://docs.snowflake.com/en/user-guide/views-semantic/sql
+// https://docs.snowflake.com/en/user-guide/views-semantic/example
+// https://docs.snowflake.com/en/user-guide/views-semantic/querying
+
+#[test]
+fn parse_semantic_view_query_metrics_dimensions() {
+    // Docs example: METRICS before DIMENSIONS in the call.
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(flights_sv METRICS flights.m_flight_arrival_count, flights.m_flight_departure_count DIMENSIONS airports.city_name)",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_with_outer_alias_and_outer_refs() {
+    // Docs example: outer alias `AS sv` plus qualified refs in outer SELECT/ORDER BY.
+    snowflake().verified_stmt(
+        "SELECT sv.dim_event_name, sv.dim_event_timestamp, sv.dim_time_period_name, sv.m_event_count \
+         FROM SEMANTIC_VIEW(my_semantic_view_range_join \
+         METRICS my_events.m_event_count \
+         DIMENSIONS my_events.dim_event_name, my_events.dim_event_timestamp, my_time_periods.dim_time_period_name) AS sv \
+         ORDER BY sv.dim_event_timestamp",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_where_inside() {
+    // Docs example: WHERE inside the call referencing dimensions.
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS orders.order_date METRICS orders.average_line_items_per_order WHERE orders.order_date > '1995-01-01')",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_facts_with_outer_order_limit() {
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS customer.customer_name FACTS customer.c_customer_order_count) ORDER BY customer_name LIMIT 5",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_duplicate_columns_outer_rename() {
+    // https://docs.snowflake.com/en/user-guide/views-semantic/querying#label-semantic-views-duplicate-columns
+    // Disambiguate colliding output column names via the outer table-alias column list.
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(duplicate_names DIMENSIONS nation.name, region.name) AS table_alias (nation_name, region_name)",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_qualified_view_name() {
+    // Qualified semantic view name (db.schema.name) resolves through `parse_object_name`.
+    let ast = snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(\"DB\".\"SCHEMA\".\"SMV_SV_FCT_ORDERS\" DIMENSIONS LINE_NUMBER, ORDER_CHANNEL METRICS \"Total Sales\", \"Average Sales\")",
+    );
+    let sql = format!("{ast}");
+    assert!(sql.contains("\"DB\".\"SCHEMA\".\"SMV_SV_FCT_ORDERS\""));
+}
+
+#[test]
+fn parse_semantic_view_query_item_alias_and_expression() {
+    // Item with explicit `AS alias` and expression dimension item.
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS DATE_PART('year', orders.order_date) AS year METRICS orders.order_count)",
+    );
+}
+
+#[test]
+fn parse_semantic_view_query_qualified_wildcard_item() {
+    // `customer.*` wildcard inside DIMENSIONS — accepted by our parser.
+    snowflake().verified_stmt("SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS customer.*)");
+}
+
+// === CREATE SEMANTIC VIEW DDL: every shape from the official docs ===
+// https://docs.snowflake.com/en/sql-reference/sql/create-semantic-view
+// https://docs.snowflake.com/en/user-guide/views-semantic/example
+
+#[test]
+fn parse_create_semantic_view_tpch_full() {
+    // The canonical TPC-H tutorial example, parsed and roundtripped end-to-end.
+    let sql = "CREATE OR REPLACE SEMANTIC VIEW tpch_analysis \
+        TABLES (\
+            region AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.REGION PRIMARY KEY (r_regionkey), \
+            nation AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.NATION PRIMARY KEY (n_nationkey), \
+            customer AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.CUSTOMER PRIMARY KEY (c_custkey), \
+            orders AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.ORDERS PRIMARY KEY (o_orderkey), \
+            lineitem AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.LINEITEM PRIMARY KEY (l_orderkey, l_linenumber), \
+            supplier AS SNOWFLAKE_SAMPLE_DATA.TPCH_SF1.SUPPLIER PRIMARY KEY (s_suppkey)\
+        ) \
+        RELATIONSHIPS (\
+            nation (n_regionkey) REFERENCES region, \
+            customer (c_nationkey) REFERENCES nation, \
+            orders (o_custkey) REFERENCES customer, \
+            lineitem (l_orderkey) REFERENCES orders, \
+            supplier (s_nationkey) REFERENCES nation\
+        ) \
+        FACTS (\
+            region.r_name AS r_name, \
+            nation.n_name AS n_name, \
+            orders.o_orderkey AS o_orderkey, \
+            customer.c_customer_order_count AS COUNT(orders.o_orderkey), \
+            lineitem.line_item_id AS CONCAT(l_orderkey, '-', l_linenumber), \
+            orders.count_line_items AS COUNT(lineitem.line_item_id)\
+        ) \
+        DIMENSIONS (\
+            nation.nation_name AS n_name, \
+            customer.customer_name AS c_name, \
+            customer.customer_region_name AS region.r_name, \
+            customer.customer_nation_name AS nation.n_name, \
+            customer.customer_market_segment AS c_mktsegment, \
+            customer.customer_country_code AS LEFT(c_phone, 2), \
+            orders.order_date AS orders.o_orderdate\
+        ) \
+        METRICS (\
+            customer.customer_count AS COUNT(c_custkey), \
+            customer.customer_order_count AS SUM(c_customer_order_count), \
+            orders.order_count AS COUNT(o_orderkey), \
+            orders.order_average_value AS AVG(orders.o_totalprice), \
+            orders.average_line_items_per_order AS AVG(orders.count_line_items), \
+            supplier.supplier_count AS COUNT(s_suppkey)\
+        )";
+    let stmt = snowflake().verified_stmt(sql);
+
+    // AST shape sanity check — verify the relevant lineage references are visible.
+    match stmt {
+        Statement::CreateSemanticView {
+            or_replace,
+            tables,
+            relationships,
+            facts,
+            dimensions,
+            metrics,
+            ..
+        } => {
+            assert!(or_replace);
+            assert_eq!(tables.len(), 6);
+            assert_eq!(relationships.len(), 5);
+            assert_eq!(facts.len(), 6);
+            assert_eq!(dimensions.len(), 7);
+            assert_eq!(metrics.len(), 6);
+            // First table: alias `region` over a 3-part base table; PRIMARY KEY surfaced.
+            assert_eq!(tables[0].alias.as_ref().unwrap().value, "region");
+            assert_eq!(tables[0].name.0.len(), 3);
+            assert!(tables[0].primary_key.is_some());
+        }
+        other => panic!("expected CreateSemanticView, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_semantic_view_minimal() {
+    // Smallest valid shape per docs: just TABLES + at least one of FACTS/DIMENSIONS/METRICS.
+    snowflake()
+        .verified_stmt("CREATE SEMANTIC VIEW v TABLES (t AS db.s.t) METRICS (t.m AS COUNT(*))");
+}
+
+#[test]
+fn parse_create_semantic_view_if_not_exists() {
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW IF NOT EXISTS v TABLES (t AS db.s.t) DIMENSIONS (t.d AS t.col)",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_unaliased_table() {
+    // The alias prefix is optional; the table reference becomes both name and reference.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v TABLES (db.s.t PRIMARY KEY (id)) DIMENSIONS (t.d AS id)",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_range_join_constraint() {
+    // CONSTRAINT <name> DISTINCT RANGE BETWEEN ... AND ... EXCLUSIVE on the table,
+    // and BETWEEN target reference on the relationship — both used together.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW range_join_demo \
+         TABLES (\
+            my_events AS db.s.events PRIMARY KEY (event_id), \
+            my_time_periods AS db.s.tp UNIQUE (start_time, end_time) CONSTRAINT cn DISTINCT RANGE BETWEEN start_time AND end_time EXCLUSIVE\
+         ) \
+         RELATIONSHIPS (\
+            my_events (event_timestamp) REFERENCES my_time_periods(BETWEEN start_time AND end_time EXCLUSIVE)\
+         ) \
+         DIMENSIONS (my_events.d AS event_id)",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_relationship_named_and_asof() {
+    // Named relationship + ASOF target reference list.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (table_1 AS db.s.t1, table_2 AS db.s.t2 PRIMARY KEY (col_2)) \
+         RELATIONSHIPS (rel_name AS table_1 (col_1) REFERENCES table_2(ASOF col_2)) \
+         DIMENSIONS (table_1.d AS col_1)",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_member_modifiers() {
+    // PRIVATE/PUBLIC visibility, USING(rel) and NON ADDITIVE BY(...) modifiers,
+    // WITH SYNONYMS, COMMENT, and a derived (non-table-qualified) metric.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (orders AS db.s.orders, inv AS db.s.inv) \
+         FACTS (PRIVATE customers.raw_phone AS c_phone WITH SYNONYMS ('phone', 'phone_number') COMMENT = 'Raw phone') \
+         METRICS (\
+            inv.qty_eom NON ADDITIVE BY (inv.snapshot_date DESC) AS SUM(quantity), \
+            orders.value_via_cust USING (orders_to_customers) AS SUM(o_totalprice), \
+            PRIVATE orders.priv_count AS COUNT(*), \
+            total_value AS orders.order_average_value * orders.order_count\
+         )",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_cortex_search_dimension() {
+    // WITH CORTEX SEARCH SERVICE attached to a dimension, with optional USING column.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (customers AS db.s.cust) \
+         DIMENSIONS (\
+            PUBLIC customers.cust_name AS c_name WITH CORTEX SEARCH SERVICE db.schema.cust_search, \
+            customers.email AS c_email WITH CORTEX SEARCH SERVICE db.schema.email_svc USING email_normalized\
+         )",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_window_metric() {
+    // Window-function metric — `func(...) OVER (PARTITION BY ... ORDER BY ...)`.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (sales AS db.s.sales) \
+         METRICS (sales.running_total AS SUM(sales.amount) OVER (PARTITION BY sales.region ORDER BY sales.dt))",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_window_metric_partition_by_excluding() {
+    // Snowflake semantic-view-specific window form:
+    //   PARTITION BY EXCLUDING <dim>, <dim>, ...
+    // and INTERVAL-bound window frames. Both appear in the docs window-function
+    // metric example. We accept the EXCLUDING marker for parseability — the
+    // dimension column references survive in the AST as `Expr` nodes, so a
+    // lineage visitor still sees them.
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE SEMANTIC VIEW sv_window_function_example \
+              TABLES (\
+                store_sales AS SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.store_sales, \
+                date AS SNOWFLAKE_SAMPLE_DATA.TPCDS_SF10TCL.date_dim PRIMARY KEY (d_date_sk)\
+              ) \
+              RELATIONSHIPS (sales_to_date AS store_sales(ss_sold_date_sk) REFERENCES date(d_date_sk)) \
+              DIMENSIONS (date.date AS d_date, date.d_date_sk AS d_date_sk, date.year AS d_year) \
+              METRICS (\
+                store_sales.total_sales_quantity AS SUM(ss_quantity) \
+                  WITH SYNONYMS = ('Total sales quantity'), \
+                store_sales.avg_7_days_sales_quantity AS AVG(total_sales_quantity) \
+                  OVER (PARTITION BY EXCLUDING date.date, date.year ORDER BY date.date \
+                    RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW) \
+                  WITH SYNONYMS = ('Running 7-day average of total sales quantity')\
+              )",
+        )
+        .unwrap();
+}
+
+#[test]
+fn parse_create_semantic_view_relationship_mixed_target_ref() {
+    // The target reference list mixes plain columns with a BETWEEN range
+    // (`weather(airport_code, BETWEEN start_date AND end_date EXCLUSIVE)`) or
+    // an ASOF column (`customer_address(ca_cust_id, ASOF ca_start_date)`).
+    // Both shapes appear in the official docs.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (flights PRIMARY KEY (flight_id), weather PRIMARY KEY (airport_code, start_date, end_date)) \
+         RELATIONSHIPS (\
+            flight_arrival_weather AS flights (arrival_airport, arrival_time) REFERENCES weather(airport_code, BETWEEN start_date AND end_date EXCLUSIVE)\
+         ) \
+         DIMENSIONS (weather.w AS weather_condition)",
+    );
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (orders PRIMARY KEY (o_ord_id), customer_address UNIQUE (ca_cust_id, ca_start_date)) \
+         RELATIONSHIPS (orders (o_cust_id, o_ord_date) REFERENCES customer_address(ca_cust_id, ASOF ca_start_date)) \
+         DIMENSIONS (orders.d AS o_ord_date)",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_statement_options() {
+    // Statement-level COMMENT, COPY GRANTS, and AI_* extension clauses.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (t AS db.s.t) \
+         METRICS (t.m AS COUNT(*)) \
+         COMMENT = 'demo' \
+         COPY GRANTS \
+         AI_SQL_GENERATION 'Use SUM not AVG' \
+         AI_QUESTION_CATEGORIZATION 'finance only'",
+    );
+}
+
+#[test]
+fn parse_create_semantic_view_table_synonyms_and_comment() {
+    // WITH SYNONYMS and COMMENT on a logical table.
+    snowflake().verified_stmt(
+        "CREATE SEMANTIC VIEW v \
+         TABLES (t AS db.s.t WITH SYNONYMS ('table_t', 't_alias') COMMENT = 'logical t') \
+         DIMENSIONS (t.d AS col)",
+    );
+}
+
 #[test]
 fn parse_snowflake_create_external_table_with_options() {
     // Snowflake CREATE EXTERNAL TABLE has option-name = value tail
