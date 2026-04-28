@@ -2985,6 +2985,46 @@ fn test_snowflake_execute_task() {
 }
 
 #[test]
+fn test_snowflake_execute_admin_commands() {
+    // Snowflake EXECUTE NOTEBOOK / ALERT / STREAMLIT trigger ad-hoc runs of
+    // named objects.
+    // https://docs.snowflake.com/en/sql-reference/sql/execute-notebook
+    // https://docs.snowflake.com/en/sql-reference/sql/execute-alert
+    let stmt = snowflake().verified_stmt("EXECUTE NOTEBOOK my_db.public.my_notebook");
+    match stmt {
+        Statement::ExecuteSnowflakeAdmin { command, name } => {
+            assert_eq!(command, "NOTEBOOK");
+            assert_eq!(name.to_string(), "my_db.public.my_notebook");
+        }
+        other => panic!("expected ExecuteSnowflakeAdmin, got {other:?}"),
+    }
+    snowflake().verified_stmt("EXECUTE ALERT myalert");
+
+    // Empty paren argument list and qualified name with quoted parts.
+    snowflake()
+        .parse_sql_statements("EXECUTE NOTEBOOK MY_DB.PUBLIC.MY_NOTEBOOK()")
+        .unwrap();
+    snowflake()
+        .parse_sql_statements(
+            "EXECUTE NOTEBOOK MY_DATABASE.PUBLIC.MY_NOTEBOOK('a,b,c', 'target_database=PROD')",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("EXECUTE streamlit \"DB\".\"SC\".\"APP\"()")
+        .unwrap();
+
+    // EXECUTE NOTEBOOK PROJECT with trailing options.
+    snowflake()
+        .parse_sql_statements(
+            "EXECUTE NOTEBOOK PROJECT \"db\".\"sc\".\"proj\" \
+             MAIN_FILE = 'notebook.ipynb' \
+             COMPUTE_POOL = 'cp' \
+             ARGUMENTS = 'env prod'",
+        )
+        .unwrap();
+}
+
+#[test]
 fn test_snowflake_call_class_instance_method() {
     // Snowflake class instance method invocation: <instance>!<method>(args).
     // Used with Cortex ML/forecast classes and Native App class instances.
