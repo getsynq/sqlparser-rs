@@ -891,7 +891,13 @@ impl<'a> Tokenizer<'a> {
                         s.push('.');
                         chars.next();
                     }
-                    s += &peeking_take_while(chars, digit_pred);
+                    // After the period, only continue consuming if the next char is a digit.
+                    // In numeric_underscore dialects an underscore separator is only valid
+                    // *between* digits, so `._foo` must tokenize as Period + Word("_foo"),
+                    // not as a number that swallows the leading underscore of an identifier.
+                    if matches!(chars.peek(), Some(c) if c.is_ascii_digit()) {
+                        s += &peeking_take_while(chars, digit_pred);
+                    }
 
                     // No number -> Token::Period
                     if s == "." {

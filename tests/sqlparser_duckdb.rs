@@ -351,6 +351,30 @@ fn test_numeric_literal_underscores() {
 }
 
 #[test]
+fn test_qualified_name_with_underscore_prefix() {
+    // Regression: in numeric_literal_underscores dialects (DuckDB, Generic)
+    // the tokenizer must not greedily consume `_` after a `.` as a numeric
+    // separator. `schema._tbl` is two identifiers separated by a period,
+    // not `schema` + Number(".") + `tbl`. Underscores in numeric literals
+    // are only valid *between* digits (e.g. `1_000`, `1.50_0`).
+    let d = duckdb_and_generic();
+    // The original PR-7193 reproduction shape: real customer DuckDB DDL.
+    d.verified_stmt("CREATE TABLE foo._bar (x INT)");
+    // Same shape in DML / projection contexts.
+    d.verified_stmt("SELECT * FROM foo._bar");
+    d.verified_stmt("SELECT foo._bar.x FROM foo._bar");
+    // Multiple underscores in the leading position must all survive.
+    d.verified_stmt("SELECT * FROM foo.__dlt_loads");
+    // Mixed: digit-prefix segment then a `._ident`. The `1` ensures the
+    // tokenizer enters the numeric branch via a digit, not a period.
+    d.one_statement_parses_to("SELECT a FROM t1._dlt_loads", "SELECT a FROM t1._dlt_loads");
+    // Numeric separators between digits must still work — guards against
+    // an over-broad fix that disables the separator entirely.
+    d.one_statement_parses_to("SELECT 1_000", "SELECT 1000");
+    d.one_statement_parses_to("SELECT 1_000.50_0", "SELECT 1000.500");
+}
+
+#[test]
 fn test_at_sign_abs_operator() {
     // DuckDB supports @ as absolute value operator (same as PostgreSQL)
     duckdb().verified_stmt("SELECT (@-1) + 1");
