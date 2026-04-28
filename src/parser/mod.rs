@@ -6293,8 +6293,14 @@ impl<'a> Parser<'a> {
         iceberg: bool,
         hybrid: bool,
     ) -> Result<Statement, ParserError> {
-        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let mut if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
         let table_name = self.parse_object_name(true)?;
+
+        // Snowflake tolerates `IF NOT EXISTS` after the table name (observed in
+        // generator-emitted DDL, e.g. Amplitude bulk loaders).
+        if !if_not_exists && self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]) {
+            if_not_exists = true;
+        }
 
         // Snowflake allows defining `CLUSTER BY` after the name of the table or after columns
         let mut cluster_by = if self.parse_keywords(&[Keyword::CLUSTER, Keyword::BY]) {

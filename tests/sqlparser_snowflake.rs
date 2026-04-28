@@ -55,6 +55,27 @@ fn test_snowflake_create_transient_table() {
 }
 
 #[test]
+fn test_snowflake_create_table_if_not_exists_after_name() {
+    // Snowflake tolerates `IF NOT EXISTS` after the table name (observed in
+    // generator-emitted DDL such as Amplitude bulk loaders).
+    let sql = "CREATE TRANSIENT TABLE CUSTOMER IF NOT EXISTS (raw_row VARIANT)";
+    let canonical = "CREATE TRANSIENT TABLE IF NOT EXISTS CUSTOMER (raw_row VARIANT)";
+    match snowflake_and_generic().one_statement_parses_to(sql, canonical) {
+        Statement::CreateTable {
+            name,
+            if_not_exists,
+            transient,
+            ..
+        } => {
+            assert_eq!("CUSTOMER", name.to_string());
+            assert!(if_not_exists);
+            assert!(transient);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn test_snowflake_single_line_tokenize() {
     let sql = "CREATE TABLE# this is a comment \ntable_1";
     let dialect = SnowflakeDialect {};
