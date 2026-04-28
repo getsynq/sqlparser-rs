@@ -35,6 +35,10 @@ cargo fmt
 cargo clippy
 ```
 
+### Reproducing a parse failure on one SQL file
+- Use `cargo run --release --quiet --features json_example --example cli FILE --DIALECT 2>&1 1>/dev/null | grep "Error during parsing"` — DEBUG logs flood stderr by default and obscure the actual parse error.
+- The release CLI (`target/release/examples/cli`) is rebuilt independently from `corpus-runner`. After parser edits, run `cargo build --release --example cli` before re-running single-file repros — otherwise you're testing the previous build and may report false positives.
+
 ### Performance and Profiling
 
 **Critical:** Always profile BEFORE optimizing. Assumptions about bottlenecks are often wrong.
@@ -254,6 +258,13 @@ while depth > 0 {
 ```
 Use this pattern for dialect-specific clauses that don't need AST representation.
 
+**Reserved-keyword-as-alias carve-out** (recurring fix shape):
+- When a keyword (e.g. CLUSTER, SORT, FINAL, AT, BEFORE) is reserved only because of a specific clause (`CLUSTER BY`, `t AT(...)` time-travel), accept it as an identifier alias in `parse_optional_alias` when the lookahead doesn't match the clause shape (next-not-`BY`, next-not-`(`, etc.).
+- Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL and in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
+
+**Tokenizer `Number("N.")` quirk:**
+The tokenizer greedily folds a trailing `.` into the number token, so `proj-NNN.dataset` produces `Number("NNN.")` followed by `Word("dataset")`. To consume the digit prefix as part of a hyphenated identifier and keep the dot as a separator, mutate the just-consumed token in place: `self.tokens[idx].token = Token::Period;` then `prev_token()` so the surrounding `parse_object_name` loop continues. See the BigQuery hyphenated project-ID block in `parse_identifier` for the template.
+
 **Dialect struct names** (for `dialect_of!` macro):
 - `RedshiftSqlDialect` (NOT `RedshiftDialect`), `AnsiDialect`, `DuckDbDialect`
 - `ClickHouseDialect`, `SnowflakeDialect`, `BigQueryDialect`, `PostgreSqlDialect`
@@ -313,6 +324,7 @@ Since this is a fork of apache/datafusion-sqlparser-rs:
 - CI runs: `cargo check`, `cargo nextest run --all-features`
 - `cargo nextest run` without `RUST_MIN_STACK=8388608` always SIGABRTs three tests (`parse_deeply_nested_expr_hits_recursion_limits`, `..._parens_...`, `..._subquery_...`). These are stack-size probes, not regressions — ignore if the rest of the run is green.
 - Avoid adding serde dependency to test code - use manual JSON building if needed
+- `verified_stmt(s)` requires `s` to be a full statement that round-trips (parse → display → equal). For fragment / coverage tests on a non-statement (a bare CAST, a SELECT-list snippet), wrap in `SELECT` or call `parse_sql_statements(input).unwrap()` directly — `verified_stmt` will otherwise fail with `Expected an SQL statement, found: ...`.
 
 **Running corpus tests (now fast!):**
 ```bash
