@@ -5056,7 +5056,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_function_arg(&mut self) -> Result<OperateFunctionArg, ParserError> {
-        let mode = if self.parse_keyword(Keyword::IN) {
+        let mut mode = if self.parse_keyword(Keyword::IN) {
             Some(ArgMode::In)
         } else if self.parse_keyword(Keyword::OUT) {
             Some(ArgMode::Out)
@@ -5070,8 +5070,24 @@ impl<'a> Parser<'a> {
         // Try `name + data_type` first so that parameter names that happen to
         // match data-type keywords (e.g. `bytes`, `date`) are not mistaken for
         // anonymous-parameter type declarations.
-        let (name, data_type) = if let Some((n, dt)) = self.maybe_parse(|p| {
+        let mut trailing_mode: Option<ArgMode> = None;
+        let (name, data_type) = if let Some((n, dt, m)) = self.maybe_parse(|p| {
             let ident = p.parse_identifier(false)?.unwrap();
+            // Postgres also allows `argname argmode argtype`. Only accept the
+            // trailing mode when one wasn't already parsed before the name.
+            let m = if mode.is_none() {
+                if p.parse_keyword(Keyword::IN) {
+                    Some(ArgMode::In)
+                } else if p.parse_keyword(Keyword::OUT) {
+                    Some(ArgMode::Out)
+                } else if p.parse_keyword(Keyword::INOUT) {
+                    Some(ArgMode::InOut)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let dt = p.parse_data_type()?;
             if !matches!(
                 p.peek_token().token,
@@ -5083,8 +5099,9 @@ impl<'a> Parser<'a> {
             {
                 return Err(ParserError::ParserError("not a named arg".into()));
             }
-            Ok((ident, dt))
+            Ok((ident, dt, m))
         }) {
+            trailing_mode = m;
             (Some(n), dt)
         } else {
             let mut name = None;
@@ -5115,6 +5132,9 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
+        if mode.is_none() {
+            mode = trailing_mode;
+        }
         Ok(OperateFunctionArg {
             mode,
             name,
