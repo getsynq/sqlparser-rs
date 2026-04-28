@@ -4749,6 +4749,21 @@ impl<'a> Parser<'a> {
         // Trino: WITH (LOCATION='s3://bucket/foo')
         let with_properties = self.parse_options(Keyword::WITH)?;
 
+        // Databricks/Hive: LOCATION 'path' and/or MANAGED LOCATION 'path'
+        let mut location = None;
+        let mut managed_location = None;
+        loop {
+            if location.is_none() && self.parse_keyword(Keyword::LOCATION) {
+                location = Some(self.parse_literal_string()?);
+            } else if managed_location.is_none()
+                && self.parse_keywords(&[Keyword::MANAGED, Keyword::LOCATION])
+            {
+                managed_location = Some(self.parse_literal_string()?);
+            } else {
+                break;
+            }
+        }
+
         Ok(Statement::CreateSchema {
             schema_name,
             if_not_exists,
@@ -4756,6 +4771,8 @@ impl<'a> Parser<'a> {
             default_collate,
             options,
             with_properties,
+            location,
+            managed_location,
         })
     }
 

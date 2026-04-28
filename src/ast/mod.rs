@@ -2292,6 +2292,10 @@ pub enum Statement {
         options: Vec<SqlOption>,
         /// Trino: `WITH (key = 'value', ...)`
         with_properties: Vec<SqlOption>,
+        /// Databricks/Hive: `LOCATION 'path'`
+        location: Option<String>,
+        /// Databricks: `MANAGED LOCATION 'path'`
+        managed_location: Option<String>,
     },
     /// ```sql
     /// CREATE DATABASE
@@ -4025,6 +4029,8 @@ impl fmt::Display for Statement {
                 default_collate,
                 options,
                 with_properties,
+                location,
+                managed_location,
             } => {
                 write!(
                     f,
@@ -4043,6 +4049,12 @@ impl fmt::Display for Statement {
                 }
                 if !with_properties.is_empty() {
                     write!(f, " WITH ({})", display_comma_separated(with_properties))?;
+                }
+                if let Some(l) = location {
+                    write!(f, " LOCATION '{l}'")?;
+                }
+                if let Some(l) = managed_location {
+                    write!(f, " MANAGED LOCATION '{l}'")?;
                 }
                 Ok(())
             }

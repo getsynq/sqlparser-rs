@@ -443,6 +443,7 @@ define_keywords!(
     LOWCARDINALITY,
     LOWER,
     MACRO,
+    MANAGED,
     MANAGEDLOCATION,
     MAP,
     MASK,
