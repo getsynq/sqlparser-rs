@@ -14760,22 +14760,36 @@ impl<'a> Parser<'a> {
 
     pub fn parse_values(&mut self, allow_empty: bool) -> Result<Values, ParserError> {
         let mut explicit_row = false;
+        let allow_whitespace_separator = dialect_of!(self is ClickHouseDialect | GenericDialect);
 
-        let rows = self.parse_comma_separated(|parser| {
-            if parser.parse_keyword(Keyword::ROW) {
+        let mut rows = vec![];
+        loop {
+            if self.parse_keyword(Keyword::ROW) {
                 explicit_row = true;
             }
 
-            parser.expect_token(&Token::LParen)?;
-            if allow_empty && parser.peek_token().token == Token::RParen {
-                parser.next_token();
-                Ok(vec![])
+            self.expect_token(&Token::LParen)?;
+            let row = if allow_empty && self.peek_token().token == Token::RParen {
+                self.next_token();
+                vec![]
             } else {
-                let exprs = parser.parse_comma_separated(Parser::parse_expr)?;
-                parser.expect_token(&Token::RParen)?;
-                Ok(exprs)
+                let exprs = self.parse_comma_separated(Parser::parse_expr)?;
+                self.expect_token(&Token::RParen)?;
+                exprs
+            };
+            rows.push(row);
+
+            if self.consume_token(&Token::Comma) {
+                continue;
             }
-        })?;
+            if allow_whitespace_separator
+                && !explicit_row
+                && matches!(self.peek_token().token, Token::LParen)
+            {
+                continue;
+            }
+            break;
+        }
         Ok(Values { explicit_row, rows })
     }
 
