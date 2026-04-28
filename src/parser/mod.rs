@@ -8478,7 +8478,14 @@ impl<'a> Parser<'a> {
     /// Parse a `CALL procedure_name(arg1, arg2, ...)`
     /// or `CALL procedure_name` statement
     pub fn parse_call(&mut self) -> Result<Statement, ParserError> {
-        let object_name = self.parse_object_name(false)?;
+        let mut object_name = self.parse_object_name(false)?;
+        // Snowflake class instance method invocation: <instance>!<method>(args)
+        // e.g. `CALL my_model!FORECAST(FORECASTING_PERIODS => 7)`
+        // See https://docs.snowflake.com/en/sql-reference/classes
+        if self.consume_token(&Token::ExclamationMark) {
+            let method = self.parse_identifier(false)?.unwrap();
+            object_name.0.push(method);
+        }
         if self.peek_token_is(&Token::LParen) {
             match self.parse_function(object_name)? {
                 Expr::Function(f) => Ok(Statement::Call(f)),
