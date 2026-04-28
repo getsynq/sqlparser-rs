@@ -678,6 +678,18 @@ impl<'a> Parser<'a> {
                 Keyword::TRUNCATE => Ok(self.parse_truncate()?),
                 Keyword::MSCK => Ok(self.parse_msck()?),
                 Keyword::CREATE => Ok(self.parse_create()?),
+                // ClickHouse: `REPLACE TABLE name ...` is shorthand for
+                // `CREATE OR REPLACE TABLE name ...`.
+                Keyword::REPLACE
+                    if dialect_of!(self is ClickHouseDialect | GenericDialect)
+                        && matches!(
+                            self.peek_token_kind(),
+                            Token::Word(w) if w.keyword == Keyword::TABLE
+                        ) =>
+                {
+                    self.expect_keyword(Keyword::TABLE)?;
+                    Ok(self.parse_create_table(true, false, None, false)?)
+                }
                 Keyword::CACHE => Ok(self.parse_cache_table()?),
                 Keyword::DROP => Ok(self.parse_drop()?),
                 Keyword::DISCARD => Ok(self.parse_discard()?),

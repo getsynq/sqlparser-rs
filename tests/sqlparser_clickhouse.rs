@@ -200,6 +200,19 @@ fn parse_kill() {
 }
 
 #[test]
+fn parse_replace_table() {
+    // ClickHouse: `REPLACE TABLE ...` is shorthand for `CREATE OR REPLACE TABLE ...`.
+    clickhouse().one_statement_parses_to(
+        "REPLACE TABLE base.t1 (n UInt64) ENGINE=MergeTree ORDER BY n",
+        "CREATE OR REPLACE TABLE base.t1 (n UInt64) ENGINE=MergeTree ORDER BY (n)",
+    );
+    clickhouse().one_statement_parses_to(
+        "REPLACE TABLE myOldTable ENGINE=MergeTree() ORDER BY CounterID AS SELECT * FROM myOldTable WHERE CounterID < 12345",
+        "CREATE OR REPLACE TABLE myOldTable ENGINE=MergeTree() ORDER BY (CounterID) AS SELECT * FROM myOldTable WHERE CounterID < 12345",
+    );
+}
+
+#[test]
 fn parse_create_table_order_by() {
     clickhouse().one_statement_parses_to(
         "CREATE TABLE analytics.int_user_stats (`user_id` STRING, `num_events` UInt64) ENGINE=ReplicatedMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}') ORDER BY tuple() SETTINGS index_granularity = 8192",
