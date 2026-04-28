@@ -6167,6 +6167,31 @@ impl<'a> Parser<'a> {
         if dialect_of!(self is SnowflakeDialect) {
             return self.parse_snowflake_block(true);
         }
+
+        // Databricks: DECLARE [OR REPLACE] [VARIABLE] name [type] [DEFAULT expr]
+        // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-aux-var-declare.html
+        if dialect_of!(self is DatabricksDialect) {
+            let _ = self.parse_keywords(&[Keyword::OR, Keyword::REPLACE]);
+            let _ = self.parse_keyword(Keyword::VARIABLE);
+            let name = self.parse_identifier(false)?.unwrap();
+            // Optional data type (DEFAULT may follow directly without a type)
+            let saw_default = self.parse_keyword(Keyword::DEFAULT);
+            if !saw_default && !matches!(self.peek_token().token, Token::SemiColon | Token::EOF) {
+                let _ = self.parse_data_type()?;
+            }
+            if saw_default || self.parse_keyword(Keyword::DEFAULT) {
+                let _ = self.parse_expr()?;
+            }
+            return Ok(Statement::SetVariable {
+                local: false,
+                hivevar: false,
+                tuple: false,
+                variable: ObjectName(vec![name]),
+                value: vec![],
+                additional_assignments: vec![],
+            });
+        }
+
         let name = self.parse_identifier(false)?.unwrap();
 
         // BigQuery-style: DECLARE var [, ...] type [DEFAULT expr]
