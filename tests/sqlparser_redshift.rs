@@ -778,3 +778,23 @@ fn test_redshift_select_star_exclude() {
         .parse_sql_statements("SELECT t.* EXCLUDE (id) FROM t")
         .unwrap();
 }
+
+#[test]
+fn parse_create_external_function_lambda() {
+    // Redshift CREATE EXTERNAL FUNCTION with LAMBDA / IAM_ROLE / RETRY_TIMEOUT clauses.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_EXTERNAL_FUNCTION.html
+    redshift()
+        .parse_sql_statements(
+            "CREATE EXTERNAL FUNCTION exfunc_sum(INT, INT) RETURNS INT VOLATILE \
+             LAMBDA 'lambda_sum' IAM_ROLE 'arn:aws:iam::123456789012:role/Redshift-Exfunc-Test'",
+        )
+        .unwrap();
+    redshift()
+        .parse_sql_statements(
+            "CREATE OR REPLACE EXTERNAL FUNCTION exfunc_upper(varchar) RETURNS varchar VOLATILE \
+             LAMBDA 'exfunc_sleep_3' \
+             IAM_ROLE 'arn:aws:iam::123456789012:role/Redshift-Exfunc-Test' \
+             RETRY_TIMEOUT 3000",
+        )
+        .unwrap();
+}
