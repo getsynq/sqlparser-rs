@@ -12470,6 +12470,8 @@ impl<'a> Parser<'a> {
                 value_alias,
                 attribute_alias,
             })
+        } else if self.peek_semantic_view_call() {
+            return self.parse_semantic_view_table_factor();
         } else if self.parse_keyword_with_tokens(Keyword::TABLE, &[Token::LParen]) {
             // parse table function (SELECT * FROM TABLE (<expr>) [ AS <alias> ])
             let expr = self.parse_expr()?;
@@ -12597,6 +12599,14 @@ impl<'a> Parser<'a> {
                         TableFactor::TableSample { .. } => {}
                         TableFactor::ExternalQuery { .. } => {}
                         TableFactor::RedshiftUnpivot { .. } => {}
+                        TableFactor::SemanticView { alias, .. } => {
+                            if let Some(inner_alias) = alias {
+                                return Err(ParserError::ParserError(
+                                    format!("duplicate alias {inner_alias}").into(),
+                                ));
+                            }
+                            alias.replace(outer_alias);
+                        }
                         TableFactor::MatchRecognize { alias, .. } => {
                             if let Some(inner_alias) = alias {
                                 return Err(ParserError::ParserError(
@@ -12719,6 +12729,9 @@ impl<'a> Parser<'a> {
                         *alias = Some(prefix_alias);
                     }
                     TableFactor::Pivot { alias, .. } | TableFactor::Unpivot { alias, .. } => {
+                        *alias = Some(prefix_alias);
+                    }
+                    TableFactor::SemanticView { alias, .. } => {
                         *alias = Some(prefix_alias);
                     }
                     TableFactor::TableSample { .. }
@@ -13171,6 +13184,106 @@ impl<'a> Parser<'a> {
         let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
         Ok(TableFactor::MatchRecognize {
             table: Box::new(table),
+            alias,
+        })
+    }
+
+    fn peek_semantic_view_call(&self) -> bool {
+        matches!(
+            self.peek_tokens(),
+            [
+                Token::Word(Word { value: name, .. }),
+                Token::LParen,
+            ] if name.eq_ignore_ascii_case("SEMANTIC_VIEW")
+        )
+    }
+
+    fn peek_semantic_view_clause_keyword(&self) -> Option<&'static str> {
+        if let Token::Word(Word { value, .. }) = &self.peek_token().token {
+            if value.eq_ignore_ascii_case("DIMENSIONS") {
+                return Some("DIMENSIONS");
+            }
+            if value.eq_ignore_ascii_case("METRICS") {
+                return Some("METRICS");
+            }
+            if value.eq_ignore_ascii_case("FACTS") {
+                return Some("FACTS");
+            }
+        }
+        None
+    }
+
+    fn parse_semantic_view_item(&mut self) -> Result<SelectItem, ParserError> {
+        // Parse a single dimension/metric/fact item.
+        // Supports:
+        //   - qualified wildcards (`customer.*`)
+        //   - expressions, optionally followed by an explicit `AS <alias>`
+        // Implicit aliases are NOT consumed because the next token may be a
+        // clause keyword (DIMENSIONS, METRICS, FACTS, WHERE) that closes the
+        // current list.
+        let start_span = self.index;
+        let item = match self.parse_wildcard_expr()? {
+            WildcardExpr::QualifiedWildcard(prefix) => {
+                SelectItem::QualifiedWildcard(prefix, self.parse_wildcard_additional_options()?)
+            }
+            WildcardExpr::Wildcard => {
+                SelectItem::Wildcard(self.parse_wildcard_additional_options()?)
+            }
+            WildcardExpr::Expr(expr) => {
+                let expr_with_location = expr.spanning(self.span_from_index(start_span));
+                if self.parse_keyword(Keyword::AS) {
+                    let alias = self.parse_identifier(false)?;
+                    SelectItem::ExprWithAlias {
+                        expr: expr_with_location,
+                        alias,
+                    }
+                } else {
+                    SelectItem::UnnamedExpr(expr_with_location)
+                }
+            }
+        };
+        Ok(item)
+    }
+
+    fn parse_semantic_view_table_factor(&mut self) -> Result<TableFactor, ParserError> {
+        // Consume the SEMANTIC_VIEW identifier and opening paren.
+        self.next_token();
+        self.expect_token(&Token::LParen)?;
+        let name = self.parse_object_name(false)?;
+        let mut clauses: Vec<SemanticViewClause> = Vec::new();
+        loop {
+            if self.peek_token().token == Token::RParen {
+                break;
+            }
+            if self.parse_keyword(Keyword::WHERE) {
+                let expr = self.parse_expr()?;
+                clauses.push(SemanticViewClause::Where(expr));
+                continue;
+            }
+            match self.peek_semantic_view_clause_keyword() {
+                Some("DIMENSIONS") => {
+                    self.next_token();
+                    let items = self.parse_comma_separated(Parser::parse_semantic_view_item)?;
+                    clauses.push(SemanticViewClause::Dimensions(items));
+                }
+                Some("METRICS") => {
+                    self.next_token();
+                    let items = self.parse_comma_separated(Parser::parse_semantic_view_item)?;
+                    clauses.push(SemanticViewClause::Metrics(items));
+                }
+                Some("FACTS") => {
+                    self.next_token();
+                    let items = self.parse_comma_separated(Parser::parse_semantic_view_item)?;
+                    clauses.push(SemanticViewClause::Facts(items));
+                }
+                _ => break,
+            }
+        }
+        self.expect_token(&Token::RParen)?;
+        let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+        Ok(TableFactor::SemanticView {
+            name,
+            clauses,
             alias,
         })
     }
