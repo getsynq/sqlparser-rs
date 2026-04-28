@@ -2858,6 +2858,19 @@ fn test_snowflake_execute_immediate_from() {
     snowflake()
         .parse_sql_statements("EXECUTE IMMEDIATE FROM '@mystage/script.sql'")
         .unwrap();
+    // Snowflake also accepts a trailing `USING (var => value, ...)` bindings
+    // clause and `<option> = <value>` flags such as `DRY_RUN = TRUE`.
+    // https://docs.snowflake.com/en/sql-reference/sql/execute-immediate-from
+    snowflake()
+        .parse_sql_statements(
+            "EXECUTE IMMEDIATE FROM @my_stage/scripts/setup.sql USING (env => 'dev', retention_time => 0)",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements(
+            "EXECUTE IMMEDIATE FROM @my_stage/scripts/setup-env.sql USING (DEPLOYMENT_TYPE => 'prod') DRY_RUN = TRUE",
+        )
+        .unwrap();
 }
 
 #[test]
@@ -2965,6 +2978,10 @@ fn test_snowflake_execute_task() {
         other => panic!("expected ExecuteTask, got {other:?}"),
     }
     snowflake().verified_stmt("EXECUTE TASK my_task");
+    // Snowflake also accepts a trailing `USING CONFIG = <expr>` clause.
+    snowflake()
+        .parse_sql_statements("EXECUTE TASK my_root_task USING CONFIG = $$ {\"k\": 1} $$")
+        .unwrap();
 }
 
 #[test]
