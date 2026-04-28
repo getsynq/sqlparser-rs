@@ -14948,10 +14948,15 @@ impl<'a> Parser<'a> {
             return Ok(Statement::ExecuteAs { user });
         }
 
-        // Snowflake: EXECUTE TASK <name>
+        // Snowflake: EXECUTE TASK <name> [ USING CONFIG = <expr> ]
         // https://docs.snowflake.com/en/sql-reference/sql/execute-task
         if self.parse_keyword(Keyword::TASK) {
             let name = self.parse_object_name(false)?;
+            if self.parse_keyword(Keyword::USING) {
+                let _ = self.parse_identifier(false)?;
+                let _ = self.consume_token(&Token::Eq);
+                let _ = self.parse_expr()?;
+            }
             return Ok(Statement::ExecuteTask { name });
         }
 
@@ -14962,6 +14967,28 @@ impl<'a> Parser<'a> {
         if self.parse_keyword(Keyword::IMMEDIATE) {
             if self.parse_keyword(Keyword::FROM) {
                 let path = self.parse_expr()?;
+                // Snowflake: optional `USING ( name => value, ... )` bindings
+                // followed by trailing `<option> = <value>` clauses (e.g. DRY_RUN = TRUE).
+                // We don't surface them in the AST since they don't carry lineage.
+                if self.parse_keyword(Keyword::USING) {
+                    self.expect_token(&Token::LParen)?;
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+                while matches!(self.peek_token_kind(), Token::Word(_))
+                    && self.peek_nth_token(1).token == Token::Eq
+                {
+                    self.next_token();
+                    self.next_token();
+                    let _ = self.parse_expr()?;
+                }
                 return Ok(Statement::Execute {
                     name: Ident::new("").empty_span(),
                     parameters: vec![],
