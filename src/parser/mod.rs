@@ -6436,6 +6436,12 @@ impl<'a> Parser<'a> {
 
         let with = self.parse_options(Keyword::WITH)?;
 
+        // PostgreSQL: optional TABLESPACE name. Storage hint with no lineage
+        // value, so we accept but discard.
+        if self.parse_keyword(Keyword::TABLESPACE) {
+            let _ = self.parse_identifier(false)?;
+        }
+
         let predicate = if self.parse_keyword(Keyword::WHERE) {
             Some(self.parse_expr()?)
         } else {
@@ -7025,6 +7031,13 @@ impl<'a> Parser<'a> {
             // Redshift: BACKUP YES/NO, ENCODE type
             if self.parse_keyword(Keyword::BACKUP) {
                 let _ = self.parse_one_of_keywords(&[Keyword::YES, Keyword::NO]);
+                continue;
+            }
+
+            // PostgreSQL: TABLESPACE name. Storage hint with no lineage value;
+            // accept and discard.
+            if self.parse_keyword(Keyword::TABLESPACE) {
+                let _ = self.parse_identifier(false)?;
                 continue;
             }
 
