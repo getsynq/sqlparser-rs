@@ -5274,6 +5274,29 @@ impl<'a> Parser<'a> {
         let table_name = self.parse_object_name(false)?;
         let (columns, constraints, _) = self.parse_columns()?;
 
+        // BigQuery: optional `WITH PARTITION COLUMNS [(col_list)]` and
+        // `WITH CONNECTION connection_name` clauses before OPTIONS().
+        // https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_external_table_statement
+        loop {
+            if self.parse_keywords(&[Keyword::WITH, Keyword::PARTITION, Keyword::COLUMNS]) {
+                if self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+            } else if self.parse_keywords(&[Keyword::WITH, Keyword::CONNECTION]) {
+                let _ = self.parse_object_name(false)?;
+            } else {
+                break;
+            }
+        }
+
         let hive_distribution = self.parse_hive_distribution()?;
         let hive_formats = self.parse_hive_formats()?;
 

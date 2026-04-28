@@ -1561,6 +1561,33 @@ fn test_create_external_table_with_options() {
 }
 
 #[test]
+fn test_create_external_table_with_partition_columns() {
+    // BigQuery `WITH PARTITION COLUMNS` (auto-detect) and with explicit list, plus
+    // `WITH CONNECTION` — clauses are accepted; their content is not preserved in AST.
+    bigquery()
+        .parse_sql_statements(
+            "CREATE EXTERNAL TABLE dataset.AutoHivePartitionedTable \
+             WITH PARTITION COLUMNS \
+             OPTIONS (uris = ['gs://bucket/path/*'], format = 'PARQUET')",
+        )
+        .unwrap();
+    bigquery()
+        .parse_sql_statements(
+            "CREATE EXTERNAL TABLE dataset.CustomHivePartitionedTable \
+             WITH PARTITION COLUMNS (field_1 STRING, field_2 INT64) \
+             OPTIONS (uris = ['gs://bucket/path/*'], format = 'PARQUET')",
+        )
+        .unwrap();
+    bigquery()
+        .parse_sql_statements(
+            "CREATE OR REPLACE EXTERNAL TABLE mydataset.newtable (x INT64, y STRING) \
+             WITH CONNECTION myproject.us.myconnection \
+             OPTIONS(format = \"PARQUET\")",
+        )
+        .unwrap();
+}
+
+#[test]
 fn test_create_table_with_options() {
     bigquery().verified_stmt(
         "CREATE TABLE `pr`.`ts`.`salesforce_accounts` (account_name STRING) OPTIONS (description = \"Account name\")",
