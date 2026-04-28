@@ -4449,6 +4449,87 @@ fn test_postgres_variadic_argument() {
 }
 
 #[test]
+fn test_postgres_is_json_predicate() {
+    // SQL/JSON predicate: IS [NOT] JSON [VALUE | OBJECT | ARRAY | SCALAR]
+    // [WITH | WITHOUT UNIQUE [KEYS]]. Postgres 16+ / SQL:2023.
+    // https://www.postgresql.org/docs/current/functions-json.html
+    let cases: &[(&str, JsonItemType, Option<bool>, bool)] = &[
+        (
+            "SELECT js IS JSON FROM t",
+            JsonItemType::Default,
+            None,
+            false,
+        ),
+        (
+            "SELECT js IS JSON VALUE FROM t",
+            JsonItemType::Value,
+            None,
+            false,
+        ),
+        (
+            "SELECT js IS JSON OBJECT FROM t",
+            JsonItemType::Object,
+            None,
+            false,
+        ),
+        (
+            "SELECT js IS JSON ARRAY FROM t",
+            JsonItemType::Array,
+            None,
+            false,
+        ),
+        (
+            "SELECT js IS JSON SCALAR FROM t",
+            JsonItemType::Scalar,
+            None,
+            false,
+        ),
+        (
+            "SELECT js IS NOT JSON FROM t",
+            JsonItemType::Default,
+            None,
+            true,
+        ),
+        (
+            "SELECT js IS JSON ARRAY WITH UNIQUE KEYS FROM t",
+            JsonItemType::Array,
+            Some(true),
+            false,
+        ),
+        (
+            "SELECT js IS JSON OBJECT WITHOUT UNIQUE KEYS FROM t",
+            JsonItemType::Object,
+            Some(false),
+            false,
+        ),
+    ];
+    for (sql, item, uniq, neg) in cases {
+        let stmt = pg().verified_stmt(sql);
+        let Statement::Query(q) = stmt else {
+            panic!("expected query for {sql}");
+        };
+        let SetExpr::Select(sel) = *q.body else {
+            panic!("expected SELECT for {sql}");
+        };
+        let SelectItem::UnnamedExpr(expr) = &*sel.projection[0] else {
+            panic!("expected unnamed expr for {sql}");
+        };
+        let Expr::IsJson {
+            item_type,
+            unique_keys,
+            negated,
+            ..
+        } = &**expr
+        else {
+            panic!("expected IsJson predicate for {sql}");
+        };
+        assert_eq!(item_type, item, "item type for {sql}");
+        assert_eq!(unique_keys, uniq, "unique keys for {sql}");
+        assert_eq!(*negated, *neg, "negated for {sql}");
+    }
+}
+
+#[test]
 fn test_postgres_for_update_not_an_alias() {
     // `FOR UPDATE` / `FOR SHARE` are locking clauses, not table/column aliases.
     // Without `FOR` being reserved, parsers consumed it as the alias for `mytable`.

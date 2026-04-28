@@ -304,6 +304,31 @@ impl fmt::Display for Interval {
     }
 }
 
+/// Item type for the SQL/JSON `IS [NOT] JSON` predicate.
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum JsonItemType {
+    /// No item type specified (defaults to VALUE per the SQL spec).
+    Default,
+    Value,
+    Object,
+    Array,
+    Scalar,
+}
+
+impl fmt::Display for JsonItemType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JsonItemType::Default => Ok(()),
+            JsonItemType::Value => write!(f, " VALUE"),
+            JsonItemType::Object => write!(f, " OBJECT"),
+            JsonItemType::Array => write!(f, " ARRAY"),
+            JsonItemType::Scalar => write!(f, " SCALAR"),
+        }
+    }
+}
+
 /// JsonOperator
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -542,6 +567,14 @@ pub enum Expr {
     OuterJoin(Box<Expr>),
     /// `IS NOT DISTINCT FROM` operator
     IsNotDistinctFrom(Box<Expr>, Box<Expr>),
+    /// `<expr> IS [NOT] JSON [VALUE | OBJECT | ARRAY | SCALAR]
+    /// [WITH | WITHOUT UNIQUE [KEYS]]` — SQL/JSON predicate (Postgres 16+, SQL:2023).
+    IsJson {
+        expr: Box<Expr>,
+        negated: bool,
+        item_type: JsonItemType,
+        unique_keys: Option<bool>,
+    },
     /// `[ NOT ] IN (val1, val2, ...)`
     InList {
         expr: Box<Expr>,
@@ -1220,6 +1253,25 @@ impl fmt::Display for Expr {
             }
             Expr::IsDistinctFrom(a, b) => write!(f, "{a} IS DISTINCT FROM {b}"),
             Expr::IsNotDistinctFrom(a, b) => write!(f, "{a} IS NOT DISTINCT FROM {b}"),
+            Expr::IsJson {
+                expr,
+                negated,
+                item_type,
+                unique_keys,
+            } => {
+                write!(
+                    f,
+                    "{} IS{} JSON{}",
+                    expr,
+                    if *negated { " NOT" } else { "" },
+                    item_type
+                )?;
+                match unique_keys {
+                    Some(true) => write!(f, " WITH UNIQUE KEYS"),
+                    Some(false) => write!(f, " WITHOUT UNIQUE KEYS"),
+                    None => Ok(()),
+                }
+            }
             Expr::Trim {
                 expr,
                 trim_where,

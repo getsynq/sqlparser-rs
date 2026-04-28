@@ -1058,6 +1058,41 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse tokens until the precedence changes
+    /// Parse the tail of `<expr> IS [NOT] JSON …`: optional item-type
+    /// (`VALUE | OBJECT | ARRAY | SCALAR`) followed by an optional
+    /// `WITH | WITHOUT UNIQUE [KEYS]` clause. The leading `IS [NOT] JSON`
+    /// has already been consumed.
+    fn parse_is_json_predicate(&mut self, expr: Expr, negated: bool) -> Result<Expr, ParserError> {
+        let item_type = if self.parse_keyword(Keyword::VALUE) {
+            JsonItemType::Value
+        } else if self.parse_keyword(Keyword::OBJECT) {
+            JsonItemType::Object
+        } else if self.parse_keyword(Keyword::ARRAY) {
+            JsonItemType::Array
+        } else if self.parse_keyword(Keyword::SCALAR) {
+            JsonItemType::Scalar
+        } else {
+            JsonItemType::Default
+        };
+        let unique_keys = if self.parse_keyword(Keyword::WITH) {
+            self.expect_keyword(Keyword::UNIQUE)?;
+            let _ = self.parse_keyword(Keyword::KEYS);
+            Some(true)
+        } else if self.parse_keyword(Keyword::WITHOUT) {
+            self.expect_keyword(Keyword::UNIQUE)?;
+            let _ = self.parse_keyword(Keyword::KEYS);
+            Some(false)
+        } else {
+            None
+        };
+        Ok(Expr::IsJson {
+            expr: Box::new(expr),
+            negated,
+            item_type,
+            unique_keys,
+        })
+    }
+
     pub fn parse_subexpr(&mut self, precedence: u8) -> Result<Expr, ParserError> {
         debug!("parsing expr");
         let mut expr = self.parse_prefix()?;
@@ -3204,7 +3239,11 @@ impl<'a> Parser<'a> {
         } else if let Token::Word(w) = &tok.token {
             match w.keyword {
                 Keyword::IS => {
-                    if self.parse_keyword(Keyword::NULL) {
+                    if self.parse_keyword(Keyword::JSON) {
+                        Ok(self.parse_is_json_predicate(expr, false)?)
+                    } else if self.parse_keywords(&[Keyword::NOT, Keyword::JSON]) {
+                        Ok(self.parse_is_json_predicate(expr, true)?)
+                    } else if self.parse_keyword(Keyword::NULL) {
                         Ok(Expr::IsNull(Box::new(expr)))
                     } else if self.parse_keywords(&[Keyword::NOT, Keyword::NULL]) {
                         Ok(Expr::IsNotNull(Box::new(expr)))
