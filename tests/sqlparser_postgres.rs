@@ -2348,6 +2348,26 @@ fn parse_create_index_with_nulls_distinct() {
 }
 
 #[test]
+fn parse_create_index_with_tablespace() {
+    pg().one_statement_parses_to(
+        "CREATE INDEX code_idx ON films (code) TABLESPACE indexspace",
+        "CREATE INDEX code_idx ON films(code)",
+    );
+    pg().one_statement_parses_to(
+        "CREATE INDEX code_idx ON films (code) TABLESPACE indexspace WHERE code > 0",
+        "CREATE INDEX code_idx ON films(code) WHERE code > 0",
+    );
+}
+
+#[test]
+fn parse_create_table_with_tablespace() {
+    pg().one_statement_parses_to(
+        "CREATE TABLE cinemas (id INT, name TEXT) TABLESPACE diskvol1",
+        "CREATE TABLE cinemas (id INT, name TEXT)",
+    );
+}
+
+#[test]
 fn parse_create_index_with_storage_parameters() {
     let sql = "CREATE INDEX title_idx ON films(title) WITH (fillfactor = 70)";
     match pg().verified_stmt(sql) {

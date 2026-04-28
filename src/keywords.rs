@@ -723,6 +723,7 @@ define_keywords!(
     TABLE,
     TABLES,
     TABLESAMPLE,
+    TABLESPACE,
     TAG,
     TASK,
     TBLPROPERTIES,
