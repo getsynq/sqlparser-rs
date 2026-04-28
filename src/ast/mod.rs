@@ -4110,6 +4110,9 @@ impl fmt::Display for Statement {
                     if !parameters.is_empty() {
                         write!(f, "({})", display_comma_separated(parameters))?;
                     }
+                    if !using.is_empty() {
+                        write!(f, " USING {}", display_comma_separated(using))?;
+                    }
                 }
                 Ok(())
             }

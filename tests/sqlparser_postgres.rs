@@ -1531,6 +1531,30 @@ fn parse_execute() {
             ],
         }
     );
+
+    // EXECUTE name USING expr [, ...] — PostgreSQL / Trino prepared-statement form
+    let stmt = pg_and_generic().verified_stmt("EXECUTE my_query USING 1, 't'");
+    assert_eq!(
+        stmt,
+        Statement::Execute {
+            name: Ident::new("my_query").empty_span(),
+            parameters: vec![],
+            immediate: None,
+            using: vec![
+                ExecuteImmediateUsingExpr {
+                    expr: Expr::Value(number("1")),
+                    alias: None,
+                },
+                ExecuteImmediateUsingExpr {
+                    expr: Expr::Value(Value::SingleQuotedString("t".to_string())),
+                    alias: None,
+                },
+            ],
+        }
+    );
+
+    pg_and_generic()
+        .verified_stmt("EXECUTE my_query(1) USING TIMESTAMP '2026-04-14 19:50:53.345314 Z'");
 }
 
 #[test]

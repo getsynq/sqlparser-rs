@@ -14741,11 +14741,28 @@ impl<'a> Parser<'a> {
             self.expect_token(&Token::RParen)?;
         }
 
+        // PostgreSQL / Trino: EXECUTE name [(params)] USING expr [AS alias] [, ...]
+        // https://www.postgresql.org/docs/current/sql-execute.html
+        // https://trino.io/docs/current/sql/execute.html
+        let using = if self.parse_keyword(Keyword::USING) {
+            self.parse_comma_separated(|p| {
+                let expr = p.parse_expr()?;
+                let alias = if p.parse_keyword(Keyword::AS) {
+                    Some(p.parse_identifier(false)?.unwrap())
+                } else {
+                    None
+                };
+                Ok(ExecuteImmediateUsingExpr { expr, alias })
+            })?
+        } else {
+            vec![]
+        };
+
         Ok(Statement::Execute {
             name,
             parameters,
             immediate: None,
-            using: vec![],
+            using,
         })
     }
 
