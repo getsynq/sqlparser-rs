@@ -2925,3 +2925,26 @@ fn test_snowflake_execute_task() {
     }
     snowflake().verified_stmt("EXECUTE TASK my_task");
 }
+
+#[test]
+fn test_snowflake_call_class_instance_method() {
+    // Snowflake class instance method invocation: <instance>!<method>(args).
+    // Used with Cortex ML/forecast classes and Native App class instances.
+    // https://docs.snowflake.com/en/sql-reference/classes/forecast/methods/forecast
+    let sql = "CALL my_model!FORECAST(FORECASTING_PERIODS => 7)";
+    let stmt = snowflake()
+        .parse_sql_statements(sql)
+        .unwrap()
+        .pop()
+        .unwrap();
+    match stmt {
+        Statement::Call(func) => {
+            assert_eq!(func.name.to_string(), "my_model.FORECAST");
+        }
+        other => panic!("expected Call, got {other:?}"),
+    }
+
+    // With a quoted, multi-part instance name.
+    let sql = r#"CALL "DB"."SCHEMA"."MODEL"!FORECAST(FORECASTING_PERIODS => 7)"#;
+    snowflake().parse_sql_statements(sql).unwrap();
+}
