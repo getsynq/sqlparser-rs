@@ -115,6 +115,7 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
 - **Always rebuild before corpus run**: `cargo build --release --bin corpus-runner` — stale binary produces stale reports
 - **Refresh baseline after each accepted commit**: `cp target/corpus-report.json target/corpus-report-baseline.json`. Otherwise `compare-corpus-reports.js` credits old deltas and can hide fresh regressions.
+- Adding a real dispatch in `parse_create` for a previously-unsupported `CREATE <X>` shape can flag *new* corpus failures: files that slipped through the generic skip-until-semicolon fallback are now actually parsed. Either extend support, accept on a case-by-case basis, or fall back gracefully — but expect the delta.
 - **This repo is PUBLIC** (`getsynq/sqlparser-rs`, a fork of `apache/datafusion-sqlparser-rs`). Never put customer names, workspace IDs, or internal codenames into commit messages, branch names, PR titles, file names, or function names — even anonymized SQL content must be attributed generically. Every push is mirrored into GH Archive's permanent public dataset, which force-push cannot undo.
 - **Pulling real SQL from production Clickhouse for regression coverage**: `SELECT sql FROM schema.latest_sql_definitions FINAL WHERE workspace='<name>' AND asset_type IN (...)`. `asset_type` codes from `proto/core/types/v1/asset_type.proto` that carry SQL bodies parseable by this library:
   - Snowflake: 508 view, 510 dynamic table, 511 task, 513 materialized view, 514 procedure, 515 function
@@ -261,6 +262,15 @@ Use this pattern for dialect-specific clauses that don't need AST representation
 **Reserved-keyword-as-alias carve-out** (recurring fix shape):
 - When a keyword (e.g. CLUSTER, SORT, FINAL, AT, BEFORE) is reserved only because of a specific clause (`CLUSTER BY`, `t AT(...)` time-travel), accept it as an identifier alias in `parse_optional_alias` when the lookahead doesn't match the clause shape (next-not-`BY`, next-not-`(`, etc.).
 - Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL and in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
+
+**Prefer `WithSpan<Ident>` in new AST fields:**
+`parse_identifier(in_table_clause)?` returns `WithSpan<Ident>`. Keep that wrapping in new AST nodes so kernel-cll lineage can surface source positions. Reach for `parse_identifier_no_span()` only when there's a specific reason not to carry the span (e.g. matching an existing surrounding type that's still plain `Ident`).
+
+**No `peek_keyword`:**
+For one-token keyword lookahead, use `matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::FOO)`. For fixed-length sequences use `peek_keywords::<N>() -> [Keyword; N]`. There is no `peek_keyword(Keyword::FOO) -> bool`.
+
+**Match non-keyword words case-insensitively, don't add to `keywords.rs`:**
+Words that appear only in narrow constructs (e.g. `SEMANTIC`, `EXCLUDING`, `ADDITIVE`, `SYNONYMS`, `CORTEX`) shouldn't go in `ALL_KEYWORDS` — adding them risks breaking identifier usage and the reserved-alias lists. Match with `Token::Word(w) if w.value.eq_ignore_ascii_case("FOO")` (or the `peek_word_ci` / `parse_word_ci` helpers in the SEMANTIC VIEW parser).
 
 **Tokenizer `Number("N.")` quirk:**
 The tokenizer greedily folds a trailing `.` into the number token, so `proj-NNN.dataset` produces `Number("NNN.")` followed by `Word("dataset")`. To consume the digit prefix as part of a hyphenated identifier and keep the dot as a separator, mutate the just-consumed token in place: `self.tokens[idx].token = Token::Period;` then `prev_token()` so the surrounding `parse_object_name` loop continues. See the BigQuery hyphenated project-ID block in `parse_identifier` for the template.
