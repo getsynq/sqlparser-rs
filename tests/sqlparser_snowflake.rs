@@ -2832,6 +2832,24 @@ fn test_snowflake_create_hybrid_table() {
 }
 
 #[test]
+fn test_snowflake_virtual_column_as_expr() {
+    // Snowflake virtual computed columns: `<col> <type> AS (<expr>)`
+    // https://docs.snowflake.com/en/sql-reference/sql/create-table
+    let sql = "CREATE OR REPLACE TABLE t (a INT, b VARCHAR(8) AS (IFF(a IS NULL, 'x', 'y')))";
+    snowflake().verified_stmt(sql);
+
+    // Bare AS <expr> form (no outer parens) seen in real customer DDL.
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE TABLE t (a INT, b VARCHAR(8) AS IFF(a IS NULL, 'x', 'y'))",
+        )
+        .unwrap();
+    snowflake()
+        .parse_sql_statements("CREATE TABLE t (a INT, b TIMESTAMP AS CAST(a AS TIMESTAMP))")
+        .unwrap();
+}
+
+#[test]
 fn test_snowflake_execute_immediate_from() {
     // Snowflake `EXECUTE IMMEDIATE FROM <stage_path>` runs SQL stored in a file.
     snowflake()
