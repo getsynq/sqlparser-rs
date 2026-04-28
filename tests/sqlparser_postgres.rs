@@ -1479,6 +1479,7 @@ fn parse_execute() {
             name: Ident::new("a").empty_span(),
             parameters: vec![],
             immediate: None,
+            immediate_keyword: false,
             into: vec![],
             using: vec![],
         }
@@ -1494,6 +1495,7 @@ fn parse_execute() {
                 Expr::Value(Value::SingleQuotedString("t".to_string()))
             ],
             immediate: None,
+            immediate_keyword: false,
             into: vec![],
             using: vec![],
         }
@@ -1509,6 +1511,7 @@ fn parse_execute() {
             immediate: Some(Expr::Value(Value::SingleQuotedString(
                 "SELECT 1".to_string()
             ))),
+            immediate_keyword: true,
             into: vec![],
             using: vec![],
         }
@@ -1524,6 +1527,7 @@ fn parse_execute() {
             immediate: Some(Expr::Value(Value::SingleQuotedString(
                 "SELECT ?".to_string()
             ))),
+            immediate_keyword: true,
             into: vec![],
             using: vec![
                 ExecuteImmediateUsingExpr {
@@ -1546,6 +1550,7 @@ fn parse_execute() {
             name: Ident::new("my_query").empty_span(),
             parameters: vec![],
             immediate: None,
+            immediate_keyword: false,
             into: vec![],
             using: vec![
                 ExecuteImmediateUsingExpr {
@@ -1566,6 +1571,12 @@ fn parse_execute() {
     // PL/pgSQL: EXECUTE 'sql' INTO target USING args
     pg_and_generic()
         .verified_stmt("EXECUTE 'SELECT count(*) FROM t WHERE u = $1' INTO c USING checked_user");
+
+    // PL/pgSQL: EXECUTE command-string built by string concatenation.
+    // https://www.postgresql.org/docs/current/plpgsql-statements.html
+    pg_and_generic().verified_stmt(
+        "EXECUTE 'UPDATE tbl SET ' || quote_ident(colname) || ' = ' || quote_literal(newvalue)",
+    );
 
     // BigQuery scripting: EXECUTE IMMEDIATE 'sql' INTO var USING args
     pg_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT ? * (? + 2)' INTO y USING 1, 3");

@@ -2473,8 +2473,13 @@ pub enum Statement {
     Execute {
         name: WithSpan<Ident>,
         parameters: Vec<Expr>,
-        /// For `EXECUTE IMMEDIATE 'sql'` syntax (Trino, Oracle, etc.)
+        /// For `EXECUTE IMMEDIATE 'sql'` syntax (Trino, Oracle, etc.) and the
+        /// PostgreSQL PL/pgSQL `EXECUTE command-string` form. The
+        /// `immediate_keyword` flag tells which surface form was used.
         immediate: Option<Expr>,
+        /// True when the SQL had the literal `IMMEDIATE` keyword. False for the
+        /// PL/pgSQL `EXECUTE command-string` form which omits it.
+        immediate_keyword: bool,
         /// `INTO var1 [, var2, ...]` clause receiving query output. Used by
         /// BigQuery scripting (`EXECUTE IMMEDIATE 'sql' INTO y USING args`)
         /// and Postgres PL/pgSQL (`EXECUTE 'sql' INTO target USING args`).
@@ -4182,11 +4187,16 @@ impl fmt::Display for Statement {
                 name,
                 parameters,
                 immediate,
+                immediate_keyword,
                 into,
                 using,
             } => {
                 if let Some(imm) = immediate {
-                    write!(f, "EXECUTE IMMEDIATE {imm}")?;
+                    if *immediate_keyword {
+                        write!(f, "EXECUTE IMMEDIATE {imm}")?;
+                    } else {
+                        write!(f, "EXECUTE {imm}")?;
+                    }
                 } else {
                     write!(f, "EXECUTE {name}")?;
                     if !parameters.is_empty() {
