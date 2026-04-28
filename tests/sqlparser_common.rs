@@ -4838,7 +4838,7 @@ fn parse_json_keyword() {
     let select = verified_only_select(sql);
     assert_eq!(
         &Expr::TypedString {
-            data_type: DataType::JSON,
+            data_type: DataType::JSON(None),
             value: r#"{
   "id": 10,
   "type": "fruit",

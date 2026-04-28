@@ -578,12 +578,12 @@ fn parse_typed_struct_syntax() {
     assert_eq!(
         &Expr::Struct {
             values: vec![Expr::TypedString {
-                data_type: DataType::JSON,
+                data_type: DataType::JSON(None),
                 value: r#"{"class" : {"students" : [{"name" : "Jane"}]}}"#.to_string(),
             },],
             fields: vec![StructField {
                 field_name: None,
-                field_type: DataType::JSON,
+                field_type: DataType::JSON(None),
                 colon: false,
                 not_null: false,
                 options: vec![],

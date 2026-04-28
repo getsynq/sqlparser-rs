@@ -265,8 +265,14 @@ pub enum DataType {
     /// field, e.g. `INTERVAL DAY TO SECOND`, `INTERVAL YEAR TO MONTH` (ANSI /
     /// Databricks / Spark). Bare `INTERVAL` has no qualifier.
     Interval(Option<IntervalQualifier>),
-    /// JSON type used in BigQuery
-    JSON,
+    /// JSON type used in BigQuery, ClickHouse, and Snowflake.
+    ///
+    /// ClickHouse supports a parametrized form `JSON(max_dynamic_paths=N, path SubType, SKIP path, ...)`
+    /// where the body is preserved verbatim for roundtrip — the parameters
+    /// don't carry lineage information.
+    ///
+    /// [ClickHouse]: https://clickhouse.com/docs/sql-reference/data-types/newjson
+    JSON(Option<String>),
     /// Regclass used in postgresql serial
     Regclass,
     /// Text
@@ -519,7 +525,8 @@ impl fmt::Display for DataType {
                 None => write!(f, "INTERVAL"),
                 Some(q) => write!(f, "INTERVAL {q}"),
             },
-            DataType::JSON => write!(f, "JSON"),
+            DataType::JSON(None) => write!(f, "JSON"),
+            DataType::JSON(Some(body)) => write!(f, "JSON({body})"),
             DataType::Regclass => write!(f, "REGCLASS"),
             DataType::Text => write!(f, "TEXT"),
             DataType::String(size) => format_type_with_optional_length(f, "STRING", size, false),

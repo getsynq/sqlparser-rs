@@ -1688,6 +1688,28 @@ fn parse_explain_with_options() {
 }
 
 #[test]
+fn parse_clickhouse_json_type_with_modifiers() {
+    // ClickHouse `JSON` accepts an optional parameter list:
+    // https://clickhouse.com/docs/sql-reference/data-types/newjson
+    clickhouse_and_generic().one_statement_parses_to(
+        "CREATE TABLE test (json JSON(max_dynamic_paths=1)) ENGINE = Memory",
+        "CREATE TABLE test (json JSON(max_dynamic_paths = 1)) ENGINE=Memory",
+    );
+
+    // Plain JSON (no parameters) still works.
+    clickhouse_and_generic().one_statement_parses_to(
+        "CREATE TABLE test (json JSON) ENGINE = Memory",
+        "CREATE TABLE test (json JSON) ENGINE=Memory",
+    );
+
+    // Multi-parameter form with path subtypes / SKIP entries.
+    clickhouse_and_generic().one_statement_parses_to(
+        "CREATE TABLE test (j JSON(max_dynamic_paths = 16, a UInt32, SKIP path.to.skip)) ENGINE = Memory",
+        "CREATE TABLE test (j JSON(max_dynamic_paths = 16, a UInt32, SKIP path.to.skip)) ENGINE=Memory",
+    );
+}
+
+#[test]
 fn test_clickhouse_trailing_commas() {
     // ClickHouse supports trailing commas in SELECT
     clickhouse().one_statement_parses_to("SELECT 1, 2, FROM t", "SELECT 1, 2 FROM t");

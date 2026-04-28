@@ -9575,7 +9575,7 @@ impl<'a> Parser<'a> {
                 Keyword::INTERVAL => Ok(DataType::Interval(
                     self.parse_optional_interval_qualifier()?,
                 )),
-                Keyword::JSON => Ok(DataType::JSON),
+                Keyword::JSON => Ok(DataType::JSON(self.parse_optional_json_type_body()?)),
                 Keyword::REGCLASS => Ok(DataType::Regclass),
                 Keyword::STRING => Ok(DataType::String(self.parse_optional_precision()?)),
                 Keyword::FIXEDSTRING => {
@@ -10335,6 +10335,67 @@ impl<'a> Parser<'a> {
         let n = self.parse_literal_uint()?;
         self.expect_token(&Token::RParen)?;
         Ok(n)
+    }
+
+    /// Consume a parenthesized body for ClickHouse-style `JSON(...)` and
+    /// return the contents as a string suitable for roundtripping. The body
+    /// has no lineage payload, so we don't bother building a proper AST for it.
+    pub fn parse_optional_json_type_body(&mut self) -> Result<Option<String>, ParserError> {
+        if !self.consume_token(&Token::LParen) {
+            return Ok(None);
+        }
+        let mut body = String::new();
+        let mut depth: i32 = 1;
+        let mut last_was_period = false;
+        loop {
+            let tok = self.next_token();
+            let s = match &tok.token {
+                Token::LParen => {
+                    depth += 1;
+                    "(".to_string()
+                }
+                Token::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                    ")".to_string()
+                }
+                Token::EOF => {
+                    return parser_err!(
+                        "Expected ) closing JSON type body, found EOF",
+                        tok.span.start
+                    );
+                }
+                Token::Comma => ",".to_string(),
+                Token::Whitespace(_) => continue,
+                Token::Period => ".".to_string(),
+                other => other.to_string(),
+            };
+            let is_period = matches!(tok.token, Token::Period);
+            let is_comma = matches!(tok.token, Token::Comma);
+            let is_lparen = matches!(tok.token, Token::LParen);
+            let is_rparen = matches!(tok.token, Token::RParen);
+            let needs_space = !body.is_empty()
+                && !last_was_period
+                && !is_period
+                && !is_comma
+                && !is_rparen
+                && !body.ends_with('(')
+                && !body.ends_with(' ');
+            if needs_space {
+                body.push(' ');
+            }
+            if is_comma {
+                body.push_str(", ");
+                last_was_period = false;
+                continue;
+            }
+            body.push_str(&s);
+            let _ = is_lparen;
+            last_was_period = is_period;
+        }
+        Ok(Some(body.trim().to_string()))
     }
 
     pub fn parse_optional_precision(&mut self) -> Result<Option<u64>, ParserError> {
