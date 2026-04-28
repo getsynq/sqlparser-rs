@@ -15018,6 +15018,54 @@ impl<'a> Parser<'a> {
             });
         }
 
+        // Snowflake admin commands that take a qualified name and optional
+        // argument list / trailing options. We discard arguments and options
+        // since they do not carry lineage information.
+        // - EXECUTE NOTEBOOK <name> [(args)]
+        //   https://docs.snowflake.com/en/sql-reference/sql/execute-notebook
+        // - EXECUTE NOTEBOOK PROJECT <name> [<option> = <value>]...
+        //   https://docs.snowflake.com/en/sql-reference/sql/execute-notebook-project
+        // - EXECUTE ALERT <name>
+        //   https://docs.snowflake.com/en/sql-reference/sql/execute-alert
+        // - EXECUTE STREAMLIT <name> [(args)]
+        if let Token::Word(w) = &self.peek_token().token {
+            let kw = w.value.to_uppercase();
+            if matches!(kw.as_str(), "NOTEBOOK" | "ALERT" | "STREAMLIT") && w.quote_style.is_none()
+            {
+                self.next_token();
+                let mut command = kw;
+                if command == "NOTEBOOK"
+                    && matches!(&self.peek_token().token, Token::Word(w2)
+                        if w2.value.eq_ignore_ascii_case("PROJECT") && w2.quote_style.is_none())
+                {
+                    self.next_token();
+                    command.push_str(" PROJECT");
+                }
+                let name = self.parse_object_name(false)?;
+                // Optional empty/argument paren list — consume balanced.
+                if self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+                // Trailing `<option> = <value>` clauses (NOTEBOOK PROJECT).
+                while matches!(self.peek_token_kind(), Token::Word(_))
+                    && self.peek_nth_token(1).token == Token::Eq
+                {
+                    self.next_token();
+                    self.next_token();
+                    let _ = self.parse_expr()?;
+                }
+                return Ok(Statement::ExecuteSnowflakeAdmin { command, name });
+            }
+        }
+
         let name = self.parse_identifier(false)?;
 
         let mut parameters = vec![];
