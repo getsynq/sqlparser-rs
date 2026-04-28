@@ -15160,10 +15160,18 @@ impl<'a> Parser<'a> {
                     name: Ident::new("").empty_span(),
                     parameters: vec![],
                     immediate: Some(path),
+                    into: vec![],
                     using: vec![],
                 });
             }
             let immediate = self.parse_expr()?;
+            // BigQuery: EXECUTE IMMEDIATE 'sql' INTO var1 [, ...] [USING ...]
+            // https://cloud.google.com/bigquery/docs/reference/standard-sql/procedural-language#execute_immediate
+            let into = if self.parse_keyword(Keyword::INTO) {
+                self.parse_comma_separated(|p| p.parse_identifier(false))?
+            } else {
+                vec![]
+            };
             let using = if self.parse_keyword(Keyword::USING) {
                 self.parse_comma_separated(|p| {
                     let expr = p.parse_expr()?;
@@ -15181,6 +15189,7 @@ impl<'a> Parser<'a> {
                 name: Ident::new("").empty_span(),
                 parameters: vec![],
                 immediate: Some(immediate),
+                into,
                 using,
             });
         }
@@ -15244,6 +15253,13 @@ impl<'a> Parser<'a> {
         // PostgreSQL / Trino: EXECUTE name [(params)] USING expr [AS alias] [, ...]
         // https://www.postgresql.org/docs/current/sql-execute.html
         // https://trino.io/docs/current/sql/execute.html
+        // PL/pgSQL: EXECUTE 'sql' INTO target USING args
+        // https://www.postgresql.org/docs/current/plpgsql-statements.html
+        let into = if self.parse_keyword(Keyword::INTO) {
+            self.parse_comma_separated(|p| p.parse_identifier(false))?
+        } else {
+            vec![]
+        };
         let using = if self.parse_keyword(Keyword::USING) {
             self.parse_comma_separated(|p| {
                 let expr = p.parse_expr()?;
@@ -15262,6 +15278,7 @@ impl<'a> Parser<'a> {
             name,
             parameters,
             immediate: None,
+            into,
             using,
         })
     }

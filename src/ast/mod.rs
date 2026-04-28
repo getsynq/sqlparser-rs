@@ -2475,6 +2475,10 @@ pub enum Statement {
         parameters: Vec<Expr>,
         /// For `EXECUTE IMMEDIATE 'sql'` syntax (Trino, Oracle, etc.)
         immediate: Option<Expr>,
+        /// `INTO var1 [, var2, ...]` clause receiving query output. Used by
+        /// BigQuery scripting (`EXECUTE IMMEDIATE 'sql' INTO y USING args`)
+        /// and Postgres PL/pgSQL (`EXECUTE 'sql' INTO target USING args`).
+        into: Vec<WithSpan<Ident>>,
         /// USING parameters for `EXECUTE IMMEDIATE 'sql' USING p1 [AS n1], p2 [AS n2]`.
         /// The optional alias is used by Databricks for named parameter markers
         /// (e.g. `USING 10 AS val` to bind `:val`).
@@ -4178,21 +4182,22 @@ impl fmt::Display for Statement {
                 name,
                 parameters,
                 immediate,
+                into,
                 using,
             } => {
                 if let Some(imm) = immediate {
                     write!(f, "EXECUTE IMMEDIATE {imm}")?;
-                    if !using.is_empty() {
-                        write!(f, " USING {}", display_comma_separated(using))?;
-                    }
                 } else {
                     write!(f, "EXECUTE {name}")?;
                     if !parameters.is_empty() {
                         write!(f, "({})", display_comma_separated(parameters))?;
                     }
-                    if !using.is_empty() {
-                        write!(f, " USING {}", display_comma_separated(using))?;
-                    }
+                }
+                if !into.is_empty() {
+                    write!(f, " INTO {}", display_comma_separated(into))?;
+                }
+                if !using.is_empty() {
+                    write!(f, " USING {}", display_comma_separated(using))?;
                 }
                 Ok(())
             }
