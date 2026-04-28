@@ -1579,6 +1579,14 @@ impl<'a> Parser<'a> {
                     }
                     _ => expr,
                 };
+                // BigQuery struct field-access wildcard: `(expr).*`. Don't
+                // consume the period here — leave it so `parse_select_item`
+                // turns the trailing `.*` into `SelectItem::ExprWildcard`.
+                if matches!(self.peek_token_ref().token, Token::Period)
+                    && matches!(self.peek_nth_token_ref(1).token, Token::Mul)
+                {
+                    return Ok(expr);
+                }
                 if !self.consume_token(&Token::Period) {
                     Ok(expr)
                 } else {
