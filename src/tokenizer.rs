@@ -1672,6 +1672,10 @@ impl<'a> Tokenizer<'a> {
 
     /// Read a triple-quoted string (the opening """ or ''' has already been consumed).
     /// The string ends when we encounter the matching closing triple-quote.
+    /// BigQuery (and dialects with backslash-escape semantics) treat `\<char>`
+    /// as an escape sequence within triple-quoted strings, so `\"` does not
+    /// participate in closing-quote detection.
+    /// https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
     fn tokenize_triple_quoted_string(
         &self,
         chars: &mut State,
@@ -1679,9 +1683,34 @@ impl<'a> Tokenizer<'a> {
         error_loc: Location,
     ) -> Result<String, TokenizerError> {
         let mut s = String::new();
+        let backslash_escapes = dialect_of!(self is MySqlDialect | BigQueryDialect | RedshiftSqlDialect | DatabricksDialect | SnowflakeDialect | ClickHouseDialect);
 
         while let Some(&ch) = chars.peek() {
-            if ch == quote_style {
+            if ch == '\\' && backslash_escapes {
+                chars.next(); // consume backslash
+                if let Some(&next) = chars.peek() {
+                    if self.unescape {
+                        let n = match next {
+                            '\'' | '\"' | '\\' | '%' | '_' => next,
+                            'b' => '\u{8}',
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            '0' if dialect_of!(self is MySqlDialect) => '\0',
+                            'Z' if dialect_of!(self is MySqlDialect) => '\u{1a}',
+                            _ => next,
+                        };
+                        s.push(n);
+                    } else {
+                        // Preserve original bytes when not unescaping.
+                        s.push(ch);
+                        s.push(next);
+                    }
+                    chars.next(); // consume escaped char
+                } else {
+                    s.push(ch);
+                }
+            } else if ch == quote_style {
                 chars.next(); // consume first quote
                 if chars.peek() == Some(&quote_style) {
                     chars.next(); // consume second quote

@@ -1687,6 +1687,15 @@ fn test_create_table_options_expression() {
         r#"CREATE TABLE t (a INT64) OPTIONS (description = """has "q" inside""")"#,
         r#"CREATE TABLE t (a INT64) OPTIONS (description = "has ""q"" inside")"#,
     );
+    // Triple-quoted with backslash-escaped quotes inside (`\"`): the escape
+    // sequence is part of the string content and must not participate in
+    // closing-quote detection. Display roundtripping doubles the quote, so we
+    // just verify the input parses successfully.
+    bigquery()
+        .parse_sql_statements(
+            r#"CREATE TABLE t (a INT64) OPTIONS (description = """\"escaped\"""")"#,
+        )
+        .unwrap();
 }
 
 #[test]
