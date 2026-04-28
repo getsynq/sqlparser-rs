@@ -1479,6 +1479,7 @@ fn parse_execute() {
             name: Ident::new("a").empty_span(),
             parameters: vec![],
             immediate: None,
+            into: vec![],
             using: vec![],
         }
     );
@@ -1493,6 +1494,7 @@ fn parse_execute() {
                 Expr::Value(Value::SingleQuotedString("t".to_string()))
             ],
             immediate: None,
+            into: vec![],
             using: vec![],
         }
     );
@@ -1507,6 +1509,7 @@ fn parse_execute() {
             immediate: Some(Expr::Value(Value::SingleQuotedString(
                 "SELECT 1".to_string()
             ))),
+            into: vec![],
             using: vec![],
         }
     );
@@ -1521,6 +1524,7 @@ fn parse_execute() {
             immediate: Some(Expr::Value(Value::SingleQuotedString(
                 "SELECT ?".to_string()
             ))),
+            into: vec![],
             using: vec![
                 ExecuteImmediateUsingExpr {
                     expr: Expr::Value(Value::SingleQuotedString("billing".to_string())),
@@ -1542,6 +1546,7 @@ fn parse_execute() {
             name: Ident::new("my_query").empty_span(),
             parameters: vec![],
             immediate: None,
+            into: vec![],
             using: vec![
                 ExecuteImmediateUsingExpr {
                     expr: Expr::Value(number("1")),
@@ -1557,6 +1562,15 @@ fn parse_execute() {
 
     pg_and_generic()
         .verified_stmt("EXECUTE my_query(1) USING TIMESTAMP '2026-04-14 19:50:53.345314 Z'");
+
+    // PL/pgSQL: EXECUTE 'sql' INTO target USING args
+    pg_and_generic()
+        .verified_stmt("EXECUTE 'SELECT count(*) FROM t WHERE u = $1' INTO c USING checked_user");
+
+    // BigQuery scripting: EXECUTE IMMEDIATE 'sql' INTO var USING args
+    pg_and_generic().verified_stmt("EXECUTE IMMEDIATE 'SELECT ? * (? + 2)' INTO y USING 1, 3");
+    pg_and_generic()
+        .verified_stmt("EXECUTE IMMEDIATE 'SELECT @a * (@b + 2)' INTO y USING 1 AS a, 3 AS b");
 }
 
 #[test]
