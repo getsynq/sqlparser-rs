@@ -14626,6 +14626,13 @@ impl<'a> Parser<'a> {
             return Ok(Statement::ExecuteAs { user });
         }
 
+        // Snowflake: EXECUTE TASK <name>
+        // https://docs.snowflake.com/en/sql-reference/sql/execute-task
+        if self.parse_keyword(Keyword::TASK) {
+            let name = self.parse_object_name(false)?;
+            return Ok(Statement::ExecuteTask { name });
+        }
+
         // EXECUTE IMMEDIATE 'sql' [USING p1 [AS n1], p2 [AS n2]] — Trino, Oracle, DB2,
         // Databricks, etc. Databricks allows `AS name` aliases that bind to named
         // parameter markers (`:name`) in the SQL string. Snowflake also accepts

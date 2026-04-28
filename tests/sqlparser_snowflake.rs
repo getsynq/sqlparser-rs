@@ -2911,3 +2911,17 @@ fn test_snowflake_varchar_char_byte_length_units() {
         .parse_sql_statements("SELECT CAST(NULL AS CHAR(10 CHAR))")
         .unwrap();
 }
+
+#[test]
+fn test_snowflake_execute_task() {
+    // Snowflake EXECUTE TASK <name> triggers an ad-hoc run of a task.
+    // https://docs.snowflake.com/en/sql-reference/sql/execute-task
+    let sql = "EXECUTE TASK my_db.my_schema.my_task";
+    match snowflake().verified_stmt(sql) {
+        Statement::ExecuteTask { name } => {
+            assert_eq!(name.to_string(), "my_db.my_schema.my_task");
+        }
+        other => panic!("expected ExecuteTask, got {other:?}"),
+    }
+    snowflake().verified_stmt("EXECUTE TASK my_task");
+}
