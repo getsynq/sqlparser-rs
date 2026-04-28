@@ -721,6 +721,7 @@ define_keywords!(
     TABLES,
     TABLESAMPLE,
     TAG,
+    TASK,
     TBLPROPERTIES,
     TEMP,
     TEMPLATE,

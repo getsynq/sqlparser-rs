@@ -2431,6 +2431,13 @@ pub enum Statement {
     /// See: <https://clickhouse.com/docs/sql-reference/functions/other-functions>
     ExecuteAs { user: WithSpan<Ident> },
     /// ```sql
+    /// EXECUTE TASK <name>
+    /// ```
+    ///
+    /// Snowflake-specific statement that triggers an ad-hoc run of a task.
+    /// See: <https://docs.snowflake.com/en/sql-reference/sql/execute-task>
+    ExecuteTask { name: ObjectName },
+    /// ```sql
     /// PREPARE name [ ( data_type [, ...] ) ] AS statement
     /// ```
     ///
@@ -4108,6 +4115,9 @@ impl fmt::Display for Statement {
             }
             Statement::ExecuteAs { user } => {
                 write!(f, "EXECUTE AS {user}")
+            }
+            Statement::ExecuteTask { name } => {
+                write!(f, "EXECUTE TASK {name}")
             }
             Statement::Prepare {
                 name,
