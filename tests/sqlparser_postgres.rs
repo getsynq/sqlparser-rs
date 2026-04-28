@@ -2489,6 +2489,18 @@ fn test_savepoint() {
 }
 
 #[test]
+fn test_release_savepoint() {
+    match pg().verified_stmt("RELEASE SAVEPOINT test1") {
+        Statement::ReleaseSavepoint { name } => {
+            assert_eq!(Ident::new("test1"), name);
+        }
+        _ => unreachable!(),
+    }
+    // SAVEPOINT keyword is optional per Postgres grammar
+    pg().one_statement_parses_to("RELEASE test1", "RELEASE SAVEPOINT test1");
+}
+
+#[test]
 fn test_json() {
     let sql = "SELECT params ->> 'name' FROM events";
     let select = pg().verified_only_select(sql);

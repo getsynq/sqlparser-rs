@@ -816,6 +816,7 @@ impl<'a> Parser<'a> {
                 Keyword::REMOVE => Ok(self.parse_stage_file_operation("REMOVE")?),
                 Keyword::PUT => Ok(self.parse_stage_file_operation("PUT")?),
                 Keyword::SAVEPOINT => Ok(self.parse_savepoint()?),
+                Keyword::RELEASE => Ok(self.parse_release_savepoint()?),
                 Keyword::COMMIT => Ok(self.parse_commit()?),
                 Keyword::ROLLBACK => Ok(self.parse_rollback()?),
                 Keyword::ASSERT => Ok(self.parse_assert()?),
@@ -1132,6 +1133,14 @@ impl<'a> Parser<'a> {
     pub fn parse_savepoint(&mut self) -> Result<Statement, ParserError> {
         let name = self.parse_identifier(false)?;
         Ok(Statement::Savepoint {
+            name: name.unwrap(),
+        })
+    }
+
+    pub fn parse_release_savepoint(&mut self) -> Result<Statement, ParserError> {
+        let _ = self.parse_keyword(Keyword::SAVEPOINT);
+        let name = self.parse_identifier(false)?;
+        Ok(Statement::ReleaseSavepoint {
             name: name.unwrap(),
         })
     }
