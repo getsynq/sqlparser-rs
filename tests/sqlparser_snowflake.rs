@@ -3026,3 +3026,22 @@ fn parse_semantic_view_table_factor() {
     assert!(sql.contains("d.col_a"));
     assert!(sql.contains("m.col_b"));
 }
+
+#[test]
+fn parse_snowflake_create_external_table_with_options() {
+    // Snowflake CREATE EXTERNAL TABLE has option-name = value tail
+    // (LOCATION=@stage, PATTERN='...', FILE_FORMAT=(...), AUTO_REFRESH=...)
+    // that differs from Hive's `LOCATION 'path'`. Verify we accept it and
+    // preserve table name + columns for lineage.
+    let sql = "CREATE OR REPLACE EXTERNAL TABLE db1.sch1.tbl1 (\
+        \"ID\" DECIMAL(2, 0) AS CAST(GET_PATH(col_1, 'c1') AS DECIMAL(2, 0)), \
+        \"NAME\" VARCHAR(100) AS CAST(GET_PATH(col_1, 'c2') AS VARCHAR(100))) \
+        LOCATION=@my_stage pattern='.*[.]csv' \
+        FILE_FORMAT=(type=CSV skip_header=1) auto_refresh=FALSE";
+    let stmts = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmts.len(), 1);
+    let rendered = format!("{}", stmts[0]);
+    assert!(rendered.contains("db1.sch1.tbl1"));
+    assert!(rendered.contains("\"ID\""));
+    assert!(rendered.contains("\"NAME\""));
+}

@@ -5339,6 +5339,54 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Snowflake-style external table options: `LOCATION = @stage`, `PATTERN = '...'`,
+        // `FILE_FORMAT = (...)`, `AUTO_REFRESH = ...`, etc. These are syntactically very
+        // different from Hive's `LOCATION 'path'`, so when we see the Snowflake shape
+        // (option-name immediately followed by `=`), swallow the remaining options as raw
+        // tokens to keep the table name and columns available for lineage.
+        // https://docs.snowflake.com/en/sql-reference/sql/create-external-table
+        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && matches!(self.peek_token_kind(), Token::Word(w)
+                if matches!(w.keyword,
+                    Keyword::LOCATION
+                    | Keyword::PATTERN
+                    | Keyword::PARTITION
+                    | Keyword::COMMENT
+                    | Keyword::WITH)
+                || matches!(w.value.to_ascii_uppercase().as_str(),
+                    "AUTO_REFRESH" | "REFRESH_ON_CREATE" | "AWS_SNS_TOPIC" | "FILE_FORMAT"))
+            && matches!(self.peek_nth_token(1).token, Token::Eq)
+        {
+            let mut depth = 0i32;
+            loop {
+                match self.peek_token_kind() {
+                    Token::EOF => break,
+                    Token::SemiColon if depth == 0 => break,
+                    Token::LParen => {
+                        depth += 1;
+                        self.next_token();
+                    }
+                    Token::RParen => {
+                        if depth == 0 {
+                            break;
+                        }
+                        depth -= 1;
+                        self.next_token();
+                    }
+                    _ => {
+                        self.next_token();
+                    }
+                }
+            }
+            return Ok(CreateTableBuilder::new(table_name)
+                .columns(columns)
+                .constraints(constraints)
+                .or_replace(or_replace)
+                .if_not_exists(if_not_exists)
+                .external(true)
+                .build());
+        }
+
         let hive_distribution = self.parse_hive_distribution()?;
         let hive_formats = self.parse_hive_formats()?;
 
