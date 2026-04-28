@@ -1109,6 +1109,10 @@ impl fmt::Display for ColumnOption {
                     let expr = generation_expr.as_ref().unwrap();
                     write!(f, "GENERATED ALWAYS AS ({expr}) STORED")
                 }
+                GeneratedAs::ExpVirtual => {
+                    let expr = generation_expr.as_ref().unwrap();
+                    write!(f, "AS ({expr})")
+                }
             },
             Identity { seed, increment } => {
                 write!(f, "IDENTITY")?;
@@ -1137,6 +1141,8 @@ pub enum GeneratedAs {
     Always,
     ByDefault,
     ExpStored,
+    /// Snowflake virtual column: `<col> <type> AS (<expr>)`
+    ExpVirtual,
 }
 
 fn display_constraint_name(name: &'_ Option<Ident>) -> impl fmt::Display + '_ {

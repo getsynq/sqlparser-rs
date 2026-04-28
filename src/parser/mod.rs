@@ -7480,6 +7480,24 @@ impl<'a> Parser<'a> {
             }
         } else if self.parse_keyword(Keyword::GENERATED) {
             self.parse_optional_column_option_generated()
+        } else if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && self.parse_keyword(Keyword::AS)
+        {
+            // Snowflake virtual column: `<col> <type> AS (<expr>)`
+            // https://docs.snowflake.com/en/sql-reference/sql/create-table
+            // Also accept bare `AS <expr>` (function-call form seen in customer SQL).
+            let expr = if self.consume_token(&Token::LParen) {
+                let e = self.parse_expr()?;
+                self.expect_token(&Token::RParen)?;
+                e
+            } else {
+                self.parse_expr()?
+            };
+            Ok(Some(ColumnOption::Generated {
+                generated_as: GeneratedAs::ExpVirtual,
+                sequence_options: None,
+                generation_expr: Some(expr),
+            }))
         } else if dialect_of!(self is ClickHouseDialect | GenericDialect)
             && self.parse_keyword(Keyword::CODEC)
         {
