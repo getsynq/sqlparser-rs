@@ -41,6 +41,29 @@ fn test_snowflake_create_table() {
 }
 
 #[test]
+fn test_snowflake_odbc_escape_fn() {
+    // ODBC/JDBC scalar function escape: `{fn name(args)}` is equivalent to
+    // `name(args)`. Snowflake accepts this for JDBC/ODBC compatibility.
+    // Verify the inner function call (and its column references) is preserved
+    // for downstream lineage analysis.
+    let sql = "SELECT { fn convert(\"C1\", SQL_TIMESTAMP) } AS \"C2\" FROM t";
+    let canonical = "SELECT convert(\"C1\", SQL_TIMESTAMP) AS \"C2\" FROM t";
+    snowflake_and_generic().one_statement_parses_to(sql, canonical);
+}
+
+#[test]
+fn test_snowflake_odbc_escape_typed_literals() {
+    snowflake_and_generic()
+        .one_statement_parses_to("SELECT {d '2026-04-15'}", "SELECT DATE '2026-04-15'");
+    snowflake_and_generic()
+        .one_statement_parses_to("SELECT {t '12:34:56'}", "SELECT TIME '12:34:56'");
+    snowflake_and_generic().one_statement_parses_to(
+        "SELECT {ts '2026-04-15 12:34:56'}",
+        "SELECT TIMESTAMP '2026-04-15 12:34:56'",
+    );
+}
+
+#[test]
 fn test_snowflake_create_transient_table() {
     let sql = "CREATE TRANSIENT TABLE CUSTOMER (id INT, name VARCHAR(255))";
     match snowflake_and_generic().verified_stmt(sql) {
