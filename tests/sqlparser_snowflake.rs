@@ -2989,3 +2989,40 @@ fn test_snowflake_call_class_instance_method() {
     let sql = r#"CALL "DB"."SCHEMA"."MODEL"!FORECAST(FORECASTING_PERIODS => 7)"#;
     snowflake().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn parse_semantic_view_table_factor() {
+    // DIMENSIONS + METRICS (canonical roundtrip)
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS orders.order_date METRICS customer.customer_order_count)",
+    );
+
+    // METRICS before DIMENSIONS — preserve order
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(bank_accounts_sv METRICS bank_accounts.m_account_balance DIMENSIONS year_dim) ORDER BY year_dim",
+    );
+
+    // FACTS + WHERE
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis FACTS customer.c_customer_order_count WHERE orders.order_date < '2021-01-01' AND region.r_name = 'AMERICA')",
+    );
+
+    // Qualified wildcard items
+    snowflake().verified_stmt("SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS customer.*)");
+
+    // Expression with explicit AS alias
+    snowflake().verified_stmt(
+        "SELECT * FROM SEMANTIC_VIEW(tpch_analysis DIMENSIONS DATE_PART('year', orders.order_date) AS year)",
+    );
+
+    // Verify the AST exposes the semantic view name and column refs for lineage.
+    let ast = snowflake()
+        .parse_sql_statements(
+            "SELECT * FROM SEMANTIC_VIEW(my_view DIMENSIONS d.col_a METRICS m.col_b WHERE d.col_a > 0)",
+        )
+        .unwrap();
+    let sql = format!("{}", ast[0]);
+    assert!(sql.contains("my_view"));
+    assert!(sql.contains("d.col_a"));
+    assert!(sql.contains("m.col_b"));
+}

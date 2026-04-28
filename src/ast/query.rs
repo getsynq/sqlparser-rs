@@ -1347,6 +1347,55 @@ pub enum TableFactor {
         value_alias: Option<WithSpan<Ident>>,
         attribute_alias: Option<WithSpan<Ident>>,
     },
+    /// Snowflake `SEMANTIC_VIEW(...)` table function for querying a
+    /// semantic view.
+    ///
+    /// Syntax:
+    /// ```sql
+    /// SEMANTIC_VIEW(
+    ///   <view_name>
+    ///   [ DIMENSIONS <dim>[, ...] ]
+    ///   [ METRICS <metric>[, ...] ]
+    ///   [ FACTS <fact>[, ...] ]
+    ///   [ WHERE <expression> ]
+    /// )
+    /// ```
+    ///
+    /// See <https://docs.snowflake.com/en/user-guide/views-semantic/sql>.
+    SemanticView {
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        name: ObjectName,
+        clauses: Vec<SemanticViewClause>,
+        alias: Option<TableAlias>,
+    },
+}
+
+/// A clause inside a Snowflake `SEMANTIC_VIEW(...)` table function.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SemanticViewClause {
+    Dimensions(Vec<SelectItem>),
+    Metrics(Vec<SelectItem>),
+    Facts(Vec<SelectItem>),
+    Where(Expr),
+}
+
+impl fmt::Display for SemanticViewClause {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SemanticViewClause::Dimensions(items) => {
+                write!(f, "DIMENSIONS {}", display_comma_separated(items))
+            }
+            SemanticViewClause::Metrics(items) => {
+                write!(f, "METRICS {}", display_comma_separated(items))
+            }
+            SemanticViewClause::Facts(items) => {
+                write!(f, "FACTS {}", display_comma_separated(items))
+            }
+            SemanticViewClause::Where(expr) => write!(f, "WHERE {expr}"),
+        }
+    }
 }
 
 impl fmt::Display for TableFactor {
@@ -1598,6 +1647,21 @@ impl fmt::Display for TableFactor {
                 }
                 if let Some(attr) = attribute_alias {
                     write!(f, " AT {attr}")?;
+                }
+                Ok(())
+            }
+            TableFactor::SemanticView {
+                name,
+                clauses,
+                alias,
+            } => {
+                write!(f, "SEMANTIC_VIEW({name}")?;
+                for clause in clauses {
+                    write!(f, " {clause}")?;
+                }
+                write!(f, ")")?;
+                if let Some(alias) = alias {
+                    write!(f, " AS {alias}")?;
                 }
                 Ok(())
             }
