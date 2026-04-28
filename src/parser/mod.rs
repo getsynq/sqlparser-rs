@@ -1458,8 +1458,23 @@ impl<'a> Parser<'a> {
             | Token::DoubleQuotedByteStringLiteral(_)
             | Token::RawStringLiteral(_)
             | Token::NationalStringLiteral(_)
-            | Token::HexStringLiteral(_)
-            | Token::LBrace => {
+            | Token::HexStringLiteral(_) => {
+                self.prev_token();
+                Ok(Expr::Value(self.parse_value()?))
+            }
+            Token::LBrace => {
+                // ODBC/JDBC scalar escape sequences (Snowflake, MS SQL, MySQL etc.):
+                //   {fn name(args)}            -> equivalent to name(args)
+                //   {d 'YYYY-MM-DD'}           -> DATE 'YYYY-MM-DD'
+                //   {t 'HH:MM:SS'}             -> TIME 'HH:MM:SS'
+                //   {ts 'YYYY-MM-DD HH:MM:SS'} -> TIMESTAMP 'YYYY-MM-DD HH:MM:SS'
+                // The wrapper is purely syntactic; unwrap to the inner expression
+                // so lineage and downstream consumers see the underlying call/literal.
+                let idx = self.index;
+                if let Some(expr) = self.try_parse_odbc_escape()? {
+                    return Ok(expr);
+                }
+                self.index = idx;
                 self.prev_token();
                 Ok(Expr::Value(self.parse_value()?))
             }
@@ -2278,6 +2293,48 @@ impl<'a> Parser<'a> {
             let values = self.parse_comma_separated(Parser::parse_expr)?;
             self.expect_token(&Token::RBracket)?;
             Ok(Expr::TypedArray { data_type, values })
+        }
+    }
+
+    /// Try to parse an ODBC/JDBC scalar escape sequence.
+    /// Assumes the leading `{` has already been consumed.
+    /// Recognized forms (Snowflake, MS SQL, MySQL, etc. accept these for
+    /// JDBC/ODBC compatibility):
+    ///   `{fn name(args)}` -> `name(args)`
+    ///   `{d 'YYYY-MM-DD'}` -> `DATE 'YYYY-MM-DD'`
+    ///   `{t 'HH:MM:SS'}` -> `TIME 'HH:MM:SS'`
+    ///   `{ts 'YYYY-MM-DD HH:MM:SS'}` -> `TIMESTAMP 'YYYY-MM-DD HH:MM:SS'`
+    /// Returns `Ok(None)` if the next tokens do not match an escape; the caller
+    /// is responsible for restoring the parser index.
+    fn try_parse_odbc_escape(&mut self) -> Result<Option<Expr>, ParserError> {
+        let kind = match &self.peek_token().token {
+            Token::Word(w) if w.quote_style.is_none() => w.value.to_lowercase(),
+            _ => return Ok(None),
+        };
+        match kind.as_str() {
+            "fn" => {
+                self.next_token(); // consume `fn`
+                let name = self.parse_object_name(false)?;
+                let func_expr = self.parse_function(name)?;
+                self.expect_token(&Token::RBrace)?;
+                Ok(Some(func_expr))
+            }
+            "d" | "t" | "ts" => {
+                self.next_token(); // consume the kind word
+                let lit = self.parse_literal_string()?;
+                self.expect_token(&Token::RBrace)?;
+                let data_type = match kind.as_str() {
+                    "d" => DataType::Date,
+                    "t" => DataType::Time(None, TimezoneInfo::None),
+                    "ts" => DataType::Timestamp(None, TimezoneInfo::None),
+                    _ => unreachable!(),
+                };
+                Ok(Some(Expr::TypedString {
+                    data_type,
+                    value: lit,
+                }))
+            }
+            _ => Ok(None),
         }
     }
 
