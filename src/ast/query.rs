@@ -1669,6 +1669,302 @@ impl fmt::Display for TableFactor {
     }
 }
 
+/// A logical table inside a Snowflake `CREATE SEMANTIC VIEW ... TABLES (...)` clause.
+///
+/// Syntax:
+/// ```text
+/// [ <alias> AS ] <base_table>
+///   [ PRIMARY KEY ( <col>, ... ) ]
+///   [ UNIQUE ( <col>, ... ) ... ]
+///   [ CONSTRAINT [ <name> ] DISTINCT RANGE BETWEEN <start_col> AND <end_col> EXCLUSIVE ]
+///   [ WITH SYNONYMS [=] ( '<syn>', ... ) ]
+///   [ COMMENT = '<comment>' ]
+/// ```
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewLogicalTable {
+    pub alias: Option<WithSpan<Ident>>,
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub name: ObjectName,
+    pub primary_key: Option<Vec<WithSpan<Ident>>>,
+    pub unique_keys: Vec<Vec<WithSpan<Ident>>>,
+    pub range_constraint: Option<SemanticViewRangeConstraint>,
+    pub synonyms: Vec<String>,
+    pub comment: Option<String>,
+}
+
+impl fmt::Display for SemanticViewLogicalTable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(alias) = &self.alias {
+            write!(f, "{alias} AS ")?;
+        }
+        write!(f, "{}", self.name)?;
+        if let Some(pk) = &self.primary_key {
+            write!(f, " PRIMARY KEY ({})", display_comma_separated(pk))?;
+        }
+        for u in &self.unique_keys {
+            write!(f, " UNIQUE ({})", display_comma_separated(u))?;
+        }
+        if let Some(rc) = &self.range_constraint {
+            write!(f, " {rc}")?;
+        }
+        if !self.synonyms.is_empty() {
+            write!(f, " WITH SYNONYMS (")?;
+            let mut first = true;
+            for s in &self.synonyms {
+                if !first {
+                    f.write_str(", ")?;
+                }
+                first = false;
+                write!(f, "'{}'", crate::ast::value::escape_single_quote_string(s))?;
+            }
+            write!(f, ")")?;
+        }
+        if let Some(c) = &self.comment {
+            write!(
+                f,
+                " COMMENT = '{}'",
+                crate::ast::value::escape_single_quote_string(c)
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// `CONSTRAINT [ <name> ] DISTINCT RANGE BETWEEN <start_col> AND <end_col> EXCLUSIVE`
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewRangeConstraint {
+    pub name: Option<WithSpan<Ident>>,
+    pub start_col: WithSpan<Ident>,
+    pub end_col: WithSpan<Ident>,
+}
+
+impl fmt::Display for SemanticViewRangeConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("CONSTRAINT")?;
+        if let Some(n) = &self.name {
+            write!(f, " {n}")?;
+        }
+        write!(
+            f,
+            " DISTINCT RANGE BETWEEN {} AND {} EXCLUSIVE",
+            self.start_col, self.end_col
+        )
+    }
+}
+
+/// A relationship inside `CREATE SEMANTIC VIEW ... RELATIONSHIPS (...)`.
+///
+/// Syntax:
+/// ```text
+/// [ <rel_name> AS ]
+///   <source_table> ( <src_col>, ... )
+///   REFERENCES
+///   <target_table> [ ( [ ASOF ] <tgt_col>, ... | BETWEEN <start> AND <end> EXCLUSIVE ) ]
+/// ```
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewRelationship {
+    pub name: Option<WithSpan<Ident>>,
+    pub source_table: WithSpan<Ident>,
+    pub source_columns: Vec<WithSpan<Ident>>,
+    pub target_table: WithSpan<Ident>,
+    pub target_ref: Option<SemanticViewRelTargetRef>,
+}
+
+impl fmt::Display for SemanticViewRelationship {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(n) = &self.name {
+            write!(f, "{n} AS ")?;
+        }
+        write!(
+            f,
+            "{} ({}) REFERENCES {}",
+            self.source_table,
+            display_comma_separated(&self.source_columns),
+            self.target_table
+        )?;
+        if let Some(r) = &self.target_ref {
+            write!(f, "{r}")?;
+        }
+        Ok(())
+    }
+}
+
+/// One element inside the parenthesized target reference of a semantic-view
+/// relationship: either a plain column, an `ASOF <col>`, or a
+/// `BETWEEN <start> AND <end> EXCLUSIVE` range. These can be mixed in a single
+/// list, e.g. `weather(airport_code, BETWEEN start_date AND end_date EXCLUSIVE)`.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SemanticViewRelTargetRefItem {
+    Column(WithSpan<Ident>),
+    Asof(WithSpan<Ident>),
+    Between {
+        start: WithSpan<Ident>,
+        end: WithSpan<Ident>,
+    },
+}
+
+impl fmt::Display for SemanticViewRelTargetRefItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Column(c) => write!(f, "{c}"),
+            Self::Asof(c) => write!(f, "ASOF {c}"),
+            Self::Between { start, end } => {
+                write!(f, "BETWEEN {start} AND {end} EXCLUSIVE")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewRelTargetRef(pub Vec<SemanticViewRelTargetRefItem>);
+
+impl fmt::Display for SemanticViewRelTargetRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({})", display_comma_separated(&self.0))
+    }
+}
+
+/// A FACT, DIMENSION, or METRIC item in `CREATE SEMANTIC VIEW`.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewMember {
+    pub visibility: Option<SemanticViewVisibility>,
+    /// `<table>.<name>` for table-bound members; a single ident for derived/cross-table metrics.
+    pub qualified_name: ObjectName,
+    pub modifiers: Vec<SemanticViewMemberModifier>,
+    /// The body after `AS`.
+    pub expression: Expr,
+    pub synonyms: Vec<String>,
+    pub comment: Option<String>,
+    pub cortex_search: Option<SemanticViewCortexSearch>,
+}
+
+impl fmt::Display for SemanticViewMember {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(v) = &self.visibility {
+            write!(f, "{v} ")?;
+        }
+        write!(f, "{}", self.qualified_name)?;
+        for m in &self.modifiers {
+            write!(f, " {m}")?;
+        }
+        write!(f, " AS {}", self.expression)?;
+        if !self.synonyms.is_empty() {
+            write!(f, " WITH SYNONYMS (")?;
+            let mut first = true;
+            for s in &self.synonyms {
+                if !first {
+                    f.write_str(", ")?;
+                }
+                first = false;
+                write!(f, "'{}'", crate::ast::value::escape_single_quote_string(s))?;
+            }
+            write!(f, ")")?;
+        }
+        if let Some(cs) = &self.cortex_search {
+            write!(f, " WITH CORTEX SEARCH SERVICE {}", cs.service)?;
+            if let Some(u) = &cs.using {
+                write!(f, " USING {u}")?;
+            }
+        }
+        if let Some(c) = &self.comment {
+            write!(
+                f,
+                " COMMENT = '{}'",
+                crate::ast::value::escape_single_quote_string(c)
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SemanticViewVisibility {
+    Public,
+    Private,
+}
+
+impl fmt::Display for SemanticViewVisibility {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Public => f.write_str("PUBLIC"),
+            Self::Private => f.write_str("PRIVATE"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SemanticViewMemberModifier {
+    /// `USING ( <relationship_name>, ... )`
+    Using(Vec<WithSpan<Ident>>),
+    /// `NON ADDITIVE BY ( <order_by_expr>, ... )`
+    NonAdditiveBy(Vec<OrderByExpr>),
+}
+
+impl fmt::Display for SemanticViewMemberModifier {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Using(rels) => write!(f, "USING ({})", display_comma_separated(rels)),
+            Self::NonAdditiveBy(items) => {
+                write!(f, "NON ADDITIVE BY ({})", display_comma_separated(items))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SemanticViewCortexSearch {
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub service: ObjectName,
+    pub using: Option<WithSpan<Ident>>,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SemanticViewExtension {
+    AiSqlGeneration(String),
+    AiQuestionCategorization(String),
+}
+
+impl fmt::Display for SemanticViewExtension {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::AiSqlGeneration(s) => {
+                write!(
+                    f,
+                    "AI_SQL_GENERATION '{}'",
+                    crate::ast::value::escape_single_quote_string(s)
+                )
+            }
+            Self::AiQuestionCategorization(s) => {
+                write!(
+                    f,
+                    "AI_QUESTION_CATEGORIZATION '{}'",
+                    crate::ast::value::escape_single_quote_string(s)
+                )
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]

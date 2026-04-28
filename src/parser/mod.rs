@@ -4567,6 +4567,17 @@ impl<'a> Parser<'a> {
             self.parse_create_type()
         } else if self.parse_keyword(Keyword::PROCEDURE) {
             self.parse_create_procedure(or_alter)
+        } else if matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.keyword == Keyword::NoKeyword
+                && w.value.eq_ignore_ascii_case("SEMANTIC")
+        ) && matches!(
+            self.peek_nth_token(1).token,
+            Token::Word(w) if w.keyword == Keyword::VIEW
+        ) {
+            self.next_token(); // SEMANTIC
+            self.next_token(); // VIEW
+            self.parse_create_semantic_view(or_replace)
         } else {
             // Generic fallback: skip tokens until end of statement
             // This handles dialect-specific CREATE statements like:
@@ -13516,6 +13527,365 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Returns true if peek matches a non-reserved word equal (case-insensitive) to `word`.
+    fn peek_word_ci(&self, word: &str) -> bool {
+        matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.value.eq_ignore_ascii_case(word)
+        )
+    }
+
+    /// Consumes the next token if it is a non-reserved word equal (case-insensitive) to `word`.
+    /// Returns true if consumed.
+    fn parse_word_ci(&mut self, word: &str) -> bool {
+        if self.peek_word_ci(word) {
+            self.next_token();
+            return true;
+        }
+        false
+    }
+
+    /// Snowflake `CREATE SEMANTIC VIEW`. Parser is invoked after `CREATE [OR REPLACE]
+    /// SEMANTIC VIEW` has been consumed.
+    fn parse_create_semantic_view(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+
+        let mut tables: Vec<SemanticViewLogicalTable> = Vec::new();
+        let mut relationships: Vec<SemanticViewRelationship> = Vec::new();
+        let mut facts: Vec<SemanticViewMember> = Vec::new();
+        let mut dimensions: Vec<SemanticViewMember> = Vec::new();
+        let mut metrics: Vec<SemanticViewMember> = Vec::new();
+        let mut comment: Option<String> = None;
+        let mut copy_grants = false;
+        let mut extensions: Vec<SemanticViewExtension> = Vec::new();
+
+        loop {
+            if self.parse_word_ci("TABLES") {
+                self.expect_token(&Token::LParen)?;
+                tables = self.parse_comma_separated(Self::parse_semantic_view_logical_table)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_word_ci("RELATIONSHIPS") {
+                self.expect_token(&Token::LParen)?;
+                relationships =
+                    self.parse_comma_separated(Self::parse_semantic_view_relationship)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_word_ci("FACTS") {
+                self.expect_token(&Token::LParen)?;
+                facts = self.parse_comma_separated(Self::parse_semantic_view_member)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_word_ci("DIMENSIONS") {
+                self.expect_token(&Token::LParen)?;
+                dimensions = self.parse_comma_separated(Self::parse_semantic_view_member)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_word_ci("METRICS") {
+                self.expect_token(&Token::LParen)?;
+                metrics = self.parse_comma_separated(Self::parse_semantic_view_member)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_keyword(Keyword::COMMENT) {
+                self.expect_token(&Token::Eq)?;
+                comment = Some(self.parse_literal_string()?);
+            } else if self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]) {
+                copy_grants = true;
+            } else if self.parse_word_ci("AI_SQL_GENERATION") {
+                extensions.push(SemanticViewExtension::AiSqlGeneration(
+                    self.parse_literal_string()?,
+                ));
+            } else if self.parse_word_ci("AI_QUESTION_CATEGORIZATION") {
+                extensions.push(SemanticViewExtension::AiQuestionCategorization(
+                    self.parse_literal_string()?,
+                ));
+            } else {
+                break;
+            }
+        }
+
+        Ok(Statement::CreateSemanticView {
+            or_replace,
+            if_not_exists,
+            name,
+            tables,
+            relationships,
+            facts,
+            dimensions,
+            metrics,
+            comment,
+            copy_grants,
+            extensions,
+        })
+    }
+
+    fn parse_semantic_view_logical_table(
+        &mut self,
+    ) -> Result<SemanticViewLogicalTable, ParserError> {
+        // Optional `<alias> AS` prefix. The alias is a single identifier; the base
+        // table reference that follows may be multi-part (db.schema.table). Detect
+        // the alias form by lookahead — `Word AS Word`.
+        let alias = if matches!(
+            self.peek_nth_token(1).token,
+            Token::Word(w) if w.keyword == Keyword::AS
+        ) {
+            let a = self.parse_identifier(false)?;
+            self.expect_keyword(Keyword::AS)?;
+            Some(a)
+        } else {
+            None
+        };
+        let name = self.parse_object_name(false)?;
+
+        let mut primary_key: Option<Vec<WithSpan<Ident>>> = None;
+        let mut unique_keys: Vec<Vec<WithSpan<Ident>>> = Vec::new();
+        let mut range_constraint: Option<SemanticViewRangeConstraint> = None;
+        let mut synonyms: Vec<String> = Vec::new();
+        let mut comment: Option<String> = None;
+
+        loop {
+            if self.parse_keywords(&[Keyword::PRIMARY, Keyword::KEY]) {
+                self.expect_token(&Token::LParen)?;
+                primary_key = Some(self.parse_comma_separated(|p| p.parse_identifier(false))?);
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_keyword(Keyword::UNIQUE) {
+                self.expect_token(&Token::LParen)?;
+                let cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+                unique_keys.push(cols);
+            } else if self.parse_keyword(Keyword::CONSTRAINT) {
+                range_constraint = Some(self.parse_semantic_view_range_constraint(true)?);
+            } else if self.peek_word_ci("DISTINCT")
+                && matches!(
+                    self.peek_nth_token(1).token,
+                    Token::Word(w) if w.value.eq_ignore_ascii_case("RANGE")
+                )
+            {
+                range_constraint = Some(self.parse_semantic_view_range_constraint(false)?);
+            } else if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::WITH
+            ) && matches!(
+                self.peek_nth_token(1).token,
+                Token::Word(w) if w.value.eq_ignore_ascii_case("SYNONYMS")
+            ) {
+                self.next_token(); // WITH
+                self.next_token(); // SYNONYMS
+                let _ = self.consume_token(&Token::Eq);
+                self.expect_token(&Token::LParen)?;
+                synonyms = self.parse_comma_separated(Self::parse_literal_string)?;
+                self.expect_token(&Token::RParen)?;
+            } else if self.parse_keyword(Keyword::COMMENT) {
+                self.expect_token(&Token::Eq)?;
+                comment = Some(self.parse_literal_string()?);
+            } else {
+                break;
+            }
+        }
+
+        Ok(SemanticViewLogicalTable {
+            alias,
+            name,
+            primary_key,
+            unique_keys,
+            range_constraint,
+            synonyms,
+            comment,
+        })
+    }
+
+    /// `[CONSTRAINT [<name>]] DISTINCT RANGE BETWEEN <c1> AND <c2> EXCLUSIVE`.
+    /// `constraint_seen` indicates whether the leading `CONSTRAINT` keyword was
+    /// already consumed by the caller.
+    fn parse_semantic_view_range_constraint(
+        &mut self,
+        constraint_seen: bool,
+    ) -> Result<SemanticViewRangeConstraint, ParserError> {
+        let name = if constraint_seen {
+            // Optional name, but only if the next token isn't DISTINCT.
+            if self.peek_word_ci("DISTINCT") {
+                None
+            } else {
+                Some(self.parse_identifier(false)?)
+            }
+        } else {
+            None
+        };
+        if !self.parse_word_ci("DISTINCT") {
+            return self.expected("DISTINCT", self.peek_token());
+        }
+        if !self.parse_word_ci("RANGE") {
+            return self.expected("RANGE", self.peek_token());
+        }
+        self.expect_keyword(Keyword::BETWEEN)?;
+        let start_col = self.parse_identifier(false)?;
+        self.expect_keyword(Keyword::AND)?;
+        let end_col = self.parse_identifier(false)?;
+        if !self.parse_word_ci("EXCLUSIVE") {
+            return self.expected("EXCLUSIVE", self.peek_token());
+        }
+        Ok(SemanticViewRangeConstraint {
+            name,
+            start_col,
+            end_col,
+        })
+    }
+
+    fn parse_semantic_view_relationship(
+        &mut self,
+    ) -> Result<SemanticViewRelationship, ParserError> {
+        // Optional `<rel_name> AS` prefix.
+        let name = if matches!(
+            self.peek_nth_token(1).token,
+            Token::Word(w) if w.keyword == Keyword::AS
+        ) {
+            let n = self.parse_identifier(false)?;
+            self.expect_keyword(Keyword::AS)?;
+            Some(n)
+        } else {
+            None
+        };
+        let source_table = self.parse_identifier(false)?;
+        self.expect_token(&Token::LParen)?;
+        let source_columns = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+        self.expect_token(&Token::RParen)?;
+        self.expect_keyword(Keyword::REFERENCES)?;
+        let target_table = self.parse_identifier(false)?;
+        let target_ref = if self.consume_token(&Token::LParen) {
+            let items = self.parse_comma_separated(|p| {
+                if p.parse_keyword(Keyword::ASOF) {
+                    Ok(SemanticViewRelTargetRefItem::Asof(
+                        p.parse_identifier(false)?,
+                    ))
+                } else if p.parse_keyword(Keyword::BETWEEN) {
+                    let start = p.parse_identifier(false)?;
+                    p.expect_keyword(Keyword::AND)?;
+                    let end = p.parse_identifier(false)?;
+                    if !p.parse_word_ci("EXCLUSIVE") {
+                        return p.expected("EXCLUSIVE", p.peek_token());
+                    }
+                    Ok(SemanticViewRelTargetRefItem::Between { start, end })
+                } else {
+                    Ok(SemanticViewRelTargetRefItem::Column(
+                        p.parse_identifier(false)?,
+                    ))
+                }
+            })?;
+            self.expect_token(&Token::RParen)?;
+            Some(SemanticViewRelTargetRef(items))
+        } else {
+            None
+        };
+        Ok(SemanticViewRelationship {
+            name,
+            source_table,
+            source_columns,
+            target_table,
+            target_ref,
+        })
+    }
+
+    fn parse_semantic_view_member(&mut self) -> Result<SemanticViewMember, ParserError> {
+        let visibility = if self.parse_word_ci("PRIVATE") {
+            Some(SemanticViewVisibility::Private)
+        } else if self.parse_word_ci("PUBLIC") {
+            Some(SemanticViewVisibility::Public)
+        } else {
+            None
+        };
+        let qualified_name = self.parse_object_name(false)?;
+
+        let mut modifiers: Vec<SemanticViewMemberModifier> = Vec::new();
+        loop {
+            // `USING ( rel, ... )` — only when followed by `(`. The USING tail in
+            // `WITH CORTEX SEARCH SERVICE … USING <col>` takes a single identifier
+            // without parens and is parsed in the post-AS tail below.
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::USING
+            ) && matches!(self.peek_nth_token(1).token, Token::LParen)
+            {
+                self.next_token(); // USING
+                self.expect_token(&Token::LParen)?;
+                let rels = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+                modifiers.push(SemanticViewMemberModifier::Using(rels));
+                continue;
+            }
+            // `NON ADDITIVE BY ( <order_by>, ... )`. NON and ADDITIVE are not
+            // reserved keywords, so peek by string.
+            if self.peek_word_ci("NON")
+                && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.value.eq_ignore_ascii_case("ADDITIVE"))
+                && matches!(self.peek_nth_token(2).token, Token::Word(w) if w.keyword == Keyword::BY)
+            {
+                self.next_token(); // NON
+                self.next_token(); // ADDITIVE
+                self.next_token(); // BY
+                self.expect_token(&Token::LParen)?;
+                let items = self.parse_comma_separated(Self::parse_order_by_expr)?;
+                self.expect_token(&Token::RParen)?;
+                modifiers.push(SemanticViewMemberModifier::NonAdditiveBy(items));
+                continue;
+            }
+            break;
+        }
+
+        self.expect_keyword(Keyword::AS)?;
+        let expression = self.parse_expr()?;
+
+        let mut synonyms: Vec<String> = Vec::new();
+        let mut comment: Option<String> = None;
+        let mut cortex_search: Option<SemanticViewCortexSearch> = None;
+        loop {
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::WITH
+            ) {
+                let n1 = self.peek_nth_token(1).token;
+                if matches!(&n1, Token::Word(w) if w.value.eq_ignore_ascii_case("SYNONYMS")) {
+                    self.next_token(); // WITH
+                    self.next_token(); // SYNONYMS
+                    let _ = self.consume_token(&Token::Eq);
+                    self.expect_token(&Token::LParen)?;
+                    synonyms = self.parse_comma_separated(Self::parse_literal_string)?;
+                    self.expect_token(&Token::RParen)?;
+                    continue;
+                }
+                if matches!(&n1, Token::Word(w) if w.value.eq_ignore_ascii_case("CORTEX")) {
+                    self.next_token(); // WITH
+                    self.next_token(); // CORTEX
+                    if !self.parse_word_ci("SEARCH") {
+                        return self.expected("SEARCH", self.peek_token());
+                    }
+                    if !self.parse_word_ci("SERVICE") {
+                        return self.expected("SERVICE", self.peek_token());
+                    }
+                    let service = self.parse_object_name(false)?;
+                    let using = if self.parse_keyword(Keyword::USING) {
+                        Some(self.parse_identifier(false)?)
+                    } else {
+                        None
+                    };
+                    cortex_search = Some(SemanticViewCortexSearch { service, using });
+                    continue;
+                }
+                break;
+            }
+            if self.parse_keyword(Keyword::COMMENT) {
+                self.expect_token(&Token::Eq)?;
+                comment = Some(self.parse_literal_string()?);
+                continue;
+            }
+            break;
+        }
+
+        Ok(SemanticViewMember {
+            visibility,
+            qualified_name,
+            modifiers,
+            expression,
+            synonyms,
+            comment,
+            cortex_search,
+        })
+    }
+
     pub fn parse_join_constraint(&mut self, natural: bool) -> Result<JoinConstraint, ParserError> {
         if natural {
             Ok(JoinConstraint::Natural)
@@ -16085,6 +16455,13 @@ impl<'a> Parser<'a> {
         let old_trailing = self.options.trailing_commas;
         self.options.trailing_commas = false;
         let partition_by = if self.parse_keywords(&[Keyword::PARTITION, Keyword::BY]) {
+            // Snowflake semantic-view window-function metric form:
+            //   PARTITION BY EXCLUDING <dim>, <dim>, ...
+            // The EXCLUDING marker is currently unrepresented in the AST; we
+            // accept it for parseability, and the dimension references in the
+            // tail are still preserved as `Expr` nodes for lineage.
+            // See https://docs.snowflake.com/en/sql-reference/sql/create-semantic-view
+            let _ = self.parse_word_ci("EXCLUDING");
             self.parse_comma_separated(Parser::parse_expr)?
         } else {
             vec![]
