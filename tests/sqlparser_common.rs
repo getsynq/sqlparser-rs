@@ -3141,6 +3141,37 @@ fn parse_create_schema_with_properties() {
 }
 
 #[test]
+fn parse_create_schema_with_location() {
+    // Databricks/Hive: LOCATION 'path'
+    let sql = "CREATE SCHEMA foo LOCATION 's3://bucket/foo'";
+    match verified_stmt(sql) {
+        Statement::CreateSchema {
+            location,
+            managed_location,
+            ..
+        } => {
+            assert_eq!(location.as_deref(), Some("s3://bucket/foo"));
+            assert!(managed_location.is_none());
+        }
+        _ => unreachable!(),
+    }
+
+    // Databricks: MANAGED LOCATION 'path'
+    let sql = "CREATE SCHEMA foo MANAGED LOCATION 'DOUG_BRONZE'";
+    match verified_stmt(sql) {
+        Statement::CreateSchema {
+            location,
+            managed_location,
+            ..
+        } => {
+            assert!(location.is_none());
+            assert_eq!(managed_location.as_deref(), Some("DOUG_BRONZE"));
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_drop_schema() {
     let sql = "DROP SCHEMA X";
 
