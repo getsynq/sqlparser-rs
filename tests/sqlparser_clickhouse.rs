@@ -1643,6 +1643,15 @@ fn clickhouse() -> TestedDialects {
 }
 
 #[test]
+fn parse_insert_values_whitespace_separated_rows() {
+    // ClickHouse VALUES format allows rows separated by whitespace (no comma).
+    clickhouse().one_statement_parses_to(
+        "INSERT INTO test_flow VALUES (1, 1, 'Home') (2, 1, 'Gift') (3, 1, 'Exit')",
+        "INSERT INTO test_flow VALUES (1, 1, 'Home'), (2, 1, 'Gift'), (3, 1, 'Exit')",
+    );
+}
+
+#[test]
 fn parse_create_table_as_function() {
     // CREATE TABLE ... AS function(...) is used for table functions in ClickHouse
     clickhouse().one_statement_parses_to(
