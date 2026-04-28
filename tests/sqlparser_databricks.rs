@@ -534,3 +534,24 @@ fn test_sort_by_with_direction_and_nulls() {
         .verified_stmt("SELECT age, name, zip_code FROM person SORT BY age DESC NULLS FIRST");
     databricks().verified_stmt("SELECT a FROM t SORT BY a ASC, b DESC NULLS LAST");
 }
+
+#[test]
+fn test_declare_variable() {
+    // Databricks SQL Scripting variable declaration:
+    // DECLARE [OR REPLACE] [VARIABLE] name [type] [DEFAULT expr]
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-aux-var-declare.html
+    let cases = [
+        "DECLARE state STRING",
+        "DECLARE argstr STRING",
+        "DECLARE line BIGINT",
+        "DECLARE args MAP<STRING, STRING>",
+        "DECLARE OR REPLACE VARIABLE x INT DEFAULT 5",
+        "DECLARE VARIABLE y DEFAULT 1",
+        "DECLARE z DEFAULT 'hello'",
+    ];
+    for sql in cases {
+        databricks()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse {sql:?}: {e}"));
+    }
+}
