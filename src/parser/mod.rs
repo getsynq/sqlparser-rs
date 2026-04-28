@@ -5202,10 +5202,12 @@ impl<'a> Parser<'a> {
             } else if self.parse_keywords(&[Keyword::REMOTE, Keyword::WITH, Keyword::CONNECTION]) {
                 // BigQuery: REMOTE WITH CONNECTION connection_name
                 let _ = self.parse_object_name(false);
-            } else if dialect_of!(self is SnowflakeDialect | BigQueryDialect | GenericDialect) {
+            } else if dialect_of!(self is SnowflakeDialect | BigQueryDialect | RedshiftSqlDialect | GenericDialect)
+            {
                 // Generic fallback for dialect-specific CREATE FUNCTION clauses:
                 // Pattern 1: WORD = value_or_parens (e.g. RUNTIME_VERSION = '3.10')
                 // Pattern 2: WORD(values) (e.g. OPTIONS(...), PACKAGES(...))
+                // Pattern 3 (Redshift): WORD literal (e.g. LAMBDA 'name', IAM_ROLE 'arn', RETRY_TIMEOUT 0)
                 if matches!(self.peek_token_kind().clone(), Token::Word(_)) {
                     let next = self.peek_nth_token(1).token;
                     if next == Token::Eq {
@@ -5237,6 +5239,17 @@ impl<'a> Parser<'a> {
                                 _ => {}
                             }
                         }
+                        continue;
+                    } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+                        && matches!(
+                            next,
+                            Token::SingleQuotedString(_)
+                                | Token::Number(_, _)
+                                | Token::DoubleQuotedString(_)
+                        )
+                    {
+                        self.next_token(); // consume keyword
+                        self.next_token(); // consume literal value
                         continue;
                     }
                 }
