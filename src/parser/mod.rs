@@ -15160,6 +15160,7 @@ impl<'a> Parser<'a> {
                     name: Ident::new("").empty_span(),
                     parameters: vec![],
                     immediate: Some(path),
+                    immediate_keyword: true,
                     into: vec![],
                     using: vec![],
                 });
@@ -15189,6 +15190,50 @@ impl<'a> Parser<'a> {
                 name: Ident::new("").empty_span(),
                 parameters: vec![],
                 immediate: Some(immediate),
+                immediate_keyword: true,
+                into,
+                using,
+            });
+        }
+
+        // PostgreSQL PL/pgSQL: `EXECUTE command-string [INTO target] [USING args]`
+        // where command-string is any string-valued expression (typically a
+        // string literal possibly concatenated with `||`). Distinguished from
+        // `EXECUTE name [(params)]` by the leading token not being a bare
+        // identifier — strings, parens, casts, etc. mean we are in PL/pgSQL.
+        // https://www.postgresql.org/docs/current/plpgsql-statements.html
+        if matches!(
+            self.peek_token().token,
+            Token::SingleQuotedString(_)
+                | Token::DollarQuotedString(_)
+                | Token::EscapedStringLiteral(_)
+                | Token::NationalStringLiteral(_)
+                | Token::LParen
+        ) {
+            let command = self.parse_expr()?;
+            let into = if self.parse_keyword(Keyword::INTO) {
+                self.parse_comma_separated(|p| p.parse_identifier(false))?
+            } else {
+                vec![]
+            };
+            let using = if self.parse_keyword(Keyword::USING) {
+                self.parse_comma_separated(|p| {
+                    let expr = p.parse_expr()?;
+                    let alias = if p.parse_keyword(Keyword::AS) {
+                        Some(p.parse_identifier(false)?.unwrap())
+                    } else {
+                        None
+                    };
+                    Ok(ExecuteImmediateUsingExpr { expr, alias })
+                })?
+            } else {
+                vec![]
+            };
+            return Ok(Statement::Execute {
+                name: Ident::new("").empty_span(),
+                parameters: vec![],
+                immediate: Some(command),
+                immediate_keyword: false,
                 into,
                 using,
             });
@@ -15278,6 +15323,7 @@ impl<'a> Parser<'a> {
             name,
             parameters,
             immediate: None,
+            immediate_keyword: false,
             into,
             using,
         })
