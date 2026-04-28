@@ -3681,6 +3681,30 @@ fn parse_create_function() {
 }
 
 #[test]
+fn parse_create_function_arg_mode_after_name() {
+    // PostgreSQL accepts the argument mode either before or after the parameter
+    // name. The Oracle-style `name IN type` form appears in the official PG
+    // PL/SQL porting docs.
+    let sql = "CREATE FUNCTION foo(v_url IN VARCHAR, v_host OUT VARCHAR) RETURNS INTEGER LANGUAGE SQL AS 'select 1;'";
+    let stmt = pg().one_statement_parses_to(
+        sql,
+        "CREATE FUNCTION foo(IN v_url VARCHAR, OUT v_host VARCHAR) RETURNS INTEGER LANGUAGE SQL AS 'select 1;'",
+    );
+    match stmt {
+        Statement::CreateFunction {
+            args: Some(args), ..
+        } => {
+            assert_eq!(args.len(), 2);
+            assert_eq!(args[0].mode, Some(ArgMode::In));
+            assert_eq!(args[0].name.as_ref().unwrap().value, "v_url");
+            assert_eq!(args[1].mode, Some(ArgMode::Out));
+            assert_eq!(args[1].name.as_ref().unwrap().value, "v_host");
+        }
+        _ => panic!("expected CreateFunction"),
+    }
+}
+
+#[test]
 fn parse_create_function_strict() {
     // PostgreSQL STRICT is a function attribute meaning "RETURNS NULL ON NULL INPUT".
     // It can appear either before or after IMMUTABLE/STABLE/VOLATILE.
