@@ -13503,8 +13503,11 @@ impl<'a> Parser<'a> {
                 break;
             }
             if self.parse_keyword(Keyword::WHERE) {
+                let start_idx = self.index;
                 let expr = self.parse_expr()?;
-                clauses.push(SemanticViewClause::Where(expr));
+                clauses.push(SemanticViewClause::Where(
+                    expr.spanning(self.span_from_index(start_idx)),
+                ));
                 continue;
             }
             match self.peek_semantic_view_clause_keyword() {
@@ -13835,7 +13838,10 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_keyword(Keyword::AS)?;
-        let expression = self.parse_expr()?;
+        let expr_start_idx = self.index;
+        let expression = self
+            .parse_expr()?
+            .spanning(self.span_from_index(expr_start_idx));
 
         let mut synonyms: Vec<String> = Vec::new();
         let mut comment: Option<String> = None;
