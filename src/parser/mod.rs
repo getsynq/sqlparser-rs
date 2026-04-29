@@ -16553,7 +16553,11 @@ impl<'a> Parser<'a> {
         }
         let start_span = start_token.span;
 
-        let mut idx = self.index.max(start_index).min(self.tokens.len() - 1);
+        let mut idx = self
+            .index
+            .saturating_sub(1)
+            .max(start_index)
+            .min(self.tokens.len() - 1);
         loop {
             if idx <= start_index || idx >= self.tokens.len() {
                 break;
