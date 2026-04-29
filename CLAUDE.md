@@ -263,8 +263,8 @@ Use this pattern for dialect-specific clauses that don't need AST representation
 - When a keyword (e.g. CLUSTER, SORT, FINAL, AT, BEFORE) is reserved only because of a specific clause (`CLUSTER BY`, `t AT(...)` time-travel), accept it as an identifier alias in `parse_optional_alias` when the lookahead doesn't match the clause shape (next-not-`BY`, next-not-`(`, etc.).
 - Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL and in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
 
-**Prefer `WithSpan<Ident>` in new AST fields:**
-`parse_identifier(in_table_clause)?` returns `WithSpan<Ident>`. Keep that wrapping in new AST nodes so kernel-cll lineage can surface source positions. Reach for `parse_identifier_no_span()` only when there's a specific reason not to carry the span (e.g. matching an existing surrounding type that's still plain `Ident`).
+**Prefer `WithSpan<Ident>` / `WithSpan<Expr>` in new AST fields:**
+`parse_identifier(in_table_clause)?` returns `WithSpan<Ident>`. Keep that wrapping in new AST nodes so kernel-cll lineage can surface source positions. Reach for `parse_identifier_no_span()` only when there's a specific reason not to carry the span (e.g. matching an existing surrounding type that's still plain `Ident`). For new `Expr` fields, wrap with the standard idiom: `let start_idx = self.index; let expr = self.parse_expr()?; expr.spanning(self.span_from_index(start_idx))` — see `selection` in `parse_select` for the template. `span_from_index` anchors its end at `self.index - 1` (the last consumed token), so the trailing `)` of an enclosing `(...)` is correctly excluded.
 
 **No `peek_keyword`:**
 For one-token keyword lookahead, use `matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::FOO)`. For fixed-length sequences use `peek_keywords::<N>() -> [Keyword; N]`. There is no `peek_keyword(Keyword::FOO) -> bool`.
