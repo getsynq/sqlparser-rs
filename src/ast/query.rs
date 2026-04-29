@@ -1378,7 +1378,7 @@ pub enum SemanticViewClause {
     Dimensions(Vec<SelectItem>),
     Metrics(Vec<SelectItem>),
     Facts(Vec<SelectItem>),
-    Where(Expr),
+    Where(WithSpan<Expr>),
 }
 
 impl fmt::Display for SemanticViewClause {
@@ -1844,7 +1844,7 @@ pub struct SemanticViewMember {
     pub qualified_name: ObjectName,
     pub modifiers: Vec<SemanticViewMemberModifier>,
     /// The body after `AS`.
-    pub expression: Expr,
+    pub expression: WithSpan<Expr>,
     pub synonyms: Vec<String>,
     pub comment: Option<String>,
     pub cortex_search: Option<SemanticViewCortexSearch>,
