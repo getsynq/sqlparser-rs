@@ -14509,7 +14509,9 @@ impl<'a> Parser<'a> {
                 }
                 func_name
             } else {
-                self.parse_object_name(false)?
+                // BigQuery hyphenated project IDs (`my-proj.ds.tbl`) are unlocked
+                // by the `in_table_clause` flag on `parse_identifier`.
+                self.parse_object_name(true)?
             };
             let is_mysql = dialect_of!(self is MySqlDialect);
 

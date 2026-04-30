@@ -2378,6 +2378,18 @@ fn test_bigquery_hyphenated_project_id_with_numeric_segment() {
 }
 
 #[test]
+fn test_bigquery_hyphenated_project_id_in_insert() {
+    // BigQuery hyphenated project IDs are valid in `INSERT INTO`, not just
+    // in `FROM` / table clauses.
+    bigquery()
+        .parse_sql_statements("INSERT INTO my-proj.ds.tbl SELECT 1")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("INSERT INTO root-rarity-166622.scores.ds VALUES (1)")
+        .unwrap();
+}
+
+#[test]
 fn test_bigquery_offset_in_arithmetic_projection() {
     // BigQuery `WITH OFFSET` exposes `offset` as a column the projection
     // can use. Ensure trailing-comma handling still parses
