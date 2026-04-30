@@ -6411,15 +6411,17 @@ impl<'a> Parser<'a> {
                 {
                     let _ = self.parse_data_type()?;
                 }
+                let mut value = Vec::new();
                 if saw_eq || saw_default || self.parse_keyword(Keyword::DEFAULT) {
-                    let _ = self.parse_expr()?;
+                    // Preserve the initialiser so column refs reach lineage.
+                    value.push(self.parse_expr()?);
                 }
                 return Ok(Statement::SetVariable {
                     local: false,
                     hivevar: false,
                     tuple: false,
                     variable: ObjectName(vec![name]),
-                    value: vec![],
+                    value,
                     additional_assignments: vec![],
                 });
             }
@@ -6442,9 +6444,11 @@ impl<'a> Parser<'a> {
                 }
                 // Parse the data type
                 let _ = self.parse_data_type()?;
-                // Parse optional DEFAULT expression
+                // Parse optional DEFAULT expression — keep the parsed Expr so
+                // lineage visitors see column refs in the initialiser.
+                let mut value = Vec::new();
                 if self.parse_keyword(Keyword::DEFAULT) {
-                    let _ = self.parse_expr()?;
+                    value.push(self.parse_expr()?);
                 }
                 // Use SetVariable as a simple representation
                 return Ok(Statement::SetVariable {
@@ -6452,7 +6456,7 @@ impl<'a> Parser<'a> {
                     hivevar: false,
                     tuple: false,
                     variable: ObjectName(vec![name]),
-                    value: vec![],
+                    value,
                     additional_assignments: vec![],
                 });
             }
@@ -6476,25 +6480,35 @@ impl<'a> Parser<'a> {
             ) {
                 // Parse first variable's type and optional `= <expr>`.
                 let _ = self.parse_data_type()?;
+                let mut value = Vec::new();
                 if self.consume_token(&Token::Eq) {
-                    let _ = self.parse_expr()?;
+                    value.push(self.parse_expr()?);
                 }
-                // Parse additional comma-separated declarations.
+                // Parse additional comma-separated declarations; surface their
+                // initialisers as `additional_assignments` so lineage visitors
+                // see every column ref, not just the first one.
+                let mut additional_assignments: Vec<SetVariableAssignment> = Vec::new();
                 while self.consume_token(&Token::Comma) {
-                    let _ = self.parse_identifier(false)?;
+                    let extra_name = self.parse_identifier(false)?.unwrap();
                     let _ = self.parse_keyword(Keyword::AS);
                     let _ = self.parse_data_type()?;
+                    let mut extra_value = Vec::new();
                     if self.consume_token(&Token::Eq) {
-                        let _ = self.parse_expr()?;
+                        extra_value.push(self.parse_expr()?);
                     }
+                    additional_assignments.push(SetVariableAssignment {
+                        scope: None,
+                        variable: ObjectName(vec![extra_name]),
+                        value: extra_value,
+                    });
                 }
                 return Ok(Statement::SetVariable {
                     local: false,
                     hivevar: false,
                     tuple: false,
                     variable: ObjectName(vec![name]),
-                    value: vec![],
-                    additional_assignments: vec![],
+                    value,
+                    additional_assignments,
                 });
             }
             self.index = idx;
