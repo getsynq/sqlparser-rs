@@ -7762,6 +7762,20 @@ impl<'a> Parser<'a> {
                 Token::make_keyword("ENCODE"),
                 Token::make_word(&encoding.value, encoding.quote_style),
             ])))
+        } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+            && self.parse_keyword(Keyword::DISTKEY)
+        {
+            // Redshift inline column attribute: DISTKEY (no arguments)
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("DISTKEY"),
+            ])))
+        } else if dialect_of!(self is RedshiftSqlDialect | GenericDialect)
+            && self.parse_keyword(Keyword::SORTKEY)
+        {
+            // Redshift inline column attribute: SORTKEY (no arguments)
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("SORTKEY"),
+            ])))
         } else {
             Ok(None)
         }
