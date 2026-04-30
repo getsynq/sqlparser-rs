@@ -683,3 +683,16 @@ fn parse_mssql_execute_as_login() {
     ms().parse_sql_statements("EXECUTE AS USER = 'bar'").unwrap();
     ms().parse_sql_statements("EXECUTE AS CALLER").unwrap();
 }
+
+#[test]
+fn parse_mssql_create_table_as_clone_of() {
+    // T-SQL / Fabric: `CREATE TABLE foo AS CLONE OF bar [AT '<timestamp>']`
+    // — clone an existing table (optionally at a specific point in time).
+    // https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-as-clone-of-transact-sql
+    ms().parse_sql_statements("CREATE TABLE dbo.Foo AS CLONE OF dbo.Bar")
+        .unwrap();
+    ms().parse_sql_statements(
+        "CREATE TABLE dbo.Foo AS CLONE OF dbo.Bar AT '2023-05-23T14:24:10.325'",
+    )
+    .unwrap();
+}

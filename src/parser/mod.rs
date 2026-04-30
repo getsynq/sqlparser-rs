@@ -6816,7 +6816,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let clone = if self.parse_keyword(Keyword::CLONE) {
+        let mut clone = if self.parse_keyword(Keyword::CLONE) {
             self.parse_object_name(false).ok()
         } else {
             None
@@ -7321,8 +7321,18 @@ impl<'a> Parser<'a> {
 
         // Parse optional `AS ( query )` or `AS table_name` (ClickHouse)
         let query = if self.parse_keyword(Keyword::AS) {
-            // Check if AS is followed by a plain identifier (not a query keyword)
-            // ClickHouse: CREATE TABLE t1 (...) AS t2
+            // T-SQL / Fabric: `CREATE TABLE foo AS CLONE OF bar [AT '<ts>']`.
+            // https://learn.microsoft.com/en-us/sql/t-sql/statements/create-table-as-clone-of-transact-sql
+            // Surface the cloned source through the existing `clone` slot.
+            if self.parse_keywords(&[Keyword::CLONE, Keyword::OF]) {
+                let source = self.parse_object_name(false)?;
+                clone = Some(source);
+                // Optional `AT '<timestamp>'` time-travel suffix.
+                if self.parse_keyword(Keyword::AT) {
+                    let _ = self.parse_expr()?;
+                }
+                None
+            } else {
             match self.peek_token().token {
                 Token::Word(ref w)
                     if !matches!(
@@ -7417,6 +7427,7 @@ impl<'a> Parser<'a> {
                     }))
                 }
                 _ => Some(self.parse_boxed_query()?),
+            }
             }
         } else {
             None
