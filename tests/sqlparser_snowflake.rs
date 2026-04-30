@@ -1596,6 +1596,21 @@ fn parse_array_index_json_with_cast() {
 }
 
 #[test]
+fn parse_array_subscript_after_cast() {
+    // Snowflake variant access often casts a path to ARRAY then indexes the
+    // result, e.g. `v:category::array[0]`. The `[N]` is an array subscript,
+    // NOT the postgresql `[]` empty-bracket type suffix.
+    snowflake().one_statement_parses_to(
+        "SELECT v:c::array[0] FROM t",
+        "SELECT CAST(v:c AS ARRAY)[0] FROM t",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT v:c::array[0]::string FROM t",
+        "SELECT CAST(CAST(v:c AS ARRAY)[0] AS STRING) FROM t",
+    );
+}
+
+#[test]
 fn parse_pivot_of_table_factor_derived() {
     snowflake().verified_stmt(
         "SELECT * FROM (SELECT place_id, weekday, open FROM times AS p) PIVOT(max(open) FOR weekday IN (0, 1, 2, 3, 4, 5, 6)) AS p (place_id, open_sun, open_mon, open_tue, open_wed, open_thu, open_fri, open_sat)"

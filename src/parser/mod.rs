@@ -10046,8 +10046,13 @@ impl<'a> Parser<'a> {
         }?;
 
         // Parse array data types. Note: this is postgresql-specific and different from
-        // Keyword::ARRAY syntax from above
-        while self.consume_token(&Token::LBracket) {
+        // Keyword::ARRAY syntax from above. Only `[]` (empty brackets) belongs
+        // to the type — `[N]` is an array subscript and stays for the outer
+        // expression parser, e.g. `v::array[0]` in Snowflake variant access.
+        while self.peek_token_is(&Token::LBracket)
+            && matches!(self.peek_nth_token_ref(1).token, Token::RBracket)
+        {
+            self.expect_token(&Token::LBracket)?;
             self.expect_token(&Token::RBracket)?;
             data = DataType::Array(ArrayElemTypeDef::SquareBracket(Box::new(data)))
         }
