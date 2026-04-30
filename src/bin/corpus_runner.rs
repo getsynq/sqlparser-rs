@@ -80,7 +80,16 @@ fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
         sql
     };
 
-    match Parser::parse_sql(&*dialect, &sql) {
+    // Customer SQL routinely contains deep COALESCE/TRIM/REPLACE chains
+    // (100+ levels) that blow past the default 61-deep recursion guard.
+    // Bump the limit for the corpus runner; the 8 MB RUST_MIN_STACK keeps
+    // the actual stack from blowing.
+    const CORPUS_RECURSION_LIMIT: usize = 256;
+    let parse_result = Parser::new(&*dialect)
+        .with_recursion_limit(CORPUS_RECURSION_LIMIT)
+        .try_with_sql(&sql)
+        .and_then(|mut p| p.parse_statements());
+    match parse_result {
         Ok(statements) => {
             if statements.is_empty() {
                 return Err(format!("Parsed 0 statements from {}", path.display()));
