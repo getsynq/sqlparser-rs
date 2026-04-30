@@ -607,8 +607,24 @@ impl<'a> Parser<'a> {
         let mut expecting_statement_delimiter = false;
         loop {
             // ignore empty statements (between successive statement delimiters)
-            while self.consume_token(&Token::SemiColon) {
-                expecting_statement_delimiter = false;
+            // and MS-SQL `GO` batch separators (sqlcmd / SSMS); they're not
+            // SQL statements but show up in script files.
+            loop {
+                if self.consume_token(&Token::SemiColon) {
+                    expecting_statement_delimiter = false;
+                    continue;
+                }
+                if dialect_of!(self is MsSqlDialect | GenericDialect)
+                    && matches!(
+                        self.peek_token_kind(),
+                        Token::Word(w) if w.value.eq_ignore_ascii_case("GO") && w.quote_style.is_none()
+                    )
+                {
+                    self.next_token();
+                    expecting_statement_delimiter = false;
+                    continue;
+                }
+                break;
             }
 
             match self.peek_token_kind().clone() {
