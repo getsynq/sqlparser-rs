@@ -9308,9 +9308,6 @@ impl<'a> Parser<'a> {
 
     pub fn parse_snowflake_json_path(&mut self) -> Result<Value, ParserError> {
         let mut buf = String::new();
-        // Track bracket nesting so we can ignore whitespace inside `[ ... ]`
-        // (Snowflake accepts both `v:f['k']` and `v:f[ 'k' ]`).
-        let mut bracket_depth: i32 = 0;
 
         let mut next_next_token = Some(self.next_token());
         while let Some(next_token) = next_next_token {
@@ -9334,15 +9331,63 @@ impl<'a> Parser<'a> {
                         self.prev_token();
                         break;
                     }
-                    bracket_depth += 1;
-                    buf.push('[')
-                }
-                Token::RBracket => {
-                    if bracket_depth > 0 {
-                        bracket_depth -= 1;
+                    // Snowflake `obj[<expr>]` — `<expr>` can be a literal, integer,
+                    // or any expression (including nested function calls and `:` paths).
+                    // Consume balanced brackets/parens as a single opaque chunk so
+                    // arbitrary index expressions don't terminate the path early.
+                    buf.push('[');
+                    let mut bracket_depth = 1i32;
+                    let mut paren_depth = 0i32;
+                    loop {
+                        let t = self.next_token().token;
+                        match t {
+                            Token::EOF => break,
+                            Token::LBracket => {
+                                bracket_depth += 1;
+                                buf.push('[');
+                            }
+                            Token::RBracket => {
+                                if paren_depth == 0 {
+                                    bracket_depth -= 1;
+                                    buf.push(']');
+                                    if bracket_depth == 0 {
+                                        break;
+                                    }
+                                } else {
+                                    buf.push(']');
+                                }
+                            }
+                            Token::LParen => {
+                                paren_depth += 1;
+                                buf.push('(');
+                            }
+                            Token::RParen => {
+                                paren_depth -= 1;
+                                buf.push(')');
+                            }
+                            Token::Word(ref w) if w.quote_style == Some('`') => {
+                                write!(buf, "`{}`", w.value).unwrap()
+                            }
+                            Token::Word(w) => buf.push_str(&w.value),
+                            Token::Number(n, _) => buf.push_str(&n),
+                            Token::SingleQuotedString(s) => write!(buf, "'{}'", s).unwrap(),
+                            Token::DoubleQuotedString(s) => write!(buf, "\"{}\"", s).unwrap(),
+                            Token::Period => buf.push('.'),
+                            Token::Comma => buf.push(','),
+                            Token::Colon => buf.push(':'),
+                            Token::Minus => buf.push('-'),
+                            Token::Plus => buf.push('+'),
+                            Token::Mul => buf.push('*'),
+                            Token::Div => buf.push('/'),
+                            Token::Whitespace(_) => {}
+                            _ => {}
+                        }
                     }
-                    buf.push(']')
                 }
+                // Stray `]` (no matching `[`) — consumed for back-compat with
+                // upstream callers (e.g. `parse_map_access` is lenient about
+                // missing closing brackets when the path ate one).
+                Token::RBracket => buf.push(']'),
                 // Only consume * inside brackets [*] for array wildcard traversal.
                 // Bare * after . is a qualified wildcard (.* EXCEPT) not a JSON path.
                 Token::Mul if buf.ends_with('[') => buf.push('*'),
@@ -9369,16 +9414,7 @@ impl<'a> Parser<'a> {
                     }
                     buf.push(')');
                 }
-                Token::Whitespace(_) => {
-                    if bracket_depth > 0 {
-                        // Inside `[ ... ]`, whitespace is insignificant — keep scanning.
-                        // Don't append it to the path buffer; the AST normalizes
-                        // `v:f[ 'k' ]` to `v:f['k']`.
-                        next_next_token = self.next_token_no_skip().cloned();
-                        continue;
-                    }
-                    break;
-                }
+                Token::Whitespace(_) => break,
                 _ => {
                     self.prev_token();
                     break;

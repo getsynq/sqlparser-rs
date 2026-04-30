@@ -1561,10 +1561,7 @@ fn parse_variant_path_with_whitespace_in_brackets() {
         "SELECT v:custom_attributes[ 'k' ]::string FROM t",
         "SELECT CAST(v:custom_attributes['k'] AS STRING) FROM t",
     );
-    snowflake().one_statement_parses_to(
-        "SELECT v:f[ 0 ] FROM t",
-        "SELECT v:f[0] FROM t",
-    );
+    snowflake().one_statement_parses_to("SELECT v:f[ 0 ] FROM t", "SELECT v:f[0] FROM t");
 }
 
 #[test]
