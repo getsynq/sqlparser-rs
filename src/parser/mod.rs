@@ -10198,6 +10198,19 @@ impl<'a> Parser<'a> {
         let after_as = self.parse_keyword(Keyword::AS);
         let next_token = self.next_token();
         match next_token.token {
+            // T-SQL trailing query hint `OPTION (RECOMPILE)` — rewind so the
+            // top-level query parser can consume the `OPTION (...)` clause
+            // instead of mis-parsing it as `<table> OPTION (col_list)`.
+            // Must run BEFORE the catch-all "any identifier" arm.
+            Token::Word(w)
+                if !after_as
+                    && w.keyword == Keyword::OPTION
+                    && dialect_of!(self is MsSqlDialect | GenericDialect)
+                    && matches!(self.peek_token_kind(), Token::LParen) =>
+            {
+                self.prev_token();
+                Ok(None)
+            }
             // Accept any identifier after `AS` (though many dialects have restrictions on
             // keywords that may appear here). If there's no `AS`: don't parse keywords,
             // which may start a construct allowed in this position, to be parsed as aliases.
