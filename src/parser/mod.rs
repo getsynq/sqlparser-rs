@@ -6306,23 +6306,13 @@ impl<'a> Parser<'a> {
 
     /// Parse the body of an `IF`/`ELSEIF`/`ELSE` block: a sequence of
     /// statements terminated by `;`, stopping at `ELSEIF`, `ELSE`, or `END`.
+    /// Each statement must be terminated by `;` to match Display's output and
+    /// keep round-trips idempotent for `verified_stmt`.
     fn parse_if_body(&mut self) -> Result<Vec<Statement>, ParserError> {
         let mut stmts = Vec::new();
         loop {
-            match self.peek_token_kind() {
-                Token::Word(w)
-                    if w.keyword == Keyword::END
-                        || w.keyword == Keyword::ELSE
-                        || w.value.eq_ignore_ascii_case("ELSEIF") =>
-                {
-                    break;
-                }
-                Token::EOF => break,
-                _ => {}
-            }
-            // Skip stray separators.
+            // Skip stray leading separators (e.g. `;;`).
             while self.consume_token(&Token::SemiColon) {}
-            // Re-check after consuming separators.
             match self.peek_token_kind() {
                 Token::Word(w)
                     if w.keyword == Keyword::END
@@ -6335,8 +6325,8 @@ impl<'a> Parser<'a> {
                 _ => {}
             }
             stmts.push(self.parse_statement()?);
-            // Optional terminator after each statement.
-            let _ = self.consume_token(&Token::SemiColon);
+            // Each body statement must be `;`-terminated.
+            self.expect_token(&Token::SemiColon)?;
         }
         Ok(stmts)
     }
