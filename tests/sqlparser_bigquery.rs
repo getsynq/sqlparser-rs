@@ -2396,6 +2396,16 @@ fn test_bigquery_offset_in_arithmetic_projection() {
 }
 
 #[test]
+fn test_bigquery_if_then_else_block() {
+    // BigQuery procedural language: IF / ELSEIF / ELSE / END IF.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/procedural-language#if
+    bigquery().verified_stmt("IF a = 1 THEN SELECT 1; END IF");
+    bigquery().verified_stmt("IF a = 1 THEN SELECT 1; ELSE SELECT 2; END IF");
+    bigquery()
+        .verified_stmt("IF a = 1 THEN SELECT 1; ELSEIF a = 2 THEN SELECT 2; ELSE SELECT 3; END IF");
+}
+
+#[test]
 fn test_bigquery_raw_string_escaped_quote() {
     // BigQuery raw string literals preserve backslashes literally, but
     // `\'` (or `\"`) is a two-character sequence that does not terminate
