@@ -6384,27 +6384,42 @@ impl<'a> Parser<'a> {
         }
 
         // Databricks: DECLARE [OR REPLACE] [VARIABLE] name [type] [DEFAULT expr]
+        //   — variable declaration. Falls through to the cursor path when the
+        //   syntax is `DECLARE name CURSOR FOR <query>` instead.
         // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-aux-var-declare.html
+        // https://docs.databricks.com/aws/en/sql/language-manual/control-flow/declare-cursor-stmt
         if dialect_of!(self is DatabricksDialect) {
+            let saved = self.index;
             let _ = self.parse_keywords(&[Keyword::OR, Keyword::REPLACE]);
             let _ = self.parse_keyword(Keyword::VARIABLE);
             let name = self.parse_identifier(false)?.unwrap();
-            // Optional data type (DEFAULT may follow directly without a type)
-            let saw_default = self.parse_keyword(Keyword::DEFAULT);
-            if !saw_default && !matches!(self.peek_token().token, Token::SemiColon | Token::EOF) {
-                let _ = self.parse_data_type()?;
+            // If next is CURSOR, this is the cursor form — rewind and fall
+            // through to the standard `[BINARY] [INSENSITIVE] CURSOR FOR …`
+            // path below.
+            let is_cursor = matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::CURSOR
+            );
+            if !is_cursor {
+                let saw_default = self.parse_keyword(Keyword::DEFAULT);
+                if !saw_default
+                    && !matches!(self.peek_token().token, Token::SemiColon | Token::EOF)
+                {
+                    let _ = self.parse_data_type()?;
+                }
+                if saw_default || self.parse_keyword(Keyword::DEFAULT) {
+                    let _ = self.parse_expr()?;
+                }
+                return Ok(Statement::SetVariable {
+                    local: false,
+                    hivevar: false,
+                    tuple: false,
+                    variable: ObjectName(vec![name]),
+                    value: vec![],
+                    additional_assignments: vec![],
+                });
             }
-            if saw_default || self.parse_keyword(Keyword::DEFAULT) {
-                let _ = self.parse_expr()?;
-            }
-            return Ok(Statement::SetVariable {
-                local: false,
-                hivevar: false,
-                tuple: false,
-                variable: ObjectName(vec![name]),
-                value: vec![],
-                additional_assignments: vec![],
-            });
+            self.index = saved;
         }
 
         let name = self.parse_identifier(false)?.unwrap();
