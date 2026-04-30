@@ -21,9 +21,35 @@ fn normalize_dialect_name(name: &str) -> &str {
         .unwrap_or(name)
 }
 
-fn dialect_for_name(name: &str) -> Option<Box<dyn sqlparser::dialect::Dialect>> {
-    let base_name = normalize_dialect_name(name);
-    dialect_from_str(base_name)
+/// Map a corpus dialect-dir name to the closest supported parser dialect.
+///
+/// Dialects without a dedicated parser fall back to a related dialect or to
+/// `GenericDialect` rather than being silently skipped, so corpus stats reflect
+/// every file under `tests/corpus/`. Aliases are best-effort:
+///   - `presto` / `athena` use Trino-style SQL → Generic (same as our `trino`)
+///   - `tsql` / `fabric` use T-SQL → MsSql
+///   - `spark` uses Spark SQL → Databricks
+///   - `materialize` is Postgres-compatible → Postgres
+///   - `singlestore` / `doris` / `starrocks` are MySQL-compatible → MySql
+///   - `oracle` / `teradata` / `dremio` / `exasol` have no dedicated parser → Generic
+fn dialect_for_name(name: &str) -> Box<dyn sqlparser::dialect::Dialect> {
+    let base_name = normalize_dialect_name(name).to_lowercase();
+    if let Some(d) = dialect_from_str(&base_name) {
+        return d;
+    }
+    let alias: &str = match base_name.as_str() {
+        "presto" | "athena" => "trino",
+        "tsql" | "fabric" => "mssql",
+        "spark" => "databricks",
+        "materialize" => "postgres",
+        "singlestore" | "doris" | "starrocks" => "mysql",
+        // Everything else (oracle, teradata, dremio, exasol, …) → generic
+        _ => "generic",
+    };
+    dialect_from_str(alias).unwrap_or_else(|| {
+        Box::new(sqlparser::dialect::GenericDialect)
+            as Box<dyn sqlparser::dialect::Dialect>
+    })
 }
 
 fn dialect_from_path(path: &Path, corpus_root: &Path) -> Option<String> {
@@ -54,8 +80,7 @@ fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
     let dialect_name = dialect_from_path(path, corpus_root)
         .ok_or_else(|| format!("Could not determine dialect from path: {}", path.display()))?;
 
-    let dialect = dialect_for_name(&dialect_name)
-        .ok_or_else(|| format!("Unknown dialect: {}", dialect_name))?;
+    let dialect = dialect_for_name(&dialect_name);
 
     let sql = std::fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
 
@@ -246,12 +271,8 @@ fn main() {
 
         // Normalize dialect name (extract base dialect from directory name)
         let normalized_dialect = normalize_dialect_name(&dialect_dir_name);
-
-        // Skip if dialect is not supported
-        if dialect_for_name(normalized_dialect).is_none() {
-            // Skip silently - unknown dialects are expected (e.g., trino)
-            return;
-        }
+        // No silent skip: dialects without a dedicated parser fall back to a
+        // related dialect or to GenericDialect inside `dialect_for_name`.
 
         // Run test with panic catching
         let result =
