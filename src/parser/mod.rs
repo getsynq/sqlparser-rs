@@ -10211,6 +10211,21 @@ impl<'a> Parser<'a> {
                 self.prev_token();
                 Ok(None)
             }
+            // MySQL / MariaDB / Snowflake index hints: `USE / IGNORE / FORCE
+            // INDEX (...)`. Don't consume the `USE / IGNORE / FORCE` as a
+            // table alias — leave them for the trailing-hint loop in
+            // `parse_table_and_joins`.
+            Token::Word(w)
+                if !after_as
+                    && matches!(w.keyword, Keyword::USE | Keyword::IGNORE | Keyword::FORCE)
+                    && matches!(
+                        self.peek_token_kind(),
+                        Token::Word(next) if next.keyword == Keyword::INDEX || next.keyword == Keyword::KEY
+                    ) =>
+            {
+                self.prev_token();
+                Ok(None)
+            }
             // Accept any identifier after `AS` (though many dialects have restrictions on
             // keywords that may appear here). If there's no `AS`: don't parse keywords,
             // which may start a construct allowed in this position, to be parsed as aliases.
@@ -12710,6 +12725,50 @@ impl<'a> Parser<'a> {
             && self.parse_keyword(Keyword::AT)
         {
             let _ = self.parse_identifier(false)?;
+        }
+
+        // MySQL / MariaDB / Snowflake index hints:
+        //   tbl [AS alias] { USE | IGNORE | FORCE } [INDEX|KEY] [FOR {JOIN|...}] (idx, ...)
+        // Consume the balanced paren chunk; we don't surface index hints in
+        // the AST.
+        // https://dev.mysql.com/doc/refman/8.4/en/index-hints.html
+        loop {
+            let hint_kw = match self.peek_token_kind() {
+                Token::Word(w)
+                    if matches!(w.keyword, Keyword::USE | Keyword::IGNORE | Keyword::FORCE) =>
+                {
+                    Some(w.keyword)
+                }
+                _ => None,
+            };
+            let Some(kw) = hint_kw else { break };
+            // Need to look further: must be followed by INDEX or KEY.
+            let is_index_hint = matches!(
+                self.peek_nth_token_ref(1).token,
+                Token::Word(ref w) if w.keyword == Keyword::INDEX || w.keyword == Keyword::KEY
+            );
+            if !is_index_hint {
+                break;
+            }
+            // Consume `USE/IGNORE/FORCE` + `INDEX|KEY`.
+            self.next_token();
+            self.next_token();
+            // Optional `FOR { JOIN | ORDER BY | GROUP BY }`.
+            if self.parse_keyword(Keyword::FOR) {
+                let _ = self.parse_one_of_keywords(&[
+                    Keyword::JOIN,
+                    Keyword::ORDER,
+                    Keyword::GROUP,
+                ]);
+                let _ = self.parse_keyword(Keyword::BY);
+            }
+            // Required `(name [, name]*)` — empty list also accepted.
+            self.expect_token(&Token::LParen)?;
+            if !self.consume_token(&Token::RParen) {
+                let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+            }
+            let _ = kw; // kw discarded; preserved name not needed in AST.
         }
         // Note that for keywords to be properly handled here, they need to be
         // added to `RESERVED_FOR_TABLE_ALIAS`, otherwise they may be parsed as
