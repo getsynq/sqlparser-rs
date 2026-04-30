@@ -9308,6 +9308,9 @@ impl<'a> Parser<'a> {
 
     pub fn parse_snowflake_json_path(&mut self) -> Result<Value, ParserError> {
         let mut buf = String::new();
+        // Track bracket nesting so we can ignore whitespace inside `[ ... ]`
+        // (Snowflake accepts both `v:f['k']` and `v:f[ 'k' ]`).
+        let mut bracket_depth: i32 = 0;
 
         let mut next_next_token = Some(self.next_token());
         while let Some(next_token) = next_next_token {
@@ -9331,9 +9334,15 @@ impl<'a> Parser<'a> {
                         self.prev_token();
                         break;
                     }
+                    bracket_depth += 1;
                     buf.push('[')
                 }
-                Token::RBracket => buf.push(']'),
+                Token::RBracket => {
+                    if bracket_depth > 0 {
+                        bracket_depth -= 1;
+                    }
+                    buf.push(']')
+                }
                 // Only consume * inside brackets [*] for array wildcard traversal.
                 // Bare * after . is a qualified wildcard (.* EXCEPT) not a JSON path.
                 Token::Mul if buf.ends_with('[') => buf.push('*'),
@@ -9361,6 +9370,13 @@ impl<'a> Parser<'a> {
                     buf.push(')');
                 }
                 Token::Whitespace(_) => {
+                    if bracket_depth > 0 {
+                        // Inside `[ ... ]`, whitespace is insignificant — keep scanning.
+                        // Don't append it to the path buffer; the AST normalizes
+                        // `v:f[ 'k' ]` to `v:f['k']`.
+                        next_next_token = self.next_token_no_skip().cloned();
+                        continue;
+                    }
                     break;
                 }
                 _ => {

@@ -1554,6 +1554,20 @@ fn parse_object_constants_expr() {
 }
 
 #[test]
+fn parse_variant_path_with_whitespace_in_brackets() {
+    // Snowflake accepts whitespace inside `[ ... ]` after a `:` colon-path,
+    // e.g. `v:custom_attributes[ 'k' ]::string`.
+    snowflake().one_statement_parses_to(
+        "SELECT v:custom_attributes[ 'k' ]::string FROM t",
+        "SELECT CAST(v:custom_attributes['k'] AS STRING) FROM t",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT v:f[ 0 ] FROM t",
+        "SELECT v:f[0] FROM t",
+    );
+}
+
+#[test]
 fn parse_array_index_json_dot() {
     let stmt = snowflake().verified_only_select("SELECT src[0].order_number FROM car_sales");
 
