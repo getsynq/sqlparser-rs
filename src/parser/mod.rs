@@ -11786,7 +11786,23 @@ impl<'a> Parser<'a> {
                 None
             };
 
-        let top = if self.parse_keyword(Keyword::TOP) {
+        // `SELECT TOP n …` is MSSQL / Sybase / Snowflake / Redshift; gate so
+        // dialects that don't use it (BigQuery, Postgres, MySQL) treat `TOP`
+        // as an ordinary identifier — e.g. `SELECT TOP.col` where `TOP` is a
+        // table alias.
+        let top = if dialect_of!(self is MsSqlDialect | SnowflakeDialect | RedshiftSqlDialect | GenericDialect)
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::TOP
+            )
+            // Only consume TOP when followed by a number / `(` / `PERCENT` —
+            // the actual `TOP n` shape. Otherwise it's an identifier.
+            && matches!(
+                self.peek_nth_token_ref(1).token,
+                Token::Number(_, _) | Token::LParen
+            )
+            && self.parse_keyword(Keyword::TOP)
+        {
             Some(self.parse_top()?)
         } else {
             None
