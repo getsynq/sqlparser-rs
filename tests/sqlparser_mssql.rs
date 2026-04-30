@@ -232,6 +232,24 @@ fn parse_mssql_top() {
 }
 
 #[test]
+fn parse_mssql_declare_variable() {
+    // T-SQL `DECLARE @var [AS] type [= expr] [, @var2 type ...]`
+    // https://learn.microsoft.com/en-us/sql/t-sql/language-elements/declare-local-variable-transact-sql
+    ms().parse_sql_statements("DECLARE @x INT").unwrap();
+    ms().parse_sql_statements("DECLARE @x AS INT").unwrap();
+    ms().parse_sql_statements("DECLARE @x INT = 5").unwrap();
+    ms().parse_sql_statements("DECLARE @CheckDate AS DATETIME = GETDATE()")
+        .unwrap();
+    ms().parse_sql_statements(
+        "DECLARE @x INT, @y VARCHAR(50), @z DATETIME = GETDATE()",
+    )
+    .unwrap();
+    // Cursor declarations (no `@` prefix) keep the existing path.
+    ms().parse_sql_statements("DECLARE c CURSOR FOR SELECT 1")
+        .unwrap();
+}
+
+#[test]
 fn parse_mssql_go_batch_separator() {
     // T-SQL `GO` is a sqlcmd / SSMS batch separator, not a SQL keyword.
     // After the previous statement is `;`-terminated, the parser must
