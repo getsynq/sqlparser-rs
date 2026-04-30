@@ -1596,6 +1596,23 @@ fn parse_array_index_json_with_cast() {
 }
 
 #[test]
+fn parse_view_as_table_alias() {
+    // `VIEW` is reserved only because of Hive's `LATERAL VIEW` clause, which
+    // is always consumed as a two-keyword pair. When `VIEW` appears in plain
+    // alias position it should be treated as an ordinary identifier — e.g.
+    // `FROM tbl VIEW` or `JOIN tbl AS VIEW`.
+    snowflake().verified_stmt("SELECT VIEW.x FROM t AS VIEW");
+    snowflake().one_statement_parses_to(
+        "SELECT * FROM t VIEW",
+        "SELECT * FROM t AS VIEW",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT VIEW.x FROM tbl FULL OUTER JOIN tbl2 AS VIEW ON tbl.id = VIEW.id",
+        "SELECT VIEW.x FROM tbl FULL JOIN tbl2 AS VIEW ON tbl.id = VIEW.id",
+    );
+}
+
+#[test]
 fn parse_array_subscript_after_cast() {
     // Snowflake variant access often casts a path to ARRAY then indexes the
     // result, e.g. `v:category::array[0]`. The `[N]` is an array subscript,
