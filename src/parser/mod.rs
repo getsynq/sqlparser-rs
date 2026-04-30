@@ -3249,6 +3249,18 @@ impl<'a> Parser<'a> {
                 })
             }
         } else if let Token::Word(w) = &tok.token {
+            // Postgres/Redshift bare-word postfix predicates: `expr ISNULL`
+            // and `expr NOTNULL`.
+            if w.quote_style.is_none()
+                && dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | SQLiteDialect | GenericDialect)
+            {
+                if w.value.eq_ignore_ascii_case("ISNULL") {
+                    return Ok(Expr::IsNull(Box::new(expr)));
+                }
+                if w.value.eq_ignore_ascii_case("NOTNULL") {
+                    return Ok(Expr::IsNotNull(Box::new(expr)));
+                }
+            }
             match w.keyword {
                 Keyword::IS => {
                     if self.parse_keyword(Keyword::JSON) {
@@ -3781,6 +3793,17 @@ impl<'a> Parser<'a> {
                 _ => Ok(0),
             },
             Token::Word(w) if w.keyword == Keyword::IS => Ok(Self::IS_PREC),
+            // Postgres / Redshift accept `expr ISNULL` and `expr NOTNULL` as
+            // bare-word postfix predicates (equivalent to `IS NULL` / `IS NOT
+            // NULL`). They aren't reserved keywords; match by spelling.
+            Token::Word(w)
+                if w.quote_style.is_none()
+                    && (w.value.eq_ignore_ascii_case("ISNULL")
+                        || w.value.eq_ignore_ascii_case("NOTNULL"))
+                    && dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | SQLiteDialect | GenericDialect) =>
+            {
+                Ok(Self::IS_PREC)
+            }
             Token::Word(w) if w.keyword == Keyword::IN => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::BETWEEN => Ok(Self::BETWEEN_PREC),
             Token::Word(w) if w.keyword == Keyword::LIKE => Ok(Self::LIKE_PREC),
