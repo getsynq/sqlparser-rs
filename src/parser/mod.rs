@@ -10160,6 +10160,13 @@ impl<'a> Parser<'a> {
             {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
+            // VIEW is reserved only because of Hive's `LATERAL VIEW` clause
+            // (always consumed as a 2-keyword pair before we get here). When
+            // it appears in alias position alone — e.g. customer SQL with
+            // `FULL OUTER JOIN VIEWS view ON …` — it's an ordinary alias.
+            Token::Word(w) if w.keyword == Keyword::VIEW => {
+                Ok(Some(w.to_ident().spanning(next_token.span)))
+            }
             // MSSQL supports single-quoted strings as aliases for columns
             // We accept them as table aliases too, although MSSQL does not.
             //
