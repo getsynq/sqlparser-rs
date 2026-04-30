@@ -843,7 +843,7 @@ impl<'a> Parser<'a> {
                 // `PREPARE`, `EXECUTE` and `DEALLOCATE` are Postgres-specific
                 // syntaxes. They are used for Postgres prepared statement.
                 Keyword::DEALLOCATE => Ok(self.parse_deallocate()?),
-                Keyword::EXECUTE => Ok(self.parse_execute()?),
+                Keyword::EXECUTE | Keyword::EXEC => Ok(self.parse_execute()?),
                 Keyword::PREPARE => Ok(self.parse_prepare()?),
                 Keyword::MERGE => Ok(self.parse_merge()?),
                 // `PRAGMA` is sqlite specific https://www.sqlite.org/pragma.html
@@ -15973,12 +15973,62 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let name = self.parse_identifier(false)?;
+        // T-SQL: `EXEC [@return_status =] proc_name [args]` where `proc_name`
+        // is dotted (`schema.proc`) and arguments are comma-separated WITHOUT
+        // parens. https://learn.microsoft.com/en-us/sql/t-sql/language-elements/execute-transact-sql
+        // Skip the optional `@return = ` prefix; we don't surface it.
+        if dialect_of!(self is MsSqlDialect | GenericDialect) {
+            let saved = self.index;
+            let mut consumed = false;
+            if let Ok(ident_with_span) = self.parse_identifier(false) {
+                let value_starts_at = ident_with_span.unwrap().value.starts_with('@');
+                if value_starts_at && self.consume_token(&Token::Eq) {
+                    consumed = true;
+                }
+            }
+            if !consumed {
+                self.index = saved;
+            }
+        }
+
+        // First identifier of the proc name.
+        let first = self.parse_identifier(false)?;
+        // Accept dotted procedure names (T-SQL `dbo.proc`); flatten to a
+        // single Ident so the existing AST shape stays unchanged.
+        let name = if dialect_of!(self is MsSqlDialect | GenericDialect)
+            && self.peek_token_is(&Token::Period)
+        {
+            let mut buf = first.clone().unwrap().value;
+            while self.consume_token(&Token::Period) {
+                let next = self.parse_identifier(false)?.unwrap();
+                buf.push('.');
+                buf.push_str(&next.value);
+            }
+            Ident::new(buf).empty_span()
+        } else {
+            first
+        };
 
         let mut parameters = vec![];
         if self.consume_token(&Token::LParen) {
             parameters = self.parse_comma_separated(Parser::parse_expr)?;
             self.expect_token(&Token::RParen)?;
+        } else if dialect_of!(self is MsSqlDialect | GenericDialect) {
+            // T-SQL `EXEC proc arg1, arg2, ...` — bare comma-separated args.
+            // Only consume if the following token actually starts an
+            // expression so we don't swallow a `;`/EOF.
+            let next_is_terminator = match self.peek_token_kind() {
+                Token::SemiColon | Token::EOF => true,
+                Token::Word(w) => matches!(w.keyword, Keyword::INTO | Keyword::USING),
+                _ => false,
+            };
+            if !next_is_terminator {
+                if let Some(args) =
+                    self.maybe_parse(|p| p.parse_comma_separated(|p2| p2.parse_expr()))
+                {
+                    parameters = args;
+                }
+            }
         }
 
         // PostgreSQL / Trino: EXECUTE name [(params)] USING expr [AS alias] [, ...]
