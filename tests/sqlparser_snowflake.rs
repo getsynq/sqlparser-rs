@@ -1861,6 +1861,13 @@ fn test_sf_trailing_commas_in_from_clause() {
         r#"SELECT a, b FROM t, LATERAL FLATTEN(INPUT => t.arr) AS f, WHERE a IS NOT NULL"#,
         r#"SELECT a, b FROM t, LATERAL FLATTEN(INPUT => t.arr) AS f WHERE a IS NOT NULL"#,
     );
+
+    // Trailing comma right before the close of an enclosing CTE / subquery
+    // (no clause keyword follows).
+    snowflake().one_statement_parses_to(
+        "WITH x AS (SELECT a FROM t1, LATERAL FLATTEN(INPUT => t1.arr),) SELECT * FROM x",
+        "WITH x AS (SELECT a FROM t1, LATERAL FLATTEN(INPUT => t1.arr)) SELECT * FROM x",
+    );
 }
 
 #[test]
