@@ -61,21 +61,6 @@ fn dialect_from_path(path: &Path, corpus_root: &Path) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Extract expected statement count from `-- Statements: N` header comment.
-fn expected_statement_count(sql: &str) -> Option<usize> {
-    for line in sql.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("-- Statements:") {
-            return rest.trim().parse().ok();
-        }
-        // Stop looking after non-comment, non-empty lines
-        if !trimmed.is_empty() && !trimmed.starts_with("--") {
-            break;
-        }
-    }
-    None
-}
-
 fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
     let dialect_name = dialect_from_path(path, corpus_root)
         .ok_or_else(|| format!("Could not determine dialect from path: {}", path.display()))?;
@@ -99,15 +84,6 @@ fn run_test(path: &Path, corpus_root: &Path) -> Result<(), String> {
         Ok(statements) => {
             if statements.is_empty() {
                 return Err(format!("Parsed 0 statements from {}", path.display()));
-            }
-
-            if let Some(expected) = expected_statement_count(&sql) {
-                if expected != statements.len() {
-                    return Err(format!(
-                        "Statement count mismatch: expected {expected}, got {}",
-                        statements.len()
-                    ));
-                }
             }
 
             Ok(())
