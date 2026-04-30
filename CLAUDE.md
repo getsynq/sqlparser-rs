@@ -261,7 +261,10 @@ Use this pattern for dialect-specific clauses that don't need AST representation
 
 **Reserved-keyword-as-alias carve-out** (recurring fix shape):
 - When a keyword (e.g. CLUSTER, SORT, FINAL, AT, BEFORE) is reserved only because of a specific clause (`CLUSTER BY`, `t AT(...)` time-travel), accept it as an identifier alias in `parse_optional_alias` when the lookahead doesn't match the clause shape (next-not-`BY`, next-not-`(`, etc.).
-- Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL and in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
+- Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL / VIEW / OPTION / USE/IGNORE/FORCE in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
+- **Match-arm ordering trap:** the catch-all `Token::Word(w) if after_as || !reserved_kwds.contains(&w.keyword)` arm fires first for any non-reserved keyword. New carve-outs for dialect-specific clauses (e.g. `OPTION (`, `USE INDEX`) must be placed *before* it or they silently never run.
+
+**Trailing-comma support** lives in `is_parse_comma_separated_end` (`src/parser/mod.rs:~4280`). Extending the set of clauses where a trailing `,` is tolerated (FROM list, IN list, …) goes there, or in the per-clause loop's bespoke check (e.g. `parse_from_clause_body`'s Snowflake terminator set).
 
 **Prefer `WithSpan<Ident>` / `WithSpan<Expr>` in new AST fields:**
 `parse_identifier(in_table_clause)?` returns `WithSpan<Ident>`. Keep that wrapping in new AST nodes so kernel-cll lineage can surface source positions. Reach for `parse_identifier_no_span()` only when there's a specific reason not to carry the span (e.g. matching an existing surrounding type that's still plain `Ident`). For new `Expr` fields, wrap with the standard idiom: `let start_idx = self.index; let expr = self.parse_expr()?; expr.spanning(self.span_from_index(start_idx))` — see `selection` in `parse_select` for the template. `span_from_index` anchors its end at `self.index - 1` (the last consumed token), so the trailing `)` of an enclosing `(...)` is correctly excluded.
@@ -318,6 +321,10 @@ When adding fields to AST structs, you must update ALL pattern matches:
 **Recursive AST types**: New fields containing `Expr` inside `Function`/`Expr` cycle need `Box<Expr>` to break infinite size (e.g., `HavingBound(Box<Expr>)`).
 
 **`ObjectName` uses `Vec<Ident>`** not `Vec<WithSpan<Ident>>` — don't wrap idents in `WithSpan` when constructing manually.
+
+**`DECLARE` has 5 dialect-specific branches** in `parse_declare` (Snowflake block, Databricks variable+cursor, BigQuery variable-list, T-SQL `@var [AS] type [= expr]`, Postgres-style cursor). Order matters: each branch returns early; a later branch never runs if an earlier one matched. When adding a new dialect, gate by `dialect_of!` *and* by a discriminator that won't false-match the others (e.g. T-SQL gates on `name.value.starts_with('@')`, Databricks falls through to the cursor path when `peek == CURSOR`).
+
+**Variable-length type lengths** are split: `parse_optional_character_length` (used by VARCHAR / CHAR — accepts `MAX` and unit suffixes) vs `parse_optional_precision` (used by NVARCHAR / VARBINARY / TIMESTAMP / etc. — `Option<u64>`, accepts `MAX` as `None`). When a new type accepts `MAX`, pick the right helper or extend it; don't write a third one.
 
 #### Upstream Compatibility
 Since this is a fork of apache/datafusion-sqlparser-rs:
