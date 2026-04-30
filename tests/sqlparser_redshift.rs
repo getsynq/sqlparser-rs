@@ -435,6 +435,15 @@ fn test_distribution_styles() {
 }
 
 #[test]
+fn test_inline_distkey_sortkey_column_attributes() {
+    // Redshift allows DISTKEY and SORTKEY as inline column attributes (no parens).
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
+    redshift().verified_stmt(
+        "CREATE TABLE t (id VARCHAR(10) NOT NULL DISTKEY PRIMARY KEY, ts TIMESTAMP SORTKEY)",
+    );
+}
+
+#[test]
 fn test_extract_with_string_date_part() {
     // Redshift allows date parts as string literals in EXTRACT
     let sql = "SELECT EXTRACT('hour' FROM col) FROM tbl";
