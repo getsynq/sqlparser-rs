@@ -270,7 +270,13 @@ fn main() {
         };
 
         // Normalize dialect name (extract base dialect from directory name)
-        let normalized_dialect = normalize_dialect_name(&dialect_dir_name);
+        // The bare `customer/` dir has no dialect suffix — bucket it under
+        // `generic` so the report doesn't list a phantom "customer" dialect.
+        let normalized_dialect = if dialect_dir_name == "customer" {
+            "generic"
+        } else {
+            normalize_dialect_name(&dialect_dir_name)
+        };
         // No silent skip: dialects without a dedicated parser fall back to a
         // related dialect or to GenericDialect inside `dialect_for_name`.
 
