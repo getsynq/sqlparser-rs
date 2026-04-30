@@ -2378,6 +2378,18 @@ fn test_bigquery_hyphenated_project_id_with_numeric_segment() {
 }
 
 #[test]
+fn test_bigquery_top_as_identifier() {
+    // BigQuery doesn't support `SELECT TOP n` (T-SQL); `TOP` should parse as
+    // an ordinary identifier — table alias, column name, etc.
+    bigquery()
+        .parse_sql_statements("SELECT TOP.col FROM tbl AS TOP")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("SELECT TOP FROM tbl")
+        .unwrap();
+}
+
+#[test]
 fn test_bigquery_hyphenated_project_id_in_insert() {
     // BigQuery hyphenated project IDs are valid in `INSERT INTO`, not just
     // in `FROM` / table clauses.
