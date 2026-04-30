@@ -2060,3 +2060,20 @@ fn parse_straight_join() {
     mysql_and_generic().verified_stmt("SELECT e.* FROM e STRAIGHT_JOIN p ON e.x = p.y");
     mysql_and_generic().verified_stmt("SELECT * FROM t1 STRAIGHT_JOIN t2 ON t1.id = t2.id");
 }
+#[test]
+fn parse_mysql_index_hints() {
+    // MySQL / MariaDB index hints: `USE | IGNORE | FORCE INDEX [FOR ...] (...)`
+    // https://dev.mysql.com/doc/refman/8.4/en/index-hints.html
+    mysql()
+        .parse_sql_statements("SELECT * FROM t USE INDEX (idx)")
+        .unwrap();
+    mysql()
+        .parse_sql_statements("SELECT * FROM t AS x USE INDEX (i1, i2) JOIN y ON 1 = 1")
+        .unwrap();
+    mysql()
+        .parse_sql_statements("SELECT * FROM t IGNORE INDEX FOR JOIN (idx)")
+        .unwrap();
+    mysql()
+        .parse_sql_statements("SELECT * FROM t FORCE INDEX (idx)")
+        .unwrap();
+}
