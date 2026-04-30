@@ -12512,10 +12512,12 @@ impl<'a> Parser<'a> {
             // Snowflake allows trailing commas in FROM clause
             // e.g. `SELECT * FROM t1, lateral flatten(...) alias, WHERE ...`
             // https://docs.snowflake.com/en/release-notes/2024/8_11#select-supports-trailing-commas
-            // Check if the comma was trailing (followed by a clause keyword)
+            // Check if the comma was trailing (followed by a clause keyword,
+            // closing paren / brace, or end-of-statement).
             if dialect_of!(self is SnowflakeDialect) {
-                if let Token::Word(w) = self.peek_token_kind().clone() {
-                    if matches!(
+                let next = self.peek_token_kind().clone();
+                let trailing = match &next {
+                    Token::Word(w) => matches!(
                         w.keyword,
                         Keyword::WHERE
                             | Keyword::GROUP
@@ -12529,10 +12531,12 @@ impl<'a> Parser<'a> {
                             | Keyword::FETCH
                             | Keyword::OFFSET
                             | Keyword::WINDOW
-                    ) {
-                        // Trailing comma - stop parsing FROM clause
-                        break;
-                    }
+                    ),
+                    Token::RParen | Token::SemiColon | Token::EOF => true,
+                    _ => false,
+                };
+                if trailing {
+                    break;
                 }
             }
         }
