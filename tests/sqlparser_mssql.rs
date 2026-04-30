@@ -232,6 +232,21 @@ fn parse_mssql_top() {
 }
 
 #[test]
+fn parse_mssql_go_batch_separator() {
+    // T-SQL `GO` is a sqlcmd / SSMS batch separator, not a SQL keyword.
+    // After the previous statement is `;`-terminated, the parser must
+    // skip `GO` rather than demanding another delimiter.
+    // https://learn.microsoft.com/en-us/sql/t-sql/language-elements/sql-server-utilities-statements-go
+    let stmts = ms()
+        .parse_sql_statements("SELECT 1; GO SELECT 2; GO")
+        .unwrap();
+    assert_eq!(stmts.len(), 2);
+    // Trailing `GO` alone after a `;`-terminated statement.
+    let stmts = ms().parse_sql_statements("SELECT 1; GO").unwrap();
+    assert_eq!(stmts.len(), 1);
+}
+
+#[test]
 fn parse_mssql_bin_literal() {
     let _ = ms_and_generic().one_statement_parses_to("SELECT 0xdeadBEEF", "SELECT X'deadBEEF'");
 }
