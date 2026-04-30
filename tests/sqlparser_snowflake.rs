@@ -1357,6 +1357,7 @@ fn test_snowflake_stage_object_names() {
         "@namespace.%table_name/path",
         "@namespace.stage_name/path",
         "@~/path",
+        "@stage/path-with-dashes/file",
     ];
     let mut allowed_object_names = vec![
         ObjectName(vec![Ident::new("my_company"), Ident::new("emp_basic")]),
@@ -1364,6 +1365,7 @@ fn test_snowflake_stage_object_names() {
         ObjectName(vec![Ident::new("@namespace.%table_name/path")]),
         ObjectName(vec![Ident::new("@namespace.stage_name/path")]),
         ObjectName(vec![Ident::new("@~/path")]),
+        ObjectName(vec![Ident::new("@stage/path-with-dashes/file")]),
     ];
 
     for it in allowed_formatted_names

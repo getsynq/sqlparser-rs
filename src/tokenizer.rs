@@ -1240,6 +1240,7 @@ impl<'a> Tokenizer<'a> {
                                     || ch == '~'
                                     || ch == '%'
                                     || ch == '.'
+                                    || ch == '-'
                             }));
                             Ok(Some(Token::make_word(&s, None)))
                         }
