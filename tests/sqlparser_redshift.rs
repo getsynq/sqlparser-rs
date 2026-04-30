@@ -628,6 +628,21 @@ fn test_redshift_array_subscript_compound_index() {
 }
 
 #[test]
+fn test_redshift_postfix_isnull_notnull() {
+    // Redshift / Postgres accept `expr ISNULL` and `expr NOTNULL` as
+    // bare-word postfix predicates (equivalent to `IS NULL` / `IS NOT NULL`).
+    // https://www.postgresql.org/docs/current/functions-comparison.html
+    redshift().one_statement_parses_to(
+        "SELECT a FROM t WHERE a NOTNULL",
+        "SELECT a FROM t WHERE a IS NOT NULL",
+    );
+    redshift().one_statement_parses_to(
+        "SELECT a FROM t WHERE a ISNULL",
+        "SELECT a FROM t WHERE a IS NULL",
+    );
+}
+
+#[test]
 fn test_redshift_extract_custom_date_parts() {
     // Redshift supports abbreviated date/time parts as identifiers
     // e.g. EXTRACT(d FROM ...) for day, EXTRACT(h FROM ...) for hour, etc.
