@@ -6402,12 +6402,16 @@ impl<'a> Parser<'a> {
             );
             if !is_cursor {
                 let saw_default = self.parse_keyword(Keyword::DEFAULT);
+                // Direct `= expr` initialiser (no type, no DEFAULT keyword) —
+                // Databricks supports `DECLARE name = expr;`.
+                let saw_eq = !saw_default && self.consume_token(&Token::Eq);
                 if !saw_default
+                    && !saw_eq
                     && !matches!(self.peek_token().token, Token::SemiColon | Token::EOF)
                 {
                     let _ = self.parse_data_type()?;
                 }
-                if saw_default || self.parse_keyword(Keyword::DEFAULT) {
+                if saw_eq || saw_default || self.parse_keyword(Keyword::DEFAULT) {
                     let _ = self.parse_expr()?;
                 }
                 return Ok(Statement::SetVariable {
