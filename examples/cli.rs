@@ -36,21 +36,19 @@ $ cargo run --feature json_example --example cli FILENAME.sql [--dialectname]
 "#,
     );
 
-    let dialect: Box<dyn Dialect> = match std::env::args().nth(2).unwrap_or_default().as_ref() {
-        "--ansi" => Box::new(AnsiDialect {}),
-        "--bigquery" => Box::new(BigQueryDialect {}),
-        "--postgres" => Box::new(PostgreSqlDialect {}),
-        "--ms" => Box::new(MsSqlDialect {}),
-        "--mysql" => Box::new(MySqlDialect {}),
-        "--snowflake" => Box::new(SnowflakeDialect {}),
-        "--hive" => Box::new(HiveDialect {}),
-        "--redshift" => Box::new(RedshiftSqlDialect {}),
-        "--clickhouse" => Box::new(ClickHouseDialect {}),
-        "--duckdb" => Box::new(DuckDbDialect {}),
-        "--sqlite" => Box::new(SQLiteDialect {}),
-        "--databricks" => Box::new(sqlparser::dialect::DatabricksDialect {}),
-        "--generic" | "" => Box::new(GenericDialect {}),
-        s => panic!("Unexpected parameter: {s}"),
+    // Resolve the `--<name>` flag via `dialect_from_str` so every dialect the
+    // library knows about is available to single-file repros. Falls back to
+    // GenericDialect when the flag is absent or `--generic`.
+    let raw_flag = std::env::args().nth(2).unwrap_or_default();
+    let dialect: Box<dyn Dialect> = if raw_flag.is_empty() {
+        Box::new(GenericDialect {})
+    } else if let Some(name) = raw_flag.strip_prefix("--") {
+        // Backwards-compat alias: `--ms` was the original spelling for MSSQL.
+        let canonical = if name == "ms" { "mssql" } else { name };
+        sqlparser::dialect::dialect_from_str(canonical)
+            .unwrap_or_else(|| panic!("Unknown dialect: --{name}"))
+    } else {
+        panic!("Unexpected parameter: {raw_flag}")
     };
 
     println!("Parsing from file '{}' using {:?}", &filename, dialect);
