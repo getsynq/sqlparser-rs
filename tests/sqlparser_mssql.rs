@@ -673,3 +673,13 @@ fn parse_mssql_exec_statement() {
     ms().parse_sql_statements("EXEC @return_status = checkstate '2'")
         .unwrap();
 }
+
+#[test]
+fn parse_mssql_execute_as_login() {
+    // T-SQL EXECUTE AS supports `LOGIN = '...'` / `USER = '...'` forms in
+    // addition to the bare CALLER / OWNER / SELF / `<name>` shapes.
+    // https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-clause-transact-sql
+    ms().parse_sql_statements("EXECUTE AS LOGIN = 'foo'").unwrap();
+    ms().parse_sql_statements("EXECUTE AS USER = 'bar'").unwrap();
+    ms().parse_sql_statements("EXECUTE AS CALLER").unwrap();
+}
