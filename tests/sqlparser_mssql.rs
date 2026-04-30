@@ -647,3 +647,15 @@ fn ms_and_generic() -> TestedDialects {
         options: None,
     }
 }
+
+#[test]
+fn parse_mssql_varchar_max() {
+    // T-SQL allows `MAX` instead of an integer for variable-length types.
+    // https://learn.microsoft.com/en-us/sql/t-sql/data-types/nchar-and-nvarchar-transact-sql
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(MAX)").unwrap();
+    ms().parse_sql_statements("DECLARE @x VARBINARY(MAX)").unwrap();
+    // Lowercase `max` should also work.
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(max)").unwrap();
+    // Numeric precision still works.
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(50)").unwrap();
+}
