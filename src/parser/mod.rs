@@ -15796,7 +15796,35 @@ impl<'a> Parser<'a> {
 
     pub fn parse_execute(&mut self) -> Result<Statement, ParserError> {
         // ClickHouse: EXECUTE AS <user> (user impersonation)
+        // T-SQL: EXECUTE AS { CALLER | OWNER | SELF | LOGIN = 'name' | USER = 'name' }
+        // https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-clause-transact-sql
         if self.parse_keyword(Keyword::AS) {
+            // T-SQL pattern: optional `LOGIN`/`USER` keyword followed by `= 'value'`.
+            if dialect_of!(self is MsSqlDialect | GenericDialect) {
+                if let Token::Word(w) = self.peek_token().token.clone() {
+                    let kw = w.value.to_uppercase();
+                    if matches!(kw.as_str(), "LOGIN" | "USER")
+                        && self.peek_nth_token(1).token == Token::Eq
+                    {
+                        // Consume `LOGIN =` / `USER =`.
+                        self.next_token();
+                        self.next_token();
+                        // The remainder is a string literal name; expose it
+                        // through the existing `user` Ident slot.
+                        let next = self.next_token();
+                        let user = match next.token {
+                            Token::SingleQuotedString(s)
+                            | Token::DoubleQuotedString(s)
+                            | Token::NationalStringLiteral(s) => {
+                                Ident::with_quote('\'', s).spanning(next.span)
+                            }
+                            Token::Word(w) => w.to_ident().spanning(next.span),
+                            _ => return self.expected("user/login name", next),
+                        };
+                        return Ok(Statement::ExecuteAs { user });
+                    }
+                }
+            }
             let user = self.parse_identifier(false)?;
             return Ok(Statement::ExecuteAs { user });
         }
