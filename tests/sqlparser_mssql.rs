@@ -696,3 +696,14 @@ fn parse_mssql_create_table_as_clone_of() {
     )
     .unwrap();
 }
+
+#[test]
+fn parse_mssql_option_query_hint() {
+    // T-SQL trailing `OPTION (...)` query hint, e.g. `OPTION (RECOMPILE)`,
+    // `OPTION (FORCE ORDER, MAXDOP 4)`. Consume-and-discard.
+    // https://learn.microsoft.com/en-us/sql/t-sql/queries/hints-transact-sql-query
+    ms().parse_sql_statements("SELECT * FROM t WHERE c > 5 OPTION (RECOMPILE)")
+        .unwrap();
+    ms().parse_sql_statements("SELECT * FROM t OPTION (FORCE ORDER, MAXDOP 4)")
+        .unwrap();
+}
