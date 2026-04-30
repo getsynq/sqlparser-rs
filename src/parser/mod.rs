@@ -10792,6 +10792,19 @@ impl<'a> Parser<'a> {
 
     pub fn parse_optional_precision(&mut self) -> Result<Option<u64>, ParserError> {
         if self.consume_token(&Token::LParen) {
+            // T-SQL allows `MAX` instead of an integer for NVARCHAR / VARBINARY
+            // / etc. — it represents the maximum allowed length. The current
+            // `Option<u64>` shape can't capture that; map MAX to `None` so the
+            // type parses (the lineage visitor doesn't depend on the length).
+            // https://learn.microsoft.com/en-us/sql/t-sql/data-types/nchar-and-nvarchar-transact-sql
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::MAX
+            ) {
+                self.next_token();
+                self.expect_token(&Token::RParen)?;
+                return Ok(None);
+            }
             let n = self.parse_literal_uint()?;
             self.expect_token(&Token::RParen)?;
             Ok(Some(n))
