@@ -11427,6 +11427,15 @@ impl<'a> Parser<'a> {
                 }
             }
 
+            // Optional `WITH TIES` after the LIMIT count (ClickHouse / BigQuery
+            // / standard SQL FETCH equivalent). The Query AST doesn't carry the
+            // tie flag, so consume-and-discard for now — round-trip won't keep
+            // it but lineage is unaffected.
+            // https://clickhouse.com/docs/sql-reference/statements/select/limit
+            if limit.is_some() {
+                let _ = self.parse_keywords(&[Keyword::WITH, Keyword::TIES]);
+            }
+
             let limit_by =
                 if dialect_of!(self is ClickHouseDialect) && self.parse_keyword(Keyword::BY) {
                     self.parse_comma_separated(Parser::parse_expr)?
@@ -11455,6 +11464,25 @@ impl<'a> Parser<'a> {
                     offset = Some(self.parse_offset()?)
                 }
             }
+            // T-SQL trailing query hint: `OPTION (RECOMPILE)` /
+            // `OPTION (FORCE ORDER, MAXDOP 4)` etc. Consume the balanced
+            // paren chunk; we don't surface it in the AST.
+            // https://learn.microsoft.com/en-us/sql/t-sql/queries/hints-transact-sql-query
+            if dialect_of!(self is MsSqlDialect | GenericDialect)
+                && self.parse_keyword(Keyword::OPTION)
+            {
+                self.expect_token(&Token::LParen)?;
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+
             let format_clause = if dialect_of!(self is ClickHouseDialect | GenericDialect)
                 && self.parse_keyword(Keyword::FORMAT)
             {
