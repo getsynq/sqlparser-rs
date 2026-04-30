@@ -2186,6 +2186,24 @@ pub enum Statement {
     /// but may also compatible with other SQL.
     Discard { object_type: DiscardObject },
     /// ```sql
+    /// IF condition THEN
+    ///   stmt; ...
+    /// [ELSEIF condition THEN
+    ///   stmt; ...]
+    /// [ELSE
+    ///   stmt; ...]
+    /// END IF
+    /// ```
+    ///
+    /// BigQuery procedural language conditional block.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/procedural-language#if>
+    If {
+        condition: Expr,
+        then_body: Vec<Statement>,
+        elseif_branches: Vec<IfBranch>,
+        else_body: Option<Vec<Statement>>,
+    },
+    /// ```sql
     /// SET [ SESSION | LOCAL ] ROLE role_name
     /// ```
     ///
@@ -3965,6 +3983,31 @@ impl fmt::Display for Statement {
                 if let Some(op) = option {
                     write!(f, " {op}")?;
                 }
+                Ok(())
+            }
+            Statement::If {
+                condition,
+                then_body,
+                elseif_branches,
+                else_body,
+            } => {
+                write!(f, "IF {condition} THEN")?;
+                for stmt in then_body {
+                    write!(f, " {stmt};")?;
+                }
+                for branch in elseif_branches {
+                    write!(f, " ELSEIF {} THEN", branch.condition)?;
+                    for stmt in &branch.body {
+                        write!(f, " {stmt};")?;
+                    }
+                }
+                if let Some(body) = else_body {
+                    write!(f, " ELSE")?;
+                    for stmt in body {
+                        write!(f, " {stmt};")?;
+                    }
+                }
+                write!(f, " END IF")?;
                 Ok(())
             }
             Statement::Discard { object_type } => {
@@ -6006,6 +6049,15 @@ impl fmt::Display for MergeClause {
             }
         }
     }
+}
+
+/// An ELSEIF branch in a procedural `IF` block.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct IfBranch {
+    pub condition: Expr,
+    pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]

@@ -694,6 +694,10 @@ impl<'a> Parser<'a> {
                 Keyword::DROP => Ok(self.parse_drop()?),
                 Keyword::DISCARD => Ok(self.parse_discard()?),
                 Keyword::DECLARE => Ok(self.parse_declare()?),
+                // Procedural `IF cond THEN ... END IF` (BigQuery, Snowflake,
+                // MySQL, etc.). T-SQL uses `IF cond <stmt>` without THEN — fall
+                // back to the default error path so we don't claim those.
+                Keyword::IF if self.if_then_block_lookahead() => Ok(self.parse_if_statement()?),
                 Keyword::FETCH => Ok(self.parse_fetch_statement()?),
                 Keyword::DELETE => Ok(self.parse_delete()?),
                 Keyword::INSERT => Ok(self.parse_insert()?),
@@ -6220,6 +6224,121 @@ impl<'a> Parser<'a> {
         };
 
         Ok(DropFunctionDesc { name, args })
+    }
+
+    /// Look ahead from a just-consumed `IF` to decide whether this is the
+    /// procedural `IF cond THEN ... END IF` block (BigQuery / Snowflake /
+    /// MySQL / Postgres) rather than T-SQL's `IF cond <stmt>` form. We scan
+    /// the rest of the statement up to the next `;` or EOF and accept the
+    /// procedural form only if a `THEN` keyword appears at paren depth 0.
+    fn if_then_block_lookahead(&self) -> bool {
+        let mut idx = self.index;
+        let mut depth: i32 = 0;
+        loop {
+            let tok = match self.tokens.get(idx) {
+                Some(t) => &t.token,
+                None => return false,
+            };
+            match tok {
+                Token::EOF | Token::SemiColon if depth == 0 => return false,
+                Token::LParen => depth += 1,
+                Token::RParen => {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                }
+                Token::Word(w) if depth == 0 && w.keyword == Keyword::THEN => return true,
+                _ => {}
+            }
+            idx += 1;
+        }
+    }
+
+    /// Parse a procedural `IF` block. The `IF` keyword has already been
+    /// consumed by `parse_statement`.
+    ///
+    /// ```sql
+    /// IF cond THEN stmt; [stmt;]*
+    /// [ELSEIF cond THEN stmt; [stmt;]*]*
+    /// [ELSE stmt; [stmt;]*]
+    /// END IF
+    /// ```
+    ///
+    /// BigQuery scripting; also accepted as a generic procedural construct.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/procedural-language#if>
+    pub fn parse_if_statement(&mut self) -> Result<Statement, ParserError> {
+        let condition = self.parse_expr()?;
+        self.expect_keyword(Keyword::THEN)?;
+        let then_body = self.parse_if_body()?;
+
+        let mut elseif_branches = vec![];
+        // ELSEIF is not a keyword in this parser; match by spelling.
+        while matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.value.eq_ignore_ascii_case("ELSEIF")
+        ) {
+            self.next_token();
+            let cond = self.parse_expr()?;
+            self.expect_keyword(Keyword::THEN)?;
+            let body = self.parse_if_body()?;
+            elseif_branches.push(IfBranch {
+                condition: cond,
+                body,
+            });
+        }
+
+        let else_body = if self.parse_keyword(Keyword::ELSE) {
+            Some(self.parse_if_body()?)
+        } else {
+            None
+        };
+
+        self.expect_keyword(Keyword::END)?;
+        self.expect_keyword(Keyword::IF)?;
+
+        Ok(Statement::If {
+            condition,
+            then_body,
+            elseif_branches,
+            else_body,
+        })
+    }
+
+    /// Parse the body of an `IF`/`ELSEIF`/`ELSE` block: a sequence of
+    /// statements terminated by `;`, stopping at `ELSEIF`, `ELSE`, or `END`.
+    fn parse_if_body(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut stmts = Vec::new();
+        loop {
+            match self.peek_token_kind() {
+                Token::Word(w)
+                    if w.keyword == Keyword::END
+                        || w.keyword == Keyword::ELSE
+                        || w.value.eq_ignore_ascii_case("ELSEIF") =>
+                {
+                    break;
+                }
+                Token::EOF => break,
+                _ => {}
+            }
+            // Skip stray separators.
+            while self.consume_token(&Token::SemiColon) {}
+            // Re-check after consuming separators.
+            match self.peek_token_kind() {
+                Token::Word(w)
+                    if w.keyword == Keyword::END
+                        || w.keyword == Keyword::ELSE
+                        || w.value.eq_ignore_ascii_case("ELSEIF") =>
+                {
+                    break;
+                }
+                Token::EOF => break,
+                _ => {}
+            }
+            stmts.push(self.parse_statement()?);
+            // Optional terminator after each statement.
+            let _ = self.consume_token(&Token::SemiColon);
+        }
+        Ok(stmts)
     }
 
     /// ```sql
