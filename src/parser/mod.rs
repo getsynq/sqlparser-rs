@@ -6440,6 +6440,47 @@ impl<'a> Parser<'a> {
             self.index = idx;
         }
 
+        // T-SQL: DECLARE @var [AS] type [= expr] [, @var2 [AS] type [= expr]]
+        // https://learn.microsoft.com/en-us/sql/t-sql/language-elements/declare-local-variable-transact-sql
+        //
+        // Gate on the leading `@` so we don't intercept Postgres
+        // `DECLARE name BINARY CURSOR FOR …` (no `@` prefix).
+        if dialect_of!(self is MsSqlDialect | GenericDialect) && name.value.starts_with('@') {
+            let idx = self.index;
+            // T-SQL never uses the `[BINARY] [INSENSITIVE] CURSOR` shape; if
+            // the next token isn't `CURSOR`, treat the rest as a regular
+            // variable declaration list.
+            let _ = self.parse_keyword(Keyword::AS);
+            if !matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.keyword == Keyword::CURSOR
+            ) {
+                // Parse first variable's type and optional `= <expr>`.
+                let _ = self.parse_data_type()?;
+                if self.consume_token(&Token::Eq) {
+                    let _ = self.parse_expr()?;
+                }
+                // Parse additional comma-separated declarations.
+                while self.consume_token(&Token::Comma) {
+                    let _ = self.parse_identifier(false)?;
+                    let _ = self.parse_keyword(Keyword::AS);
+                    let _ = self.parse_data_type()?;
+                    if self.consume_token(&Token::Eq) {
+                        let _ = self.parse_expr()?;
+                    }
+                }
+                return Ok(Statement::SetVariable {
+                    local: false,
+                    hivevar: false,
+                    tuple: false,
+                    variable: ObjectName(vec![name]),
+                    value: vec![],
+                    additional_assignments: vec![],
+                });
+            }
+            self.index = idx;
+        }
+
         let binary = self.parse_keyword(Keyword::BINARY);
         let sensitive = if self.parse_keyword(Keyword::INSENSITIVE) {
             Some(true)
