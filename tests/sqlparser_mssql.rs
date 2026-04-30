@@ -659,3 +659,17 @@ fn parse_mssql_varchar_max() {
     // Numeric precision still works.
     ms().parse_sql_statements("DECLARE @x NVARCHAR(50)").unwrap();
 }
+
+#[test]
+fn parse_mssql_exec_statement() {
+    // T-SQL `EXEC` (alias of EXECUTE) supports dotted procedure names,
+    // bare comma-separated arguments (no parens), and an optional
+    // `@var = ` return-status assignment.
+    // https://learn.microsoft.com/en-us/sql/t-sql/language-elements/execute-transact-sql
+    ms().parse_sql_statements("EXEC sp_help").unwrap();
+    ms().parse_sql_statements("EXEC dbo.uspGetWhere @x").unwrap();
+    ms().parse_sql_statements("EXEC dbo.uspGetWhereUsedProductID 819, @CheckDate")
+        .unwrap();
+    ms().parse_sql_statements("EXEC @return_status = checkstate '2'")
+        .unwrap();
+}
