@@ -1838,3 +1838,24 @@ fn parse_grant_on_wildcard() {
     clickhouse_and_generic().verified_stmt("GRANT SELECT ON mydb.* TO john");
     clickhouse_and_generic().verified_stmt("GRANT IMPERSONATE ON * TO user3");
 }
+
+#[test]
+fn parse_clickhouse_any_asof_global_joins() {
+    // ClickHouse JOIN modifiers: ANY, ASOF, ALL after [INNER|LEFT|RIGHT],
+    // and the GLOBAL distributed-query prefix on any JOIN type.
+    // https://clickhouse.com/docs/sql-reference/statements/select/join
+    let cases = [
+        "SELECT * FROM foo LEFT ANY JOIN bla",
+        "SELECT * FROM foo LEFT ASOF JOIN bla",
+        "SELECT * FROM foo LEFT ALL JOIN bla",
+        "SELECT * FROM foo GLOBAL LEFT ANY JOIN bla ON foo.c1 = bla.c2",
+        "SELECT * FROM foo GLOBAL JOIN bla ON foo.c1 = bla.c2",
+        "SELECT * FROM foo INNER ANY JOIN bla USING (c)",
+        "SELECT * FROM foo RIGHT ASOF JOIN bla ON foo.c1 = bla.c2",
+    ];
+    for sql in cases {
+        clickhouse()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}

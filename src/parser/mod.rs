@@ -12969,6 +12969,13 @@ impl<'a> Parser<'a> {
         // a table alias.
         let mut joins = vec![];
         loop {
+            // ClickHouse `GLOBAL` is a distributed-query modifier prefixing
+            // any JOIN type. It doesn't change the join shape; consume and
+            // ignore.
+            // https://clickhouse.com/docs/sql-reference/statements/select/join
+            if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                let _ = self.parse_keyword(Keyword::GLOBAL);
+            }
             let join = if self.parse_keyword(Keyword::CROSS) {
                 let join_operator = if self.parse_keyword(Keyword::JOIN) {
                     JoinOperator::CrossJoin
@@ -13053,6 +13060,14 @@ impl<'a> Parser<'a> {
                             }
                         }
                         let _ = self.parse_keyword(Keyword::INNER); // [ INNER ]
+                        // ClickHouse: `INNER [ANY|ASOF|ALL] JOIN`
+                        if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                            let _ = self.parse_one_of_keywords(&[
+                                Keyword::ANY,
+                                Keyword::ALL,
+                                Keyword::ASOF,
+                            ]);
+                        }
                         self.expect_keyword(Keyword::JOIN)?;
                         JoinOperator::Inner
                     }
@@ -13076,6 +13091,19 @@ impl<'a> Parser<'a> {
                         }
                         let _ = self.next_token(); // consume LEFT/RIGHT
                         let is_left = kw == Keyword::LEFT;
+                        // ClickHouse modifiers: `LEFT [ANY|ASOF|ALL] JOIN` and
+                        // similarly for RIGHT/INNER. Consume and treat as the
+                        // base outer join — the modifier doesn't change
+                        // lineage shape (table refs and join condition are the
+                        // same), so the AST loss is acceptable.
+                        // https://clickhouse.com/docs/sql-reference/statements/select/join
+                        if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+                            let _ = self.parse_one_of_keywords(&[
+                                Keyword::ANY,
+                                Keyword::ALL,
+                                Keyword::ASOF,
+                            ]);
+                        }
                         let join_type = self.parse_one_of_keywords(&[
                             Keyword::OUTER,
                             Keyword::SEMI,
