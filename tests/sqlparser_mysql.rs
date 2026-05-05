@@ -2091,3 +2091,24 @@ fn parse_replace_into_statement() {
         .parse_sql_statements("REPLACE INTO t (a, b) VALUES (1, 2)")
         .unwrap();
 }
+
+#[test]
+fn parse_json_table_with_columns_clause() {
+    // MySQL JSON_TABLE function attaches a `COLUMNS(<col_defs>)` clause
+    // to a path argument, defining the output row shape. The columns
+    // clause is opaque to lineage (no input refs); the path expression
+    // is preserved for grammar coverage.
+    // https://dev.mysql.com/doc/refman/8.4/en/json-table-functions.html
+    mysql()
+        .parse_sql_statements(
+            "SELECT * FROM t, JSON_TABLE(t.j, '$[*]' \
+             COLUMNS(id INT PATH '$.id', name VARCHAR(255) PATH '$.name')) AS q",
+        )
+        .unwrap();
+    mysql()
+        .parse_sql_statements(
+            "SELECT * FROM JSON_TABLE(j, '$.org[*]' \
+             COLUMNS(row_id FOR ORDINALITY, link VARCHAR(255) PATH '$.link')) AS links",
+        )
+        .unwrap();
+}
