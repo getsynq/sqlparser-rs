@@ -7522,6 +7522,26 @@ impl<'a> Parser<'a> {
             None
         };
 
+        // ANSI / Postgres / Teradata: `CREATE TABLE … AS <query> WITH [NO]
+        // DATA [AND [NO] STATISTICS]`. The clause controls whether the new
+        // table is populated with the query results and whether statistics
+        // are collected. Doesn't change lineage; consume and discard.
+        // - https://www.postgresql.org/docs/current/sql-createtableas.html
+        // - https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Data-Definition-Language-Syntax-and-Examples/Table-Statements/CREATE-TABLE-AS/AS-Subquery-Clause
+        let saved_idx = self.index;
+        if self.parse_keyword(Keyword::WITH) {
+            let _ = self.parse_keyword(Keyword::NO);
+            if self.parse_keyword(Keyword::DATA) {
+                if self.parse_keyword(Keyword::AND) {
+                    let _ = self.parse_keyword(Keyword::NO);
+                    let _ = self.parse_keyword(Keyword::STATISTICS);
+                }
+            } else {
+                // Not the WITH [NO] DATA shape — restore so other parsers
+                // (e.g. T-SQL `WITH (option=…)`) can take over.
+                self.index = saved_idx;
+            }
+        }
         // Snowflake: trailing `COPY GRANTS` after the `AS <query>` body.
         if !copy_grants && self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]) {
             copy_grants = true;
