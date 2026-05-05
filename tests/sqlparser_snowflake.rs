@@ -1429,15 +1429,14 @@ fn test_snowflake_trim() {
         expr_from_projection(only(&select.projection))
     );
 
-    // missing comma separation
-    let error_sql = "SELECT TRIM('xyz' 'a')";
-    assert_eq!(
-        ParserError::ParserError(
-            "Expected ), found: 'a'\nNear `SELECT TRIM('xyz'`"
-                .to_owned()
-                .into()
-        ),
-        snowflake().parse_sql_statements(error_sql).unwrap_err()
+    // Adjacent string literals concatenate per ANSI SQL / Snowflake docs, so
+    // `TRIM('xyz' 'a')` is a valid 1-arg TRIM on the literal `'xyza'`.
+    // https://docs.snowflake.com/en/sql-reference/data-types-text#string-constants
+    // (No roundtrip — parser produces `'xyza'`, which doesn't re-render to
+    // the two-literal source form.)
+    snowflake().one_statement_parses_to(
+        "SELECT TRIM('xyz' 'a')",
+        "SELECT TRIM('xyza')",
     );
 }
 
@@ -3444,6 +3443,23 @@ fn parse_create_semantic_view_table_synonyms_and_comment() {
         "CREATE SEMANTIC VIEW v \
          TABLES (t AS db.s.t WITH SYNONYMS ('table_t', 't_alias') COMMENT = 'logical t') \
          DIMENSIONS (t.d AS col)",
+    );
+}
+
+#[test]
+fn parse_adjacent_string_literal_concatenation() {
+    // ANSI SQL / BigQuery / Postgres / Snowflake all concatenate adjacent
+    // string literals separated by whitespace into a single literal. Real
+    // customer SQL relies on this — typically as a forgotten comma in an IN
+    // list, but the SQL still runs correctly because of concatenation.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
+    snowflake().one_statement_parses_to(
+        "SELECT 'a' 'b' 'c' FROM t",
+        "SELECT 'abc' FROM t",
+    );
+    snowflake().one_statement_parses_to(
+        "SELECT * FROM t WHERE x IN ('a', 'b' 'c', 'd')",
+        "SELECT * FROM t WHERE x IN ('a', 'bc', 'd')",
     );
 }
 
