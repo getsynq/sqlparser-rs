@@ -12884,6 +12884,68 @@ impl<'a> Parser<'a> {
             }
             let _ = kw; // kw discarded; preserved name not needed in AST.
         }
+        // DuckDB `USING SAMPLE` clause:
+        //   tbl USING SAMPLE 10%
+        //   tbl USING SAMPLE 10 ROWS
+        //   tbl USING SAMPLE SYSTEM (10 PERCENT)
+        //   tbl USING SAMPLE RESERVOIR (50 ROWS) REPEATABLE (100)
+        // https://duckdb.org/docs/sql/samples
+        // The clause is opaque to lineage (no table/column refs inside);
+        // count parens / consume balanced tokens and discard. We only enter
+        // this branch when `USING` is *not* followed by `(` (which would be
+        // a JOIN's USING (col, ...) constraint).
+        if dialect_of!(self is DuckDbDialect | GenericDialect)
+            && matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::USING)
+            && matches!(
+                self.peek_nth_token(1).token,
+                Token::Word(w) if w.value.eq_ignore_ascii_case("SAMPLE")
+            )
+        {
+            self.next_token(); // USING
+            self.next_token(); // SAMPLE
+            // Skip an optional method keyword (SYSTEM | RESERVOIR | BERNOULLI).
+            if let Token::Word(w) = self.peek_token_kind() {
+                if matches!(
+                    w.value.to_ascii_uppercase().as_str(),
+                    "SYSTEM" | "RESERVOIR" | "BERNOULLI"
+                ) {
+                    self.next_token();
+                }
+            }
+            // The sample size is either a bare `<n>[%]` / `<n> ROWS` or a
+            // parenthesised group `(<n> [PERCENT|ROWS])`. Then optional
+            // `REPEATABLE (<seed>)`. Consume by paren-balance / linear
+            // skip up to a JOIN/clause keyword or end of FROM list.
+            loop {
+                match self.peek_token_kind() {
+                    Token::LParen => {
+                        self.next_token();
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => break,
+                                _ => {}
+                            }
+                        }
+                    }
+                    Token::Number(_, _) | Token::Mod => {
+                        self.next_token();
+                    }
+                    Token::Word(w)
+                        if matches!(
+                            w.value.to_ascii_uppercase().as_str(),
+                            "ROWS" | "PERCENT" | "REPEATABLE"
+                        ) =>
+                    {
+                        self.next_token();
+                    }
+                    _ => break,
+                }
+            }
+        }
+
         // Note that for keywords to be properly handled here, they need to be
         // added to `RESERVED_FOR_TABLE_ALIAS`, otherwise they may be parsed as
         // a table alias.

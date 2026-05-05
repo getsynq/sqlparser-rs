@@ -508,3 +508,31 @@ fn test_escaped_string_literal() {
     duckdb().verified_only_select(r"SELECT E'\n'");
     duckdb().one_statement_parses_to(r"SELECT e'\n'", r"SELECT E'\n'");
 }
+
+#[test]
+fn parse_duckdb_using_sample() {
+    // DuckDB's `USING SAMPLE` clause attaches a sample method to a FROM
+    // table reference. The clause is opaque to lineage — no table/column
+    // refs inside — but we must accept it without consuming the rest of
+    // the query.
+    // https://duckdb.org/docs/sql/samples
+    let cases = [
+        "SELECT * FROM tbl USING SAMPLE 10%",
+        "SELECT * FROM tbl USING SAMPLE 10 ROWS",
+        "SELECT * FROM tbl USING SAMPLE SYSTEM (10 PERCENT)",
+        "SELECT * FROM tbl USING SAMPLE SYSTEM (10 PERCENT) REPEATABLE (377)",
+        "SELECT * FROM tbl USING SAMPLE RESERVOIR (50 ROWS) REPEATABLE (100)",
+        "SELECT * FROM tbl USING SAMPLE BERNOULLI (5 PERCENT)",
+    ];
+    for sql in cases {
+        duckdb()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+
+    // JOIN's USING (col) constraint must still parse normally — the new
+    // path only triggers when USING is followed by SAMPLE, not `(`.
+    duckdb()
+        .parse_sql_statements("SELECT * FROM a JOIN b USING (id)")
+        .unwrap();
+}
