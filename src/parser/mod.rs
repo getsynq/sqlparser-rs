@@ -7623,7 +7623,25 @@ impl<'a> Parser<'a> {
         }
 
         loop {
-            if let Some(projection) = if dialect_of!(self is ClickHouseDialect) {
+            // T-SQL system-versioned temporal tables: a table-level
+            //   PERIOD FOR SYSTEM_TIME (start_col, end_col)
+            // pairs the row-start / row-end columns. The columns inside are
+            // already part of this table's column list, so the clause adds
+            // no new lineage; consume and discard.
+            // https://learn.microsoft.com/en-us/sql/relational-databases/tables/creating-a-system-versioned-temporal-table
+            if dialect_of!(self is MsSqlDialect | GenericDialect)
+                && matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::PERIOD)
+                && matches!(self.peek_nth_token(1).token, Token::Word(ref w) if w.keyword == Keyword::FOR)
+            {
+                self.next_token(); // PERIOD
+                self.next_token(); // FOR
+                self.expect_keyword(Keyword::SYSTEM_TIME)?;
+                self.expect_token(&Token::LParen)?;
+                let _ = self.parse_identifier(false)?;
+                self.expect_token(&Token::Comma)?;
+                let _ = self.parse_identifier(false)?;
+                self.expect_token(&Token::RParen)?;
+            } else if let Some(projection) = if dialect_of!(self is ClickHouseDialect) {
                 self.parse_optional_table_projection()?
             } else {
                 None
@@ -8100,6 +8118,39 @@ impl<'a> Parser<'a> {
                 generation_expr: None,
             }))
         } else if self.parse_keywords(&[Keyword::ALWAYS, Keyword::AS]) {
+            // T-SQL system-versioned temporal table column markers:
+            //   <col> DATETIME2 GENERATED ALWAYS AS ROW START [HIDDEN]
+            //   <col> DATETIME2 GENERATED ALWAYS AS ROW END   [HIDDEN]
+            //   <col>           GENERATED ALWAYS AS TRANSACTION_ID START [HIDDEN]
+            //   <col>           GENERATED ALWAYS AS TRANSACTION_ID END   [HIDDEN]
+            // https://learn.microsoft.com/en-us/sql/relational-databases/tables/creating-a-system-versioned-temporal-table
+            // The marker doesn't carry an expression — the value is filled
+            // in by SQL Server itself. Surface as a `DialectSpecific` option
+            // so the column ref / type are preserved for lineage.
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("ROW")
+                    || w.value.eq_ignore_ascii_case("TRANSACTION_ID")
+            ) {
+                let kind = self.next_token().token;
+                let kind_word = match &kind {
+                    Token::Word(w) => Token::make_word(&w.value.to_ascii_uppercase(), None),
+                    _ => unreachable!(),
+                };
+                let _ = self.parse_one_of_keywords(&[Keyword::START, Keyword::END]);
+                if matches!(
+                    self.peek_token_kind(),
+                    Token::Word(w) if w.value.eq_ignore_ascii_case("HIDDEN")
+                ) {
+                    self.next_token();
+                }
+                return Ok(Some(ColumnOption::DialectSpecific(vec![
+                    Token::make_keyword("GENERATED"),
+                    Token::make_keyword("ALWAYS"),
+                    Token::make_keyword("AS"),
+                    kind_word,
+                ])));
+            }
             if self.expect_token(&Token::LParen).is_ok() {
                 let expr = self.parse_expr()?;
                 self.expect_token(&Token::RParen)?;
