@@ -706,6 +706,24 @@ impl<'a> Parser<'a> {
                     self.expect_keyword(Keyword::TABLE)?;
                     Ok(self.parse_create_table(true, false, None, false)?)
                 }
+                // MySQL: `REPLACE [INTO] table ...` is INSERT-with-replace
+                // semantics (delete existing + insert new on PK conflict).
+                // https://dev.mysql.com/doc/refman/8.4/en/replace.html
+                // Dispatch to `parse_insert` which already handles a leading
+                // REPLACE for SQLite's `INSERT OR REPLACE` form.
+                Keyword::REPLACE
+                    if dialect_of!(self is MySqlDialect | GenericDialect)
+                        && matches!(
+                            self.peek_token_kind(),
+                            Token::Word(w) if w.keyword == Keyword::INTO
+                        ) =>
+                {
+                    // REPLACE already consumed by the outer match; parse_insert
+                    // will pick up at INTO. The replace-vs-insert distinction
+                    // is lost in the AST, which is acceptable for grammar
+                    // coverage — table/column refs are preserved.
+                    Ok(self.parse_insert()?)
+                }
                 Keyword::CACHE => Ok(self.parse_cache_table()?),
                 Keyword::DROP => Ok(self.parse_drop()?),
                 Keyword::DISCARD => Ok(self.parse_discard()?),
