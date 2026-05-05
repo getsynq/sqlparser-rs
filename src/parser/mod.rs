@@ -9421,7 +9421,18 @@ impl<'a> Parser<'a> {
                     next_token.span.start
                 ),
             },
-            Token::SingleQuotedString(ref s) => Ok(Value::SingleQuotedString(s.to_string())),
+            Token::SingleQuotedString(ref s) => {
+                // ANSI SQL / BigQuery / Postgres / Snowflake: adjacent string
+                // literals separated by whitespace are concatenated into a
+                // single literal. e.g. `'foo' 'bar'` parses as `'foobar'`.
+                // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
+                let mut value = s.to_string();
+                while let Token::SingleQuotedString(ref next) = self.peek_token().token {
+                    value.push_str(next);
+                    self.next_token();
+                }
+                Ok(Value::SingleQuotedString(value))
+            }
             Token::DoubleQuotedString(ref s) => Ok(Value::DoubleQuotedString(s.to_string())),
             Token::DollarQuotedString(ref s) => Ok(Value::DollarQuotedString(s.clone())),
             Token::SingleQuotedByteStringLiteral(ref s) => {
