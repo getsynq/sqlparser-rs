@@ -10486,6 +10486,46 @@ impl<'a> Parser<'a> {
         let mut idents = vec![];
         loop {
             idents.push(self.parse_identifier(in_table_clause)?.unwrap());
+            // BigQuery path expressions allow the last segment to start with a
+            // digit: `foo.bar.25ab`, `foo.bar.25_`, `foo.bar.25`. The
+            // tokenizer greedily folds the leading `.` into the number, so
+            // `bar.25ab` becomes `Word("bar")` then `Number(".25")` then
+            // `Word("ab")`. When we see that shape after a path segment,
+            // peel the leading `.` off the Number and treat the digit prefix
+            // (concatenated with any adjacent Word) as the next segment.
+            // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#path_expressions
+            if dialect_of!(self is BigQueryDialect | GenericDialect) {
+                let leading_dot_digits = match self.tokens.get(self.index) {
+                    Some(t) => match &t.token {
+                        Token::Number(s, false)
+                            if s.starts_with('.')
+                                && s.len() > 1
+                                && s[1..].chars().all(|c| c.is_ascii_digit()) =>
+                        {
+                            Some(s[1..].to_string())
+                        }
+                        _ => None,
+                    },
+                    None => None,
+                };
+                if let Some(digits) = leading_dot_digits {
+                    self.index += 1; // consume the Number token
+                    let mut value = digits;
+                    if let Some(next) = self.tokens.get(self.index) {
+                        if let Token::Word(w) = &next.token {
+                            if w.quote_style.is_none() {
+                                value.push_str(&w.value);
+                                self.index += 1;
+                            }
+                        }
+                    }
+                    idents.push(Ident::new(value));
+                    if !self.consume_token(&Token::Period) {
+                        break;
+                    }
+                    continue;
+                }
+            }
             if !self.consume_token(&Token::Period) {
                 break;
             }
