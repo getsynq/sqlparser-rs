@@ -145,6 +145,20 @@ When you conclude SQL is invalid:
 3. Add the hash(es) to `kernel-cll-corpus/excluded_hashes.txt` with a one-line reason; they drop on the next `make process`.
 4. If *every* candidate failure in the top tier looks invalid, report that and stop the iteration without a commit — the loop's no-commit timer will end the run.
 
+#### Systemic anonymiser / scraper bugs: fix the source, don't repair downstream
+
+If a class of broken corpus entries shares one root cause, fix the upstream producer (`kernel-cll-corpus/pipeline/anonymize.py` or `kernel-cll-corpus/scrapers/*.py`) rather than adding a heuristic regex repair pass over already-corrupted output. Repair passes are fragile, hide the real bug, and rot as the data shifts.
+
+Concrete examples we hit and fixed at the source:
+- The number regex `\d+(?:\.\d*)?` greedily ate a trailing `.`, dropping the project/dataset separator in GCP project IDs (`proj-9764.dataset` → `0id_3.id_4`). Fix in `pipeline/anonymize.py`, not parser-side workaround.
+- `IDENTIFIER`, `TARGET`, `JS`, `PYTHON` missing from the keyword superset → renamed to `id_N` and unparseable. Fix by adding them to the keyword list.
+- Single-letter string prefixes (`r'foo'`, `N'bar'`, `_utf8'baz'`) tokenised as bare identifiers and renamed → `id_N's'`. Fix with a dedicated `str_prefix` token.
+- Oracle `/* DS_SVC */` internal Dynamic-Sampling queries with undocumented two-arg SAMPLE BLOCK. Filter at the unparsed scraper, not parser-side.
+
+Reprocessing cost: re-anonymising customer dialects from cached `raw/customer_temp/` is ~5 minutes (no DB roundtrip — Phase 1 fetch checkpoint preserved); re-scraping `unparsed_*` from ClickHouse is ~7 minutes. Worth it: a single anonymiser fix in this session unlocked +16,600 corpus passes vs. piecemeal parser carve-outs.
+
+Reach for `excluded_hashes.txt` only when the bug is in a small, bounded set of inputs that can't be re-processed (e.g. single malformed customer queries with no shared shape).
+
 #### Before extending the grammar: cite the docs
 
 Every fix that makes the parser accept **new** syntax must be justified by a primary-source grammar snippet (BigQuery / Snowflake / Postgres / Redshift / etc. docs), not by corpus files alone. If the only evidence is "two customer files fail on X," that is the anti-signal, not the signal — SQL generators produce broken output, and tailoring the parser to match those bugs is a silent regression for every other user.
