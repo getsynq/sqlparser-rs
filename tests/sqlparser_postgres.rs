@@ -4583,3 +4583,23 @@ fn test_postgres_for_update_not_an_alias() {
     pg().parse_sql_statements("SELECT * FROM (SELECT * FROM mytable FOR UPDATE) ss WHERE col1 = 5")
         .unwrap();
 }
+
+#[test]
+fn parse_create_table_as_with_data_clause() {
+    // Postgres / ANSI / Teradata: `CREATE TABLE … AS <query> WITH [NO] DATA
+    // [AND [NO] STATISTICS]` controls whether the new table is populated
+    // and whether stats are collected. Doesn't change lineage; clause is
+    // consumed and discarded.
+    // https://www.postgresql.org/docs/current/sql-createtableas.html
+    let cases = [
+        "CREATE TABLE asd AS SELECT asd FROM asd WITH DATA",
+        "CREATE TABLE asd AS SELECT asd FROM asd WITH NO DATA",
+        "CREATE TABLE a.b AS SELECT 1 WITH DATA AND STATISTICS",
+        "CREATE TABLE a.b AS SELECT 1 WITH NO DATA AND NO STATISTICS",
+    ];
+    for sql in cases {
+        pg()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
