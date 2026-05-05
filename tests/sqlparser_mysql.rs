@@ -2077,3 +2077,17 @@ fn parse_mysql_index_hints() {
         .parse_sql_statements("SELECT * FROM t FORCE INDEX (idx)")
         .unwrap();
 }
+
+#[test]
+fn parse_replace_into_statement() {
+    // MySQL `REPLACE [INTO]` is INSERT-with-replace semantics — delete on
+    // primary-key conflict and insert the new row. Same shape as INSERT
+    // INTO, just different leading verb.
+    // https://dev.mysql.com/doc/refman/8.4/en/replace.html
+    mysql()
+        .parse_sql_statements("REPLACE INTO mytable SELECT id FROM other WHERE cnt > 100")
+        .unwrap();
+    mysql()
+        .parse_sql_statements("REPLACE INTO t (a, b) VALUES (1, 2)")
+        .unwrap();
+}
