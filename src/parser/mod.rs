@@ -2700,8 +2700,46 @@ impl<'a> Parser<'a> {
     /// First, we look for keywords that might be misread as interval expressions,
     /// Then, we check if an interval can be parsed.
     fn parse_interval_guard(&mut self) -> bool {
+        // When `INTERVAL` is followed by a binary-operator or clause-starter
+        // keyword, it can't be the start of an interval literal — it's a
+        // column name in dialects that accept it as an identifier (Snowflake,
+        // ClickHouse, etc.). The greedy `parse_interval` would otherwise
+        // consume the keyword as the literal's "value" (`parse_prefix` is
+        // permissive about treating bare keywords as identifiers) and break
+        // the surrounding clause: `WHERE INTERVAL BETWEEN x AND y`,
+        // `PARTITION BY INTERVAL ORDER BY ...`, `MAX(INTERVAL)`, etc.
         match self.peek_keywords() {
-            [Keyword::LIKE] | [Keyword::IS] => return false,
+            // binary operators
+            [Keyword::LIKE]
+            | [Keyword::ILIKE]
+            | [Keyword::IS]
+            | [Keyword::BETWEEN]
+            | [Keyword::AND]
+            | [Keyword::OR]
+            | [Keyword::XOR]
+            | [Keyword::IN]
+            | [Keyword::NOT]
+            // clause starters
+            | [Keyword::ORDER]
+            | [Keyword::GROUP]
+            | [Keyword::HAVING]
+            | [Keyword::WHERE]
+            | [Keyword::LIMIT]
+            | [Keyword::OFFSET]
+            | [Keyword::QUALIFY]
+            | [Keyword::WINDOW]
+            | [Keyword::UNION]
+            | [Keyword::INTERSECT]
+            | [Keyword::EXCEPT]
+            // window-frame & sort
+            | [Keyword::ROWS]
+            | [Keyword::RANGE]
+            | [Keyword::GROUPS]
+            | [Keyword::ASC]
+            | [Keyword::DESC]
+            // join conditions
+            | [Keyword::ON]
+            | [Keyword::USING] => return false,
             _ => {}
         }
 

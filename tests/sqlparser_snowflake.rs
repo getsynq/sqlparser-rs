@@ -3448,6 +3448,35 @@ fn parse_create_semantic_view_table_synonyms_and_comment() {
 }
 
 #[test]
+fn parse_snowflake_interval_as_column_with_binary_operators() {
+    // Snowflake allows INTERVAL as a column name. The interval-literal guard
+    // must reject the literal path when the token after INTERVAL is a binary
+    // operator keyword (BETWEEN, AND, OR, XOR, IN, NOT) — otherwise the
+    // greedy expression parser inside `parse_interval` swallows the keyword
+    // as the literal's "value" and breaks the surrounding clause.
+    let cases = [
+        "SELECT * FROM t WHERE INTERVAL BETWEEN 1 AND 2",
+        "SELECT a, INTERVAL FROM t",
+        "SELECT MAX(INTERVAL) FROM t",
+        "SELECT * FROM t WHERE INTERVAL IN (1, 2)",
+        "SELECT * FROM t WHERE INTERVAL NOT IN (1, 2)",
+        // INTERVAL inside a window's PARTITION BY list (caught a regression
+        // where ORDER was misconsumed as the interval's "value").
+        "SELECT ROW_NUMBER() OVER (PARTITION BY a, INTERVAL ORDER BY c) FROM t",
+        // The literal form must still parse.
+        "SELECT INTERVAL '1' DAY",
+        "SELECT INTERVAL 1 DAY",
+        "SELECT INTERVAL -1 DAY",
+        "SELECT * FROM t WHERE x = INTERVAL '1' DAY",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
+
+#[test]
 fn parse_snowflake_identifier_literal_in_table_position() {
     // Snowflake `IDENTIFIER('<name>')` accepts a string literal anywhere a
     // name is expected: CREATE TABLE target, FROM source, INSERT INTO,
