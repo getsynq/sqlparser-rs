@@ -707,3 +707,28 @@ fn parse_mssql_option_query_hint() {
     ms().parse_sql_statements("SELECT * FROM t OPTION (FORCE ORDER, MAXDOP 4)")
         .unwrap();
 }
+
+#[test]
+fn parse_mssql_temporal_table() {
+    // T-SQL system-versioned temporal table syntax:
+    //   CREATE TABLE t (
+    //     <cols>,
+    //     <start_col> DATETIME2 GENERATED ALWAYS AS ROW START [HIDDEN] [NOT NULL],
+    //     <end_col>   DATETIME2 GENERATED ALWAYS AS ROW END   [HIDDEN] [NOT NULL],
+    //     PERIOD FOR SYSTEM_TIME (<start_col>, <end_col>)
+    //   ) [WITH (SYSTEM_VERSIONING = ON [(...)])]
+    // https://learn.microsoft.com/en-us/sql/relational-databases/tables/creating-a-system-versioned-temporal-table
+    let cases = [
+        "CREATE TABLE test (a INT, b DATETIME2(2) GENERATED ALWAYS AS ROW START NOT NULL, \
+         c DATETIME2(2) GENERATED ALWAYS AS ROW END NOT NULL, \
+         PERIOD FOR SYSTEM_TIME (b, c))",
+        "CREATE TABLE test (a INT, b DATETIME2(2) GENERATED ALWAYS AS ROW START HIDDEN NOT NULL, \
+         c DATETIME2(2) GENERATED ALWAYS AS ROW END HIDDEN NOT NULL, \
+         PERIOD FOR SYSTEM_TIME (b, c)) WITH(SYSTEM_VERSIONING=ON)",
+    ];
+    for sql in cases {
+        ms()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
