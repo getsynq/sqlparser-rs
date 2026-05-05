@@ -1602,10 +1602,7 @@ fn parse_view_as_table_alias() {
     // alias position it should be treated as an ordinary identifier — e.g.
     // `FROM tbl VIEW` or `JOIN tbl AS VIEW`.
     snowflake().verified_stmt("SELECT VIEW.x FROM t AS VIEW");
-    snowflake().one_statement_parses_to(
-        "SELECT * FROM t VIEW",
-        "SELECT * FROM t AS VIEW",
-    );
+    snowflake().one_statement_parses_to("SELECT * FROM t VIEW", "SELECT * FROM t AS VIEW");
     snowflake().one_statement_parses_to(
         "SELECT VIEW.x FROM tbl FULL OUTER JOIN tbl2 AS VIEW ON tbl.id = VIEW.id",
         "SELECT VIEW.x FROM tbl FULL JOIN tbl2 AS VIEW ON tbl.id = VIEW.id",
@@ -3448,6 +3445,25 @@ fn parse_create_semantic_view_table_synonyms_and_comment() {
          TABLES (t AS db.s.t WITH SYNONYMS ('table_t', 't_alias') COMMENT = 'logical t') \
          DIMENSIONS (t.d AS col)",
     );
+}
+
+#[test]
+fn parse_snowflake_identifier_literal_in_table_position() {
+    // Snowflake `IDENTIFIER('<name>')` accepts a string literal anywhere a
+    // name is expected: CREATE TABLE target, FROM source, INSERT INTO,
+    // multi-part dotted names embedded in the string.
+    // https://docs.snowflake.com/en/sql-reference/identifier-literal
+    let cases = [
+        "SELECT * FROM IDENTIFIER('mytable')",
+        "SELECT * FROM IDENTIFIER('db.schema.tbl') AS x",
+        "INSERT INTO IDENTIFIER('foo.bar') SELECT 1",
+        "CREATE OR REPLACE TEMP TABLE IDENTIFIER('proj.ds.t') AS SELECT 1",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
 }
 
 #[test]

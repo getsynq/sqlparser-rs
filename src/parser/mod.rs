@@ -10564,6 +10564,38 @@ impl<'a> Parser<'a> {
         in_table_clause: bool,
     ) -> Result<WithSpan<Ident>, ParserError> {
         let start_span = self.index;
+
+        // Snowflake `IDENTIFIER('<name>')` lets a string literal stand in for
+        // any identifier — `CREATE TABLE IDENTIFIER('db.schema.t') AS …`,
+        // `FROM IDENTIFIER('t')`, etc.
+        // https://docs.snowflake.com/en/sql-reference/identifier-literal
+        // Treat the whole `IDENTIFIER(<string>)` as a single quoted ident so
+        // downstream consumers see a name rather than a function call.
+        if dialect_of!(self is SnowflakeDialect | GenericDialect) {
+            if let Token::Word(w) = &self.peek_token().token {
+                if w.quote_style.is_none() && w.value.eq_ignore_ascii_case("IDENTIFIER") {
+                    let saved = self.index;
+                    self.next_token(); // consume IDENTIFIER
+                    if self.consume_token(&Token::LParen) {
+                        let inner = self.next_token();
+                        let value = match inner.token {
+                            Token::SingleQuotedString(s) => Some((s, '\'')),
+                            Token::DoubleQuotedString(s) => Some((s, '"')),
+                            _ => None,
+                        };
+                        if let Some((s, q)) = value {
+                            if self.consume_token(&Token::RParen) {
+                                return Ok(Ident::with_quote(q, s)
+                                    .spanning(self.span_from_index(start_span)));
+                            }
+                        }
+                    }
+                    // Not the IDENTIFIER(<string>) shape — back up and parse normally.
+                    self.index = saved;
+                }
+            }
+        }
+
         let next_token = self.next_token();
         match next_token.token {
             Token::Word(w) => {
