@@ -897,6 +897,26 @@ fn parse_table_identifiers() {
 }
 
 #[test]
+fn parse_bigquery_path_segment_starts_with_digit() {
+    // BigQuery path expressions allow the last segment to start with a digit
+    // (e.g. `foo.bar.25ab`, `foo.bar.25`, `foo.bar.25_`). The tokenizer
+    // greedily folds the leading `.` into the number; `parse_object_name`
+    // peels it back off.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#path_expressions
+    let cases = [
+        "SELECT * FROM foo.bar.25ab c",
+        "SELECT * FROM foo.bar.25",
+        "SELECT * FROM foo.bar.25x a",
+        "SELECT * FROM foo.bar.25_",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
+
+#[test]
 fn parse_hyphenated_table_identifiers() {
     bigquery().one_statement_parses_to(
         "select * from foo-bar f join baz-qux b on f.id = b.id",
