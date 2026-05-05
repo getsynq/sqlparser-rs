@@ -1859,3 +1859,20 @@ fn parse_clickhouse_any_asof_global_joins() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_clickhouse_delete_on_cluster() {
+    // ClickHouse distributed-DDL: `DELETE FROM tbl ON CLUSTER <name> WHERE …`.
+    // The ON CLUSTER clause routes the statement to all shards.
+    // https://clickhouse.com/docs/sql-reference/distributed-ddl
+    clickhouse()
+        .parse_sql_statements("DELETE FROM tbl ON CLUSTER test_cluster WHERE date = '2019-01-01'")
+        .unwrap();
+    clickhouse()
+        .parse_sql_statements("DELETE FROM tbl ON CLUSTER '{cluster}' WHERE date = '2019-01-01'")
+        .unwrap();
+    // Plain DELETE still parses.
+    clickhouse()
+        .parse_sql_statements("DELETE FROM tbl WHERE date = '2019-01-01'")
+        .unwrap();
+}
