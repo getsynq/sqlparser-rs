@@ -15205,6 +15205,31 @@ impl<'a> Parser<'a> {
                     {
                         let _alias = self.parse_identifier(false)?;
                     }
+                    // MySQL / Oracle / Postgres `JSON_TABLE` and `XMLTABLE`
+                    // attach a `COLUMNS(<col_defs>)` clause to a path
+                    // argument, defining the output row shape:
+                    //   JSON_TABLE(json, '$.path' COLUMNS(id INT PATH '$.id'))
+                    // The clause defines output columns (no input table /
+                    // column refs), so consume the balanced paren block
+                    // opaquely. The path expression in `expr` is preserved.
+                    // https://dev.mysql.com/doc/refman/8.4/en/json-table-functions.html
+                    if matches!(
+                        self.peek_token_kind(),
+                        Token::Word(w) if w.value.eq_ignore_ascii_case("COLUMNS")
+                    ) && matches!(self.peek_nth_token(1).token, Token::LParen)
+                    {
+                        self.next_token(); // COLUMNS
+                        self.next_token(); // (
+                        let mut depth = 1i32;
+                        while depth > 0 {
+                            match self.next_token().token {
+                                Token::LParen => depth += 1,
+                                Token::RParen => depth -= 1,
+                                Token::EOF => break,
+                                _ => {}
+                            }
+                        }
+                    }
                     FunctionArgExpr::Expr(expr)
                 }
             };
