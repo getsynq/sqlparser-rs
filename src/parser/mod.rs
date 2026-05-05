@@ -11307,6 +11307,12 @@ impl<'a> Parser<'a> {
         };
 
         let from = self.parse_comma_separated(Parser::parse_table_and_joins)?;
+        // ClickHouse distributed-DDL clause: `DELETE FROM tbl ON CLUSTER <name>
+        // WHERE …`. Doesn't change the lineage shape; consume and discard.
+        // https://clickhouse.com/docs/sql-reference/distributed-ddl
+        if dialect_of!(self is ClickHouseDialect | GenericDialect) {
+            let _ = self.parse_optional_on_cluster()?;
+        }
         let using = if self.parse_keyword(Keyword::USING) {
             Some(self.parse_comma_separated(Parser::parse_table_and_joins)?)
         } else {
