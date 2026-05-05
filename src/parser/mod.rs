@@ -8103,6 +8103,69 @@ impl<'a> Parser<'a> {
             Ok(Some(ColumnOption::DialectSpecific(vec![
                 Token::make_keyword("SORTKEY"),
             ])))
+        } else if dialect_of!(self is GenericDialect | AnsiDialect)
+            && self.parse_keyword(Keyword::FORMAT)
+        {
+            // Teradata column attribute: FORMAT '<pattern>'.
+            // https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Data-Definition-Language-Detailed-Topics/CREATE-TABLE/Column-Level-Attributes-for-Database-Object-Creation
+            let _ = self.parse_literal_string()?;
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("FORMAT"),
+            ])))
+        } else if dialect_of!(self is GenericDialect | AnsiDialect)
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("TITLE")
+            )
+        {
+            // Teradata column attribute: TITLE '<title>'.
+            self.next_token();
+            let _ = self.parse_literal_string()?;
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("TITLE"),
+            ])))
+        } else if dialect_of!(self is GenericDialect | AnsiDialect)
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("COMPRESS")
+            )
+        {
+            // Teradata column attribute: COMPRESS [(value [, value]*)] —
+            // value-list compression. Consume the optional paren list
+            // opaquely; the values are constants, no lineage content.
+            self.next_token();
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("COMPRESS"),
+            ])))
+        } else if dialect_of!(self is GenericDialect | AnsiDialect)
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("INLINE")
+            )
+            && matches!(
+                self.peek_nth_token(1).token,
+                Token::Word(w) if w.value.eq_ignore_ascii_case("LENGTH")
+            )
+        {
+            // Teradata column attribute: INLINE LENGTH <n>.
+            self.next_token(); // INLINE
+            self.next_token(); // LENGTH
+            let _ = self.parse_literal_uint()?;
+            Ok(Some(ColumnOption::DialectSpecific(vec![
+                Token::make_keyword("INLINE"),
+                Token::make_keyword("LENGTH"),
+            ])))
         } else {
             Ok(None)
         }

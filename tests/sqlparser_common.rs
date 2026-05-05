@@ -9189,3 +9189,24 @@ fn interval_identifier() {
         )
         .unwrap();
 }
+
+#[test]
+fn parse_teradata_column_attributes() {
+    // Teradata column-level attributes: FORMAT, TITLE, COMPRESS, INLINE LENGTH.
+    // https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Data-Definition-Language-Detailed-Topics/CREATE-TABLE/Column-Level-Attributes-for-Database-Object-Creation
+    // Routed through GenericDialect / AnsiDialect (no dedicated Teradata dialect).
+    let cases = [
+        "CREATE TABLE db.foo (id INT NOT NULL, valid_date DATE FORMAT 'YYYY-MM-DD', measurement INT COMPRESS)",
+        "CREATE TABLE foo (baz DATE FORMAT 'YYYY/MM/DD' TITLE 'title' INLINE LENGTH 1 COMPRESS ('a', 'b'))",
+        "CREATE TABLE db.foo (id INT NOT NULL, valid_date DATE FORMAT 'YYYY-MM-DD' COMPRESS (CAST('9999-09-09' AS DATE)), measurement INT)",
+    ];
+    let dialects = TestedDialects {
+        dialects: vec![Box::new(GenericDialect {}), Box::new(AnsiDialect {})],
+        options: None,
+    };
+    for sql in cases {
+        dialects
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
