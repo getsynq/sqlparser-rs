@@ -104,33 +104,86 @@ pub fn parse_create_stage(
     let mut comment = None;
 
     // [ internalStageParams | externalStageParams ]
-    let stage_params = parse_stage_params(parser)?;
+    let mut stage_params = parse_stage_params(parser)?;
 
-    // [ directoryTableParams ]
-    if parser.parse_keyword(Keyword::DIRECTORY) {
-        parser.expect_token(&Token::Eq)?;
-        directory_table_params = parse_parentheses_options(parser)?;
-    }
-
-    // [ file_format]
-    if parser.parse_keyword(Keyword::FILE_FORMAT) {
-        parser.expect_token(&Token::Eq)?;
-        file_format = parse_parentheses_options(parser)?;
-    }
-
-    // [ copy_options ]
-    if parser.parse_keyword(Keyword::COPY_OPTIONS) {
-        parser.expect_token(&Token::Eq)?;
-        copy_options = parse_parentheses_options(parser)?;
-    }
-
-    // [ comment ]
-    if parser.parse_keyword(Keyword::COMMENT) {
-        parser.expect_token(&Token::Eq)?;
-        comment = Some(match parser.next_token().token {
-            Token::SingleQuotedString(word) => Ok(word),
-            _ => parser.expected("a comment statement", parser.peek_token()),
-        }?)
+    // CREATE STAGE option clauses (DIRECTORY, FILE_FORMAT, COPY_OPTIONS,
+    // COMMENT, plus URL/CREDENTIALS/etc that may also appear after the
+    // initial stage-params block) can come in any order. Loop until none
+    // of the recognised keywords appear.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-stage
+    loop {
+        if parser.parse_keyword(Keyword::DIRECTORY) {
+            parser.expect_token(&Token::Eq)?;
+            directory_table_params = parse_parentheses_options(parser)?;
+        } else if parser.parse_keyword(Keyword::FILE_FORMAT) {
+            parser.expect_token(&Token::Eq)?;
+            if parser.peek_token_is(&Token::LParen) {
+                file_format = parse_parentheses_options(parser)?;
+            } else {
+                // Snowflake accepts FILE_FORMAT shorthand:
+                //   FILE_FORMAT = '<format_name>' (string)
+                //   FILE_FORMAT = [<schema>.]<format_name> (ident)
+                let next_token = parser.next_token();
+                let value = match next_token.token {
+                    Token::SingleQuotedString(s) => s,
+                    Token::Word(w) => {
+                        let mut name = w.value;
+                        while parser.consume_token(&Token::Period) {
+                            let part = parser.next_token();
+                            match part.token {
+                                Token::Word(w) => {
+                                    name.push('.');
+                                    name.push_str(&w.value);
+                                }
+                                _ => parser.expected("identifier after .", part)?,
+                            }
+                        }
+                        name
+                    }
+                    _ => parser.expected("file format name", next_token)?,
+                };
+                file_format.push(DataLoadingOption {
+                    option_name: "FORMAT_NAME".to_string(),
+                    option_type: DataLoadingOptionType::STRING,
+                    value,
+                });
+            }
+        } else if parser.parse_keyword(Keyword::COPY_OPTIONS) {
+            parser.expect_token(&Token::Eq)?;
+            copy_options = parse_parentheses_options(parser)?;
+        } else if parser.parse_keyword(Keyword::COMMENT) {
+            parser.expect_token(&Token::Eq)?;
+            comment = Some(match parser.next_token().token {
+                Token::SingleQuotedString(word) => Ok(word),
+                _ => parser.expected("a comment statement", parser.peek_token()),
+            }?);
+        } else if matches!(
+            parser.peek_token_kind(),
+            Token::Word(w) if matches!(w.keyword,
+                Keyword::URL | Keyword::CREDENTIALS | Keyword::STORAGE_INTEGRATION
+                    | Keyword::ENDPOINT | Keyword::ENCRYPTION)
+        ) {
+            // Stage-params clauses can also appear after FILE_FORMAT etc.;
+            // re-enter the parser and merge the result.
+            let extra = parse_stage_params(parser)?;
+            if extra.url.is_some() {
+                stage_params.url = extra.url;
+            }
+            if extra.storage_integration.is_some() {
+                stage_params.storage_integration = extra.storage_integration;
+            }
+            if extra.endpoint.is_some() {
+                stage_params.endpoint = extra.endpoint;
+            }
+            if !extra.credentials.options.is_empty() {
+                stage_params.credentials = extra.credentials;
+            }
+            if !extra.encryption.options.is_empty() {
+                stage_params.encryption = extra.encryption;
+            }
+        } else {
+            break;
+        }
     }
 
     Ok(Statement::CreateStage {
@@ -588,10 +641,23 @@ fn parse_parentheses_options(parser: &mut Parser) -> Result<Vec<DataLoadingOptio
                             Ok(())
                         }
                         Token::Word(word) => {
+                            // Allow dotted object names (e.g.
+                            // `FORMAT_NAME=schema.format`).
+                            let mut value = word.value;
+                            while parser.consume_token(&Token::Period) {
+                                let part = parser.next_token();
+                                match part.token {
+                                    Token::Word(w) => {
+                                        value.push('.');
+                                        value.push_str(&w.value);
+                                    }
+                                    _ => parser.expected("identifier after .", part)?,
+                                }
+                            }
                             options.push(DataLoadingOption {
                                 option_name: key.value,
                                 option_type: DataLoadingOptionType::ENUM,
-                                value: word.value,
+                                value,
                             });
                             Ok(())
                         }

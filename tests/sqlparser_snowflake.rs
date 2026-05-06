@@ -3598,3 +3598,25 @@ fn parse_snowflake_create_sequence_comment() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_snowflake_create_stage_options() {
+    // Snowflake CREATE STAGE accepts FILE_FORMAT in three shapes
+    // (parenthesised options, string shorthand, dotted-ident shorthand)
+    // and the option clauses (URL/CREDENTIALS/FILE_FORMAT/COPY_OPTIONS/
+    // COMMENT/ENCRYPTION/STORAGE_INTEGRATION/ENDPOINT) can appear in any
+    // order.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-stage
+    let cases = [
+        "CREATE STAGE stage1 FILE_FORMAT='format1'",
+        "CREATE STAGE stage1 FILE_FORMAT=schema1.format1",
+        "CREATE STAGE stage1 FILE_FORMAT=(FORMAT_NAME=stage1.format1)",
+        "CREATE STAGE s1 URL='s3://bucket-123' FILE_FORMAT=(TYPE='JSON') \
+         CREDENTIALS=(aws_key_id='test' aws_secret_key='test')",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
