@@ -528,3 +528,23 @@ fn hive() -> TestedDialects {
         options: None,
     }
 }
+
+#[test]
+fn parse_iceberg_partitioned_by_with_transforms() {
+    // Athena Iceberg / Trino-style PARTITIONED BY clauses use expressions
+    // (column refs + transform functions) instead of Hive-style column
+    // definitions. The parser auto-detects which form by peeking the
+    // second token after the first identifier.
+    // https://docs.aws.amazon.com/athena/latest/ug/querying-iceberg-creating-tables.html
+    let cases = [
+        "CREATE TABLE t (`id` BIGINT, category STRING) PARTITIONED BY (category, BUCKET(16, id))",
+        "CREATE TABLE t (id BIGINT, ts TIMESTAMP) PARTITIONED BY (TRUNCATE(8, id), DAY(ts))",
+        // Hive column-def form still parses
+        "CREATE TABLE t (a INT) PARTITIONED BY (year INT)",
+    ];
+    for sql in cases {
+        hive()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}

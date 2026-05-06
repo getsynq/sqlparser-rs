@@ -6854,14 +6854,85 @@ impl<'a> Parser<'a> {
                 let columns = self.parse_comma_separated(|p| p.parse_identifier(false))?;
                 HiveDistributionStyle::PARTITIONED_NAMES { columns }
             } else {
-                let columns = self.parse_comma_separated(Parser::parse_column_def)?;
-                HiveDistributionStyle::PARTITIONED { columns }
+                // Athena Iceberg / Trino / BigQuery use expression-style
+                // partition specs: `PARTITIONED BY (col, BUCKET(16, id),
+                // TRUNCATE(8, name))`. Hive uses column-def specs:
+                // `PARTITIONED BY (year INT)`. Distinguish by peeking past
+                // the first identifier: if a known data-type keyword
+                // follows, it's the column-def form; otherwise expression.
+                // https://docs.aws.amazon.com/athena/latest/ug/querying-iceberg-creating-tables.html
+                let is_expr_form = matches!(self.peek_token_kind(), Token::Word(w)
+                    if !matches!(self.peek_nth_token(1).token, Token::Word(t)
+                        if Self::is_data_type_keyword(t.keyword)));
+                if is_expr_form {
+                    let _ = self.parse_comma_separated(|p| p.parse_expr())?;
+                    HiveDistributionStyle::NONE
+                } else {
+                    let columns = self.parse_comma_separated(Parser::parse_column_def)?;
+                    HiveDistributionStyle::PARTITIONED { columns }
+                }
             };
             self.expect_token(&Token::RParen)?;
             Ok(distribution)
         } else {
             Ok(HiveDistributionStyle::NONE)
         }
+    }
+
+    fn is_data_type_keyword(kw: Keyword) -> bool {
+        matches!(
+            kw,
+            Keyword::INT
+                | Keyword::INT2
+                | Keyword::INT4
+                | Keyword::INT8
+                | Keyword::INT16
+                | Keyword::INT32
+                | Keyword::INT64
+                | Keyword::INT128
+                | Keyword::INT256
+                | Keyword::INTEGER
+                | Keyword::BIGINT
+                | Keyword::SMALLINT
+                | Keyword::TINYINT
+                | Keyword::MEDIUMINT
+                | Keyword::FLOAT
+                | Keyword::FLOAT4
+                | Keyword::FLOAT8
+                | Keyword::FLOAT32
+                | Keyword::FLOAT64
+                | Keyword::DOUBLE
+                | Keyword::REAL
+                | Keyword::DECIMAL
+                | Keyword::NUMERIC
+                | Keyword::DEC
+                | Keyword::BOOLEAN
+                | Keyword::BOOL
+                | Keyword::CHAR
+                | Keyword::CHARACTER
+                | Keyword::VARCHAR
+                | Keyword::NVARCHAR
+                | Keyword::NCHAR
+                | Keyword::STRING
+                | Keyword::TEXT
+                | Keyword::BLOB
+                | Keyword::BYTEA
+                | Keyword::BINARY
+                | Keyword::VARBINARY
+                | Keyword::DATE
+                | Keyword::TIME
+                | Keyword::TIMESTAMP
+                | Keyword::TIMESTAMPTZ
+                | Keyword::TIMETZ
+                | Keyword::INTERVAL
+                | Keyword::JSON
+                | Keyword::UUID
+                | Keyword::ARRAY
+                | Keyword::STRUCT
+                | Keyword::MAP
+                | Keyword::TUPLE
+                | Keyword::OBJECT
+        )
     }
 
     pub fn parse_hive_formats(&mut self) -> Result<HiveFormat, ParserError> {
