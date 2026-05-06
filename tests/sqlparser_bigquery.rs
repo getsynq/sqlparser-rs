@@ -2551,3 +2551,19 @@ fn parse_bigquery_reserved_keyword_in_parenthesised_list() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_create_function_deterministic_marker() {
+    // BigQuery's CREATE FUNCTION accepts an optional `[NOT] DETERMINISTIC`
+    // marker between RETURNS and LANGUAGE.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_a_function
+    let cases = [
+        "CREATE TEMPORARY FUNCTION a(x FLOAT64, y FLOAT64) RETURNS FLOAT64 NOT DETERMINISTIC LANGUAGE js AS 'return x*y;'",
+        "CREATE TEMPORARY FUNCTION a(x FLOAT64) RETURNS FLOAT64 DETERMINISTIC LANGUAGE js AS 'return x;'",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}

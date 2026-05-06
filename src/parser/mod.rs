@@ -5415,6 +5415,13 @@ impl<'a> Parser<'a> {
                 body.behavior = Some(FunctionBehavior::Volatile);
             } else if self.parse_keyword(Keyword::STRICT) {
                 body.strict = true;
+            } else if self.parse_keywords(&[Keyword::NOT, Keyword::DETERMINISTIC])
+                || self.parse_keyword(Keyword::DETERMINISTIC)
+            {
+                // BigQuery: `[NOT] DETERMINISTIC` marker. Doesn't change
+                // lineage; consume and discard. (No `body.deterministic`
+                // field — keeping the AST minimal.)
+                // https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_a_function
             } else if self.parse_keywords(&[
                 Keyword::RETURNS,
                 Keyword::NULL,
