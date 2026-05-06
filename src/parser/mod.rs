@@ -17319,6 +17319,13 @@ impl<'a> Parser<'a> {
                 sequence_options.push(SequenceOptions::OrderBy(true));
             } else if self.parse_keyword(Keyword::NOORDER) {
                 sequence_options.push(SequenceOptions::OrderBy(false));
+            }
+            // COMMENT = '<string>' (Snowflake): user-provided sequence comment.
+            // https://docs.snowflake.com/en/sql-reference/sql/create-sequence
+            // No lineage content; consume the value and discard.
+            else if self.parse_keyword(Keyword::COMMENT) {
+                let _ = self.consume_token(&Token::Eq);
+                let _ = self.parse_literal_string()?;
             } else {
                 break;
             }
