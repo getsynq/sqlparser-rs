@@ -8226,7 +8226,13 @@ impl<'a> Parser<'a> {
                 is_primary: false,
                 characteristics,
             }))
-        } else if self.parse_keyword(Keyword::REFERENCES) {
+        } else if self.parse_keywords(&[Keyword::FOREIGN, Keyword::KEY, Keyword::REFERENCES])
+            || self.parse_keyword(Keyword::REFERENCES)
+        {
+            // Snowflake column-level: `<col> <type> [NOT NULL] FOREIGN KEY
+            // REFERENCES <ref_table>[(<ref_col>)]`. Postgres / ANSI allow the
+            // shorter `<col> <type> REFERENCES <ref_table>[(<ref_col>)]`.
+            // https://docs.snowflake.com/en/sql-reference/sql/create-table
             let foreign_table = self.parse_object_name(false)?;
             // PostgreSQL allows omitting the column list and
             // uses the primary key column of the foreign table by default

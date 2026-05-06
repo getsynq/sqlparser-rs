@@ -3629,3 +3629,21 @@ fn parse_snowflake_column_comment_dollar_quoted() {
         .parse_sql_statements("CREATE TABLE foo (ID INT COMMENT $$some comment$$)")
         .unwrap();
 }
+
+#[test]
+fn parse_snowflake_column_foreign_key_references() {
+    // Snowflake column-level: `<col> <type> [NOT NULL] FOREIGN KEY
+    // REFERENCES <ref_table> [(<ref_col>)]` — same as the ANSI/Postgres
+    // shorter form, just with an explicit `FOREIGN KEY` prefix.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-table
+    snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE TABLE TEST (\
+             SOME_REF DECIMAL(38, 0) NOT NULL FOREIGN KEY REFERENCES SOME_OTHER_TABLE (ID))",
+        )
+        .unwrap();
+    // Existing short form still parses.
+    snowflake()
+        .parse_sql_statements("CREATE TABLE T (a INT REFERENCES other(id))")
+        .unwrap();
+}
