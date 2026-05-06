@@ -6906,13 +6906,70 @@ impl<'a> Parser<'a> {
 
     pub fn parse_row_format(&mut self) -> Result<HiveRowFormat, ParserError> {
         self.expect_keyword(Keyword::FORMAT)?;
-        match self.parse_one_of_keywords(&[Keyword::SERDE, Keyword::DELIMITED]) {
+        let format = match self.parse_one_of_keywords(&[Keyword::SERDE, Keyword::DELIMITED]) {
             Some(Keyword::SERDE) => {
                 let class = self.parse_literal_string()?;
-                Ok(HiveRowFormat::SERDE { class })
+                HiveRowFormat::SERDE { class }
             }
-            _ => Ok(HiveRowFormat::DELIMITED),
+            _ => {
+                // Hive `ROW FORMAT DELIMITED [FIELDS|COLLECTION|MAP KEYS|LINES|NULL] …`.
+                // The DELIMITED suboptions (FIELDS TERMINATED BY '…', etc.) are
+                // dialect-specific punctuation with no lineage content; consume
+                // them opaquely until the next ROW / STORED / LOCATION / WITH
+                // / COMMENT / TBLPROPERTIES / PARTITIONED clause boundary.
+                // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-RowFormats&SerDe
+                loop {
+                    let stop = match self.peek_token_kind() {
+                        Token::Word(w) => match w.keyword {
+                            Keyword::ROW
+                            | Keyword::STORED
+                            | Keyword::LOCATION
+                            | Keyword::WITH
+                            | Keyword::COMMENT
+                            | Keyword::TBLPROPERTIES
+                            | Keyword::PARTITIONED
+                            | Keyword::AS => true,
+                            _ => w.value.eq_ignore_ascii_case("CLUSTERED"),
+                        },
+                        Token::EOF | Token::SemiColon => true,
+                        _ => false,
+                    };
+                    if stop {
+                        break;
+                    }
+                    self.next_token();
+                }
+                HiveRowFormat::DELIMITED
+            }
+        };
+        // Hive `ROW FORMAT SERDE 'class' WITH SERDEPROPERTIES ('k'='v', ...)`.
+        // SERDEPROPERTIES isn't in our keyword list (matched case-insensitively).
+        // The properties are key/value strings with no lineage content; consume
+        // the balanced paren block and discard.
+        let saved = self.index;
+        let with_serde = self.parse_keyword(Keyword::WITH)
+            && matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("SERDEPROPERTIES")
+            );
+        if with_serde {
+            self.next_token(); // SERDEPROPERTIES
+            self.expect_token(&Token::LParen)?;
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => break,
+                    _ => {}
+                }
+            }
+        } else {
+            // WITH wasn't followed by SERDEPROPERTIES — restore so other
+            // parsers (table options, CTEs, etc.) can take over.
+            self.index = saved;
         }
+        Ok(format)
     }
 
     fn parse_optional_on_cluster(&mut self) -> Result<Option<WithSpan<Ident>>, ParserError> {
