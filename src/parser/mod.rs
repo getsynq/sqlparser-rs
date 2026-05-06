@@ -8183,6 +8183,9 @@ impl<'a> Parser<'a> {
             let next_token = self.next_token();
             match next_token.token {
                 Token::SingleQuotedString(value, ..) => Ok(Some(ColumnOption::Comment(value))),
+                // Snowflake / Postgres dollar-quoted string for column COMMENT
+                // (`COMMENT $$some comment$$`).
+                Token::DollarQuotedString(s) => Ok(Some(ColumnOption::Comment(s.value))),
                 _ => self.expected("string", next_token),
             }
         } else if self.parse_keyword(Keyword::NULL) {

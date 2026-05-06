@@ -3620,3 +3620,12 @@ fn parse_snowflake_create_stage_options() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_snowflake_column_comment_dollar_quoted() {
+    // Snowflake (and Postgres) accept dollar-quoted strings for column
+    // COMMENT bodies, useful when the comment contains single quotes.
+    snowflake()
+        .parse_sql_statements("CREATE TABLE foo (ID INT COMMENT $$some comment$$)")
+        .unwrap();
+}
