@@ -13881,7 +13881,27 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr()?;
             self.expect_token(&Token::RParen)?;
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
-            Ok(TableFactor::TableFunction { expr, alias })
+            let mut table = TableFactor::TableFunction { expr, alias };
+            // Snowflake allows TABLESAMPLE after a TABLE(<expr>) reference:
+            //   FROM TABLE('t1') TABLESAMPLE BERNOULLI (20.3)
+            // Loop through the same suffix keywords as plain table refs.
+            while let Some(kw) = self.parse_one_of_keywords(&[
+                Keyword::PIVOT,
+                Keyword::UNPIVOT,
+                Keyword::TABLESAMPLE,
+                Keyword::SAMPLE,
+                Keyword::MATCH_RECOGNIZE,
+            ]) {
+                table = match kw {
+                    Keyword::PIVOT => self.parse_pivot_table_factor(table)?,
+                    Keyword::UNPIVOT => self.parse_unpivot_table_factor(table)?,
+                    Keyword::TABLESAMPLE => self.parse_tablesample_table_factor(table, false)?,
+                    Keyword::SAMPLE => self.parse_tablesample_table_factor(table, true)?,
+                    Keyword::MATCH_RECOGNIZE => self.parse_match_recognize_table_factor(table)?,
+                    _ => unreachable!(),
+                };
+            }
+            Ok(table)
         } else if self.consume_token(&Token::LParen) {
             // A left paren introduces either a derived table (i.e., a subquery)
             // or a nested join. It's nearly impossible to determine ahead of
