@@ -822,3 +822,21 @@ fn parse_create_external_function_lambda() {
         )
         .unwrap();
 }
+
+#[test]
+fn parse_redshift_create_table_diststyle_distkey_sortkey_any_order() {
+    // Redshift CREATE TABLE accepts DISTSTYLE / DISTKEY / SORTKEY in any
+    // order after the column definitions.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
+    let cases = [
+        "CREATE TABLE sales (salesid INTEGER NOT NULL) DISTKEY(listid) COMPOUND SORTKEY(listid, sellerid) DISTSTYLE AUTO",
+        "CREATE TABLE soup (LIKE other_table) DISTKEY(soup1) SORTKEY(soup2) DISTSTYLE ALL",
+        "CREATE TABLE t (a INT) DISTSTYLE KEY DISTKEY(a) SORTKEY(a)",
+        "CREATE TABLE t (a INT) SORTKEY(a) DISTKEY(a)",
+    ];
+    for sql in cases {
+        redshift()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
