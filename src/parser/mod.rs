@@ -3420,6 +3420,17 @@ impl<'a> Parser<'a> {
                                     time_zone,
                                 })
                             }
+                            // BigQuery accepts both single- and double-quoted
+                            // strings as string literals; the time-zone arg
+                            // is just a string. e.g. `AT TIME ZONE "Asia/Tokyo"`.
+                            Token::DoubleQuotedString(time_zone)
+                                if dialect_of!(self is BigQueryDialect | GenericDialect) =>
+                            {
+                                Ok(Expr::AtTimeZone {
+                                    timestamp: Box::new(expr),
+                                    time_zone,
+                                })
+                            }
                             _ => self.expected(
                                 "Expected Token::SingleQuotedString after AT TIME ZONE",
                                 time_zone,
