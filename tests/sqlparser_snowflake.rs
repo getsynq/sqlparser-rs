@@ -3582,3 +3582,19 @@ fn parse_snowflake_create_external_table_partition_by() {
     FILE_FORMAT=(type=parquet compression=gzip)";
     snowflake().parse_sql_statements(sql).unwrap();
 }
+
+#[test]
+fn parse_snowflake_create_sequence_comment() {
+    // Snowflake CREATE SEQUENCE accepts a `COMMENT = '<string>'` option
+    // alongside START, INCREMENT, ORDER/NOORDER, etc.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-sequence
+    let cases = [
+        "CREATE SEQUENCE seq START=5 comment = 'foo' INCREMENT=10",
+        "CREATE SEQUENCE seq3 COMMENT = 'description'",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
