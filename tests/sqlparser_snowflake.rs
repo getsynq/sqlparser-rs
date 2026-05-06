@@ -3503,6 +3503,11 @@ fn parse_snowflake_identifier_literal_in_table_position() {
         "SELECT * FROM IDENTIFIER('db.schema.tbl') AS x",
         "INSERT INTO IDENTIFIER('foo.bar') SELECT 1",
         "CREATE OR REPLACE TEMP TABLE IDENTIFIER('proj.ds.t') AS SELECT 1",
+        // Snowflake also accepts session variables and bind parameters as
+        // the IDENTIFIER value.
+        "CREATE TABLE IDENTIFIER($foo) (col1 VARCHAR)",
+        "SELECT * FROM IDENTIFIER($tbl_name)",
+        "SELECT * FROM IDENTIFIER(?)",
     ];
     for sql in cases {
         snowflake()
