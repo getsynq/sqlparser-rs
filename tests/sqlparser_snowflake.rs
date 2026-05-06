@@ -3647,3 +3647,11 @@ fn parse_snowflake_column_foreign_key_references() {
         .parse_sql_statements("CREATE TABLE T (a INT REFERENCES other(id))")
         .unwrap();
 }
+
+#[test]
+fn parse_snowflake_table_function_tablesample() {
+    // TABLESAMPLE applied to a TABLE(<expr>) call.
+    snowflake()
+        .parse_sql_statements("SELECT * FROM TABLE('t1') TABLESAMPLE BERNOULLI (20.3)")
+        .unwrap();
+}
