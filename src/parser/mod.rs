@@ -5590,6 +5590,27 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Snowflake `CREATE EXTERNAL TABLE ... PARTITION BY (col, col, ...)`
+        // — the partition column list references columns already declared
+        // in the table's column-def list, so consuming opaquely preserves
+        // all lineage info. This precedes the options-swallowing block
+        // because the option-name-followed-by-`=` check below requires the
+        // first option to look like `name=value`, not `PARTITION BY (...)`.
+        // https://docs.snowflake.com/en/sql-reference/sql/create-external-table
+        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && self.parse_keywords(&[Keyword::PARTITION, Keyword::BY])
+        {
+            self.expect_token(&Token::LParen)?;
+            let mut depth = 1i32;
+            while depth > 0 {
+                match self.next_token().token {
+                    Token::LParen => depth += 1,
+                    Token::RParen => depth -= 1,
+                    Token::EOF => break,
+                    _ => {}
+                }
+            }
+        }
         // Snowflake-style external table options: `LOCATION = @stage`, `PATTERN = '...'`,
         // `FILE_FORMAT = (...)`, `AUTO_REFRESH = ...`, etc. These are syntactically very
         // different from Hive's `LOCATION 'path'`, so when we see the Snowflake shape
