@@ -13784,6 +13784,61 @@ impl<'a> Parser<'a> {
 
     /// A table name or a parenthesized subquery, followed by optional `[AS] alias`
     pub fn parse_table_factor(&mut self) -> Result<TableFactor, ParserError> {
+        // BigQuery legacy SQL bracket-quoted table identifier:
+        //   FROM [project-id:dataset.table]
+        // The Standard SQL equivalent uses backticks:
+        //   FROM `project-id.dataset.table`
+        // https://cloud.google.com/bigquery/docs/reference/legacy-sql
+        // Customers still submit legacy-SQL queries through warehouses that
+        // accept them. Capture the inner identifier as a single backticked
+        // ObjectName segment so lineage tracks the table reference.
+        if dialect_of!(self is BigQueryDialect | GenericDialect)
+            && self.peek_token_is(&Token::LBracket)
+        {
+            self.expect_token(&Token::LBracket)?;
+            // Concatenate every token inside the brackets into a single
+            // string. Tokens that aren't simple words / colons / dots /
+            // hyphens / digits would indicate something other than a legacy
+            // table identifier; bail and leave the position unchanged so
+            // other callers (e.g. array-literal contexts) can take over.
+            let saved = self.index - 1; // before LBracket
+            let mut name = String::new();
+            let mut ok = true;
+            loop {
+                let token = self.next_token().token;
+                match token {
+                    Token::RBracket => break,
+                    Token::Word(w) => name.push_str(&w.value),
+                    Token::Number(n, _) => name.push_str(&n),
+                    Token::Period => name.push('.'),
+                    Token::Colon => name.push(':'),
+                    Token::Minus => name.push('-'),
+                    Token::Mul => name.push('*'),
+                    Token::EOF => {
+                        ok = false;
+                        break;
+                    }
+                    _ => {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok && !name.is_empty() {
+                let alias =
+                    self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+                return Ok(TableFactor::Table {
+                    name: ObjectName(vec![Ident::with_quote('`', name)]),
+                    alias,
+                    args: None,
+                    with_hints: vec![],
+                    version: None,
+                    partitions: vec![],
+                    with_ordinality: false,
+                });
+            }
+            self.index = saved;
+        }
         // Databricks `FROM STREAM table_name` streaming read modifier.
         // The STREAM keyword marks the source as a streaming read; it is not
         // preserved in the AST since the underlying table reference carries

@@ -2567,3 +2567,23 @@ fn parse_bigquery_create_function_deterministic_marker() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_legacy_bracket_table_ref() {
+    // BigQuery legacy SQL bracket-quoted table identifier:
+    //   FROM [project-id:dataset.table]
+    // Standard SQL replaces these with backticks, but customers still send
+    // legacy-SQL queries through the wire. Inside the brackets we capture
+    // any project/dataset/table chars as a single backticked ObjectName.
+    // https://cloud.google.com/bigquery/docs/reference/legacy-sql
+    let cases = [
+        "SELECT * FROM [my-proj-123:dataset.table]",
+        "SELECT * FROM [proj:ds.tbl] AS t",
+        "SELECT * FROM [a-b-c:d.e] WHERE x = 1",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
