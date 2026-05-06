@@ -2492,3 +2492,24 @@ fn parse_bigquery_union_corresponding() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_union_strict_corresponding_on() {
+    // BigQuery extends UNION/INTERSECT/EXCEPT with three optional suffixes
+    // that can appear in any order:
+    //   STRICT
+    //   CORRESPONDING [BY (cols)]
+    //   ON (cols)            -- after BY NAME
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
+    let cases = [
+        "SELECT 1 AS x UNION ALL STRICT CORRESPONDING SELECT 2 AS x",
+        "SELECT 1 AS x UNION ALL STRICT CORRESPONDING BY (foo, bar) SELECT 2 AS x",
+        "SELECT 1 AS x INNER UNION ALL BY NAME ON (foo, bar) SELECT 2 AS x",
+        "SELECT 1 AS x UNION ALL BY NAME ON (foo, bar) SELECT 2 AS x",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
