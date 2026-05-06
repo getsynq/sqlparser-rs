@@ -840,3 +840,15 @@ fn parse_redshift_create_table_diststyle_distkey_sortkey_any_order() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_redshift_oracle_outer_join_marker() {
+    // Redshift supports the Oracle/Snowflake legacy `expr (+)` outer-join
+    // marker in the WHERE clause of comma-join queries.
+    redshift()
+        .parse_sql_statements("select a.foo from a, b where a.baz = b.baz (+)")
+        .unwrap();
+    redshift()
+        .parse_sql_statements("select * from a, b where a.id (+) = b.id")
+        .unwrap();
+}
