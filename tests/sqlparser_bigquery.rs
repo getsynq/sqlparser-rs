@@ -2474,3 +2474,21 @@ fn test_bigquery_raw_string_escaped_quote() {
         .parse_sql_statements(r#"SELECT r"escaped \" quote stays in string""#)
         .unwrap();
 }
+
+#[test]
+fn parse_bigquery_union_corresponding() {
+    // BigQuery / ANSI SQL set-operator suffixes: CORRESPONDING [BY (cols)]
+    // matches legs by column name; STRICT enforces type-strict union.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
+    let cases = [
+        "SELECT 1 AS x UNION ALL CORRESPONDING SELECT 2 AS x",
+        "SELECT 1 AS x UNION ALL CORRESPONDING BY (foo, bar) SELECT 2 AS x",
+        "SELECT 1 AS x LEFT UNION ALL CORRESPONDING SELECT 2 AS x",
+        "SELECT 1 UNION ALL STRICT SELECT 2",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
