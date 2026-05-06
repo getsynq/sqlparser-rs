@@ -7061,49 +7061,47 @@ impl<'a> Parser<'a> {
             (None, None)
         };
 
-        // Redshift allows specifying DISTSTYLE after column definitions
-        let dist_style = if self.parse_keywords(&[Keyword::DISTSTYLE]) {
-            match self.parse_one_of_keywords(&[
-                Keyword::EVEN,
-                Keyword::ALL,
-                Keyword::AUTO,
-                Keyword::KEY,
-            ]) {
-                Some(Keyword::EVEN) => Some(DistributionStyle::Even),
-                Some(Keyword::ALL) => Some(DistributionStyle::All),
-                Some(Keyword::AUTO) => Some(DistributionStyle::Auto),
-                Some(Keyword::KEY) => Some(DistributionStyle::Key),
-                _ => self.expected("KEY, EVEN, ALL or AUTO", self.peek_token())?,
+        // Redshift CREATE TABLE accepts DISTSTYLE / DISTKEY / SORTKEY in any
+        // order after the column definitions. Loop to consume each at most
+        // once.
+        // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
+        let mut dist_style = None;
+        let mut dist_key = None;
+        let mut sort_key = None;
+        loop {
+            if dist_style.is_none() && self.parse_keyword(Keyword::DISTSTYLE) {
+                dist_style = match self.parse_one_of_keywords(&[
+                    Keyword::EVEN,
+                    Keyword::ALL,
+                    Keyword::AUTO,
+                    Keyword::KEY,
+                ]) {
+                    Some(Keyword::EVEN) => Some(DistributionStyle::Even),
+                    Some(Keyword::ALL) => Some(DistributionStyle::All),
+                    Some(Keyword::AUTO) => Some(DistributionStyle::Auto),
+                    Some(Keyword::KEY) => Some(DistributionStyle::Key),
+                    _ => self.expected("KEY, EVEN, ALL or AUTO", self.peek_token())?,
+                };
+            } else if dist_key.is_none() && self.parse_keyword(Keyword::DISTKEY) {
+                self.expect_token(&Token::LParen)?;
+                let key = self.parse_identifier_or_number()?;
+                self.expect_token(&Token::RParen)?;
+                dist_key = Some(key);
+            } else if sort_key.is_none()
+                && (matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::SORTKEY)
+                    || (matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::COMPOUND)
+                        && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::SORTKEY)))
+            {
+                let compound = self.parse_keyword(Keyword::COMPOUND);
+                self.expect_keyword(Keyword::SORTKEY)?;
+                self.expect_token(&Token::LParen)?;
+                let columns = self.parse_comma_separated(|p| p.parse_identifier_or_number())?;
+                self.expect_token(&Token::RParen)?;
+                sort_key = Some(SortKey { compound, columns });
+            } else {
+                break;
             }
-        } else {
-            None
-        };
-
-        // Redshift allows specifying DISTKEY after column definitions
-        // Column reference can be a name or a number (1-based column index)
-        let dist_key = if self.parse_keywords(&[Keyword::DISTKEY]) {
-            self.expect_token(&Token::LParen)?;
-            let key = self.parse_identifier_or_number()?;
-            self.expect_token(&Token::RParen)?;
-            Some(key)
-        } else {
-            None
-        };
-
-        // Redshift allows specifying SORTKEY after column definitions
-        // Column references can be names or numbers (1-based column index)
-        let compound_sort_key = self.parse_keywords(&[Keyword::COMPOUND]);
-        let sort_key = if self.parse_keywords(&[Keyword::SORTKEY]) {
-            self.expect_token(&Token::LParen)?;
-            let columns = self.parse_comma_separated(|p| p.parse_identifier_or_number())?;
-            self.expect_token(&Token::RParen)?;
-            Some(SortKey {
-                compound: compound_sort_key,
-                columns,
-            })
-        } else {
-            None
-        };
+        }
 
         // SQLite supports `WITHOUT ROWID` at the end of `CREATE TABLE`
         let without_rowid = self.parse_keywords(&[Keyword::WITHOUT, Keyword::ROWID]);
