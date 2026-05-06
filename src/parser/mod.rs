@@ -4472,6 +4472,10 @@ impl<'a> Parser<'a> {
                             | Token::LtEq
                             | Token::Gt
                             | Token::GtEq => false,
+                            // `(col1, CLUSTER)` — the reserved keyword sits
+                            // inside a parenthesised list with `)` after it.
+                            // The `,` is a real separator, not trailing.
+                            Token::RParen => false,
                             _ => true,
                         }
                     }
