@@ -500,6 +500,28 @@ fn parse_similar_to() {
     chk(true);
 }
 
+#[test]
+fn parse_hive_row_format_serde_with_serdeproperties() {
+    // Hive `ROW FORMAT SERDE 'class' WITH SERDEPROPERTIES ('k'='v', …)`.
+    // SERDEPROPERTIES is not a Keyword; matched case-insensitively.
+    // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL#LanguageManualDDL-RowFormats&SerDe
+    let cases = [
+        "CREATE EXTERNAL TABLE foo (a INT, b STRING) \
+         ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe' \
+         WITH SERDEPROPERTIES ('case.insensitive'='FALSE') \
+         LOCATION 's3://table/path'",
+        "CREATE EXTERNAL TABLE x (y INT) \
+         ROW FORMAT SERDE 'serde' \
+         ROW FORMAT DELIMITED FIELDS TERMINATED BY '1' \
+         WITH SERDEPROPERTIES ('input.regex'='')",
+    ];
+    for sql in cases {
+        hive()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
+
 fn hive() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(HiveDialect {})],
