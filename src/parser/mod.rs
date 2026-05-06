@@ -12527,17 +12527,43 @@ impl<'a> Parser<'a> {
             }
             _ => SetQuantifier::None,
         };
-        // ANSI SQL / BigQuery: `CORRESPONDING [BY (col, col, …)]` matches
-        // legs by column name rather than position. The BY column list
-        // contains plain column names that already appear in the SELECT
-        // legs, so opaque consumption preserves all lineage info.
+        // ANSI SQL / BigQuery set-operator suffixes — accept in any order:
+        //   CORRESPONDING [BY (col, col, …)]  -- match legs by column name
+        //   STRICT                            -- type-strict union
+        //   ON (col, col, …)                  -- BigQuery `BY NAME ON (cols)`
+        // All are opaque to lineage (the column names inside already
+        // appear in the SELECT legs); consume balanced paren blocks and
+        // discard.
         // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
-        if matches!(
-            self.peek_token_kind(),
-            Token::Word(w) if w.value.eq_ignore_ascii_case("CORRESPONDING")
-        ) {
-            self.next_token();
-            if self.parse_keyword(Keyword::BY) && self.consume_token(&Token::LParen) {
+        loop {
+            let advanced = if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("CORRESPONDING")
+            ) {
+                self.next_token();
+                if self.parse_keyword(Keyword::BY) && self.consume_token(&Token::LParen) {
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+                true
+            } else if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("STRICT")
+            ) {
+                self.next_token();
+                true
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ON)
+                && matches!(self.peek_nth_token(1).token, Token::LParen)
+            {
+                self.next_token(); // ON
+                self.next_token(); // (
                 let mut depth = 1i32;
                 while depth > 0 {
                     match self.next_token().token {
@@ -12547,15 +12573,13 @@ impl<'a> Parser<'a> {
                         _ => {}
                     }
                 }
+                true
+            } else {
+                false
+            };
+            if !advanced {
+                break;
             }
-        }
-        // BigQuery: `UNION ALL STRICT` for type-strict union (no implicit
-        // coercion). Modifier doesn't affect lineage.
-        if matches!(
-            self.peek_token_kind(),
-            Token::Word(w) if w.value.eq_ignore_ascii_case("STRICT")
-        ) {
-            self.next_token();
         }
         q
     }
