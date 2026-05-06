@@ -11095,12 +11095,15 @@ impl<'a> Parser<'a> {
     ) -> Result<WithSpan<Ident>, ParserError> {
         let start_span = self.index;
 
-        // Snowflake `IDENTIFIER('<name>')` lets a string literal stand in for
-        // any identifier — `CREATE TABLE IDENTIFIER('db.schema.t') AS …`,
-        // `FROM IDENTIFIER('t')`, etc.
+        // Snowflake `IDENTIFIER(<value>)` lets any of the following stand in
+        // for an identifier:
+        //   IDENTIFIER('<name>')       -- string literal (most common)
+        //   IDENTIFIER($foo)           -- session variable
+        //   IDENTIFIER(?)              -- bind parameter
         // https://docs.snowflake.com/en/sql-reference/identifier-literal
-        // Treat the whole `IDENTIFIER(<string>)` as a single quoted ident so
-        // downstream consumers see a name rather than a function call.
+        // The placeholder forms carry no compile-time name, so we surface a
+        // synthetic one (the placeholder text) just to keep parsing going —
+        // execution would resolve it at run time anyway.
         if dialect_of!(self is SnowflakeDialect | GenericDialect) {
             if let Token::Word(w) = &self.peek_token().token {
                 if w.quote_style.is_none() && w.value.eq_ignore_ascii_case("IDENTIFIER") {
@@ -11109,18 +11112,22 @@ impl<'a> Parser<'a> {
                     if self.consume_token(&Token::LParen) {
                         let inner = self.next_token();
                         let value = match inner.token {
-                            Token::SingleQuotedString(s) => Some((s, '\'')),
-                            Token::DoubleQuotedString(s) => Some((s, '"')),
+                            Token::SingleQuotedString(s) => Some((s, Some('\''))),
+                            Token::DoubleQuotedString(s) => Some((s, Some('"'))),
+                            Token::Placeholder(p) => Some((p, None)),
                             _ => None,
                         };
                         if let Some((s, q)) = value {
                             if self.consume_token(&Token::RParen) {
-                                return Ok(Ident::with_quote(q, s)
-                                    .spanning(self.span_from_index(start_span)));
+                                let ident = match q {
+                                    Some(quote) => Ident::with_quote(quote, s),
+                                    None => Ident::new(s),
+                                };
+                                return Ok(ident.spanning(self.span_from_index(start_span)));
                             }
                         }
                     }
-                    // Not the IDENTIFIER(<string>) shape — back up and parse normally.
+                    // Not the IDENTIFIER(<value>) shape — back up and parse normally.
                     self.index = saved;
                 }
             }
