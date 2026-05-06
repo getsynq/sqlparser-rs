@@ -12244,7 +12244,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_set_quantifier(&mut self, op: &Option<SetOperator>) -> SetQuantifier {
-        match op {
+        let q = match op {
             Some(SetOperator::Union) => {
                 if self.parse_keywords(&[Keyword::BY, Keyword::NAME]) {
                     SetQuantifier::ByName
@@ -12276,7 +12276,38 @@ impl<'a> Parser<'a> {
                 }
             }
             _ => SetQuantifier::None,
+        };
+        // ANSI SQL / BigQuery: `CORRESPONDING [BY (col, col, …)]` matches
+        // legs by column name rather than position. The BY column list
+        // contains plain column names that already appear in the SELECT
+        // legs, so opaque consumption preserves all lineage info.
+        // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#set_operators
+        if matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.value.eq_ignore_ascii_case("CORRESPONDING")
+        ) {
+            self.next_token();
+            if self.parse_keyword(Keyword::BY) && self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
         }
+        // BigQuery: `UNION ALL STRICT` for type-strict union (no implicit
+        // coercion). Modifier doesn't affect lineage.
+        if matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if w.value.eq_ignore_ascii_case("STRICT")
+        ) {
+            self.next_token();
+        }
+        q
     }
 
     /// Parse a restricted `SELECT` statement (no CTEs / `UNION` / `ORDER BY`),
