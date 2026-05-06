@@ -5659,7 +5659,15 @@ impl<'a> Parser<'a> {
                 .build());
         }
 
+        // Hive `CREATE [EXTERNAL] TABLE` accepts COMMENT, PARTITIONED BY,
+        // CLUSTERED BY ... INTO N BUCKETS, SKEWED BY, ROW FORMAT, STORED
+        // AS, LOCATION, TBLPROPERTIES in roughly this order.
+        // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+        // Consume the optional table-level COMMENT and CLUSTERED BY before
+        // the existing partition / formats parsers.
+        let _ = self.parse_optional_hive_comment_and_clustered_by()?;
         let hive_distribution = self.parse_hive_distribution()?;
+        let _ = self.parse_optional_hive_comment_and_clustered_by()?;
         let hive_formats = self.parse_hive_formats()?;
 
         let file_format = if let Some(ff) = &hive_formats.storage {
@@ -5686,6 +5694,63 @@ impl<'a> Parser<'a> {
             .file_format(file_format)
             .location(location)
             .build())
+    }
+
+    /// Consume optional Hive table-level `COMMENT '<str>'` and `CLUSTERED BY
+    /// (cols) [SORTED BY (cols)] INTO <n> BUCKETS` clauses. Used by both
+    /// CREATE TABLE and CREATE EXTERNAL TABLE; lineage is preserved by the
+    /// surrounding column list. Returns nothing — the clauses are
+    /// consumed and discarded for parser-coverage. Both clauses can appear
+    /// in either order.
+    /// https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+    fn parse_optional_hive_comment_and_clustered_by(&mut self) -> Result<(), ParserError> {
+        loop {
+            if self.parse_keyword(Keyword::COMMENT) {
+                let _ = self.parse_literal_string()?;
+                continue;
+            }
+            if matches!(
+                self.peek_token_kind(),
+                Token::Word(w) if w.value.eq_ignore_ascii_case("CLUSTERED")
+            ) && matches!(
+                self.peek_nth_token(1).token,
+                Token::Word(w) if w.keyword == Keyword::BY
+            ) {
+                self.next_token(); // CLUSTERED
+                self.next_token(); // BY
+                self.expect_token(&Token::LParen)?;
+                let _ = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                self.expect_token(&Token::RParen)?;
+                if matches!(self.peek_token_kind(), Token::Word(w) if w.value.eq_ignore_ascii_case("SORTED"))
+                    && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::BY)
+                {
+                    self.next_token(); // SORTED
+                    self.next_token(); // BY
+                    self.expect_token(&Token::LParen)?;
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                }
+                if self.parse_keyword(Keyword::INTO) {
+                    let _ = self.parse_literal_uint()?;
+                    if matches!(
+                        self.peek_token_kind(),
+                        Token::Word(w) if w.value.eq_ignore_ascii_case("BUCKETS")
+                    ) {
+                        self.next_token();
+                    }
+                }
+                continue;
+            }
+            break;
+        }
+        Ok(())
     }
 
     pub fn parse_file_format(&mut self) -> Result<FileFormat, ParserError> {
