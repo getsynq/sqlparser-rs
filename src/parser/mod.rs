@@ -1139,7 +1139,7 @@ impl<'a> Parser<'a> {
         // WHERE clauses of the old-style comma-join syntax, but we recognize
         // the suffix anywhere to keep parsing simple; the AST node preserves
         // the inner expression so column-level lineage is unaffected.
-        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+        if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect)
             && matches!(self.peek_token().token, Token::LParen)
             && matches!(self.peek_nth_token(1).token, Token::Plus)
             && matches!(self.peek_nth_token(2).token, Token::RParen)
@@ -1481,9 +1481,9 @@ impl<'a> Parser<'a> {
                             }
                         }
 
-                        // Oracle/Snowflake legacy outer-join marker on a
-                        // qualified column reference: `tbl.col (+)`.
-                        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                        // Oracle/Snowflake/Redshift legacy outer-join marker on
+                        // a qualified column reference: `tbl.col (+)`.
+                        if dialect_of!(self is SnowflakeDialect | RedshiftSqlDialect | GenericDialect)
                             && matches!(self.peek_token().token, Token::LParen)
                             && matches!(self.peek_nth_token(1).token, Token::Plus)
                             && matches!(self.peek_nth_token(2).token, Token::RParen)
