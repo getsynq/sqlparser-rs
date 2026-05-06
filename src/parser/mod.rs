@@ -1265,6 +1265,44 @@ impl<'a> Parser<'a> {
         let start_idx = self.index;
         let next_token = self.next_token();
         let expr = match next_token.token {
+            Token::Word(ref w_ref)
+                if w_ref.keyword == Keyword::NoKeyword
+                    && w_ref.quote_style.is_none()
+                    && w_ref.value.eq_ignore_ascii_case("DATE_PART")
+                    && self.peek_token_is(&Token::LParen)
+                    && dialect_of!(self is SnowflakeDialect | GenericDialect) =>
+            {
+                // Snowflake DATE_PART supports ANSI EXTRACT-style syntax:
+                //   DATE_PART(<part> FROM <expr>)
+                // alongside the function-call form `DATE_PART(<part>, <expr>)`.
+                // https://docs.snowflake.com/en/sql-reference/functions/date_part
+                let name = ObjectName(vec![Ident::new("DATE_PART")]);
+                self.expect_token(&Token::LParen)?;
+                let part = self.parse_function_args()?;
+                let value = if self.consume_token(&Token::Comma) {
+                    self.parse_function_args()?
+                } else {
+                    self.expect_keyword(Keyword::FROM)?;
+                    let expr = self.parse_expr()?;
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))
+                };
+                self.expect_token(&Token::RParen)?;
+                Ok(Expr::Function(Function {
+                    name,
+                    args: vec![part, value],
+                    parameters: None,
+                    over: None,
+                    distinct: false,
+                    approximate: false,
+                    special: false,
+                    order_by: vec![],
+                    limit: None,
+                    on_overflow: None,
+                    null_treatment: None,
+                    within_group: None,
+                    having_bound: None,
+                }))
+            }
             Token::Word(w) => match w.keyword {
                 Keyword::TRUE | Keyword::FALSE | Keyword::NULL => {
                     self.prev_token();

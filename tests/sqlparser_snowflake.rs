@@ -3547,3 +3547,23 @@ fn parse_snowflake_create_schema_clone() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_snowflake_date_part_from() {
+    // Snowflake's DATE_PART accepts both function-call and ANSI EXTRACT
+    // forms:
+    //   DATE_PART(<part>, <expr>)         -- function-call
+    //   DATE_PART(<part> FROM <expr>)     -- EXTRACT-style
+    // https://docs.snowflake.com/en/sql-reference/functions/date_part
+    let cases = [
+        "SELECT DATE_PART('month' FROM CAST('2024-04-08' AS DATE))",
+        "SELECT DATE_PART(day FROM a)",
+        "SELECT DATE_PART(year FROM CAST('2024-04-08' AS DATE))",
+        "SELECT DATE_PART('month', CAST('2024-04-08' AS DATE))",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
