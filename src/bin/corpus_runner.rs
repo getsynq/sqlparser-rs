@@ -26,7 +26,8 @@ fn normalize_dialect_name(name: &str) -> &str {
 /// Dialects without a dedicated parser fall back to a related dialect or to
 /// `GenericDialect` rather than being silently skipped, so corpus stats reflect
 /// every file under `tests/corpus/`. Aliases are best-effort:
-///   - `presto` / `athena` use Trino-style SQL → Generic (same as our `trino`)
+///   - `presto` uses Trino-style SQL → Trino
+///   - `athena` uses Hive-style DDL on top of Trino-style DML → Hive
 ///   - `tsql` / `fabric` use T-SQL → MsSql
 ///   - `spark` uses Spark SQL → Databricks
 ///   - `materialize` is Postgres-compatible → Postgres
@@ -38,7 +39,8 @@ fn dialect_for_name(name: &str) -> Box<dyn sqlparser::dialect::Dialect> {
         return d;
     }
     let alias: &str = match base_name.as_str() {
-        "presto" | "athena" => "trino",
+        "presto" => "trino",
+        "athena" => "hive",
         "tsql" | "fabric" => "mssql",
         "spark" => "databricks",
         "materialize" => "postgres",
