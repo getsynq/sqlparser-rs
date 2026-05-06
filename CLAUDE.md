@@ -39,6 +39,10 @@ cargo clippy
 - Use `cargo run --release --quiet --features json_example --example cli FILE --DIALECT 2>&1 1>/dev/null | grep "Error during parsing"` — DEBUG logs flood stderr by default and obscure the actual parse error.
 - The release CLI (`target/release/examples/cli`) is rebuilt independently from `corpus-runner`. After parser edits, run `cargo build --release --example cli` before re-running single-file repros — otherwise you're testing the previous build and may report false positives.
 
+### Backgrounding gotcha
+
+- **`cmd > log 2>&1 &` in a Bash tool call with `run_in_background: true` returns "completed" immediately** because the shell exits while the `&`-detached child keeps running. Don't trust the completion notification for detached processes — verify with `pgrep -f <name>` or arm a Monitor that polls `pgrep`.
+
 ### Performance and Profiling
 
 **Critical:** Always profile BEFORE optimizing. Assumptions about bottlenecks are often wrong.
@@ -115,6 +119,10 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
 - **Always rebuild before corpus run**: `cargo build --release --bin corpus-runner` — stale binary produces stale reports
 - **Refresh baseline after each accepted commit**: `cp target/corpus-report.json target/corpus-report-baseline.json`. Otherwise `compare-corpus-reports.js` credits old deltas and can hide fresh regressions.
+- `compare-corpus-reports.js` only lists *added* tests under "New Tests" — deleted/pruned files don't appear there. After a kernel-cll-corpus pipeline run, also check `git status -s` in that repo to see what was removed.
+- **Pipeline reprocess (`make process` in kernel-cll-corpus) takes ~10 minutes** for the full corpus. Don't poll — arm a Monitor on `while pgrep -f pipeline.process; do sleep 15; done` and let it wake you.
+- **Anonymizer-corruption signature**: `'s'<word>` (the `'s'` placeholder string directly abutting an identifier/keyword, e.g. `'s'HOUR`, `'s'id_5`) is unique to anonymizer misalignment. Filter on exactly `'s'<word>` — a broader `'<anything>'<word>` regex misaligns on multi-string SQL (`'foo','bar'`) and silently deletes hand-written sqlglot fixtures.
+- **Query-log truncation heuristics** (`pipeline/process.py::_looks_truncated`) that worked without false positives: trailing punctuation (`,`/`(`/`=`/operator), trailing clause keyword (SELECT/FROM/BY/AS/…), and `CASE` count > `END` count. Removed ~4k Redshift query-log fragments.
 - Adding a real dispatch in `parse_create` for a previously-unsupported `CREATE <X>` shape can flag *new* corpus failures: files that slipped through the generic skip-until-semicolon fallback are now actually parsed. Either extend support, accept on a case-by-case basis, or fall back gracefully — but expect the delta.
 - **This repo is PUBLIC** (`getsynq/sqlparser-rs`, a fork of `apache/datafusion-sqlparser-rs`). Never put customer names, workspace IDs, or internal codenames into commit messages, branch names, PR titles, file names, or function names — even anonymized SQL content must be attributed generically. Every push is mirrored into GH Archive's permanent public dataset, which force-push cannot undo.
 - **Pulling real SQL from production Clickhouse for regression coverage**: `SELECT sql FROM schema.latest_sql_definitions FINAL WHERE workspace='<name>' AND asset_type IN (...)`. `asset_type` codes from `proto/core/types/v1/asset_type.proto` that carry SQL bodies parseable by this library:
