@@ -2587,3 +2587,21 @@ fn parse_bigquery_legacy_bracket_table_ref() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_at_time_zone_double_quoted_string() {
+    // BigQuery accepts both single- and double-quoted string literals,
+    // and `AT TIME ZONE` takes a string. The previous parser only
+    // recognized single-quoted form, so `EXTRACT(HOUR FROM ts AT TIME
+    // ZONE "Asia/Tokyo")` failed.
+    bigquery()
+        .parse_sql_statements("SELECT EXTRACT(HOUR FROM ts AT TIME ZONE \"Asia/Tokyo\")")
+        .unwrap();
+    bigquery()
+        .parse_sql_statements("SELECT ts AT TIME ZONE \"UTC\"")
+        .unwrap();
+    // Single-quoted form still parses everywhere.
+    bigquery()
+        .parse_sql_statements("SELECT ts AT TIME ZONE 'UTC'")
+        .unwrap();
+}
