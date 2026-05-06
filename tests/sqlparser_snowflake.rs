@@ -3529,3 +3529,21 @@ fn parse_snowflake_create_external_table_with_options() {
     assert!(rendered.contains("\"ID\""));
     assert!(rendered.contains("\"NAME\""));
 }
+
+#[test]
+fn parse_snowflake_create_schema_clone() {
+    // Snowflake zero-copy clone of a schema:
+    //   CREATE SCHEMA new CLONE source [AT|BEFORE (TIMESTAMP|OFFSET|STATEMENT => …)]
+    // https://docs.snowflake.com/en/sql-reference/sql/create-clone
+    let cases = [
+        "CREATE SCHEMA mytestschema_clone CLONE testschema",
+        "CREATE SCHEMA restored_schema CLONE my_schema AT (OFFSET => -3600)",
+        "CREATE SCHEMA mytestschema_clone_restore CLONE testschema \
+         BEFORE (TIMESTAMP => TO_TIMESTAMP(40 * 365 * 86400))",
+    ];
+    for sql in cases {
+        snowflake()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}

@@ -4885,6 +4885,33 @@ impl<'a> Parser<'a> {
 
         let schema_name = self.parse_schema_name()?;
 
+        // Snowflake zero-copy clone:
+        //   CREATE SCHEMA new CLONE source
+        //                       [AT|BEFORE (TIMESTAMP|OFFSET|STATEMENT => <expr>)]
+        // https://docs.snowflake.com/en/sql-reference/sql/create-clone
+        // Lineage: the source schema's tables become the new schema's tables.
+        // Currently CreateSchema has no `clone` slot — consume the clause
+        // verbatim so the statement parses; revisit when the AST gains a
+        // schema-level clone field.
+        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && self.parse_keyword(Keyword::CLONE)
+        {
+            let _source = self.parse_object_name(false)?;
+            // Optional time-travel suffix: AT|BEFORE (kind => expr).
+            if self.parse_one_of_keywords(&[Keyword::AT, Keyword::BEFORE]).is_some() {
+                self.expect_token(&Token::LParen)?;
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         // Parse optional COMMENT clause (Snowflake, ClickHouse)
         let comment = if self.parse_keyword(Keyword::COMMENT) {
             let _ = self.consume_token(&Token::Eq);
