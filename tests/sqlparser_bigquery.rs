@@ -2513,3 +2513,23 @@ fn parse_bigquery_union_strict_corresponding_on() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_for_system_time_after_alias() {
+    // BigQuery / MSSQL `FOR SYSTEM_TIME AS OF <expr>` time-travel reads
+    // can appear after an optional alias. The previous parser only
+    // accepted the clause before the alias, so an aliased shape
+    // ("FROM tbl t FOR SYSTEM_TIME AS OF …") fell through to the
+    // FOR-UPDATE locks loop and errored.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#for_system_time_as_of
+    let cases = [
+        "SELECT * FROM tbl AS t FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP()",
+        "SELECT * FROM tbl t FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP() LEFT JOIN other o ON t.id = o.id",
+        "SELECT * FROM tbl FOR SYSTEM_TIME AS OF '2025-01-01'",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}

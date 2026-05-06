@@ -14145,8 +14145,10 @@ impl<'a> Parser<'a> {
                 vec![]
             };
 
-            // Parse potential version qualifier
-            let version = self.parse_table_version()?;
+            // Parse potential version qualifier (Snowflake CHANGES, etc.)
+            // BigQuery/MSSQL `FOR SYSTEM_TIME AS OF` is also legal here, but
+            // the more common position is *after* the alias — handle both.
+            let mut version = self.parse_table_version()?;
 
             // Postgres, MSSQL: table-valued functions:
             let args = if self.consume_token(&Token::LParen) {
@@ -14160,6 +14162,13 @@ impl<'a> Parser<'a> {
                 args.is_some() && self.parse_keywords(&[Keyword::WITH, Keyword::ORDINALITY]);
 
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+
+            // BigQuery / MSSQL: `FROM tbl [alias] FOR SYSTEM_TIME AS OF expr`
+            // (the FOR clause typically follows the alias).
+            // https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax#for_system_time_as_of
+            if version.is_none() {
+                version = self.parse_table_version()?;
+            }
 
             // ClickHouse: SELECT ... FROM table [AS alias] FINAL
             // Skip FINAL keyword (doesn't affect lineage)
