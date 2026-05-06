@@ -3567,3 +3567,18 @@ fn parse_snowflake_date_part_from() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_snowflake_create_external_table_partition_by() {
+    // Snowflake CREATE EXTERNAL TABLE accepts a `PARTITION BY (col, col, …)`
+    // clause referencing columns from the column-def list, before the
+    // option block (LOCATION=…, FILE_FORMAT=(…), etc.).
+    // https://docs.snowflake.com/en/sql-reference/sql/create-external-table
+    let sql = "CREATE EXTERNAL TABLE et2 (\
+        col1 DATE AS (CAST(GET_PATH(PARSE_JSON(metadata$external_table_partition), 'COL1') AS DATE)), \
+        col2 VARCHAR AS (CAST(GET_PATH(PARSE_JSON(metadata$external_table_partition), 'COL2') AS VARCHAR))\
+    ) PARTITION BY (col1, col2) \
+    LOCATION=@s2/logs/ partition_type=user_specified \
+    FILE_FORMAT=(type=parquet compression=gzip)";
+    snowflake().parse_sql_statements(sql).unwrap();
+}
