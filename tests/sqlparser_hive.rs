@@ -548,3 +548,23 @@ fn parse_iceberg_partitioned_by_with_transforms() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_hive_create_table_comment_and_clustered_by() {
+    // Hive `CREATE [EXTERNAL] TABLE … COMMENT '<str>' [CLUSTERED BY (cols)
+    // [SORTED BY (cols)] INTO <n> BUCKETS]`. Both clauses are optional and
+    // can appear in either order before / between PARTITIONED BY and the
+    // ROW FORMAT / STORED AS / LOCATION block.
+    // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+    let cases = [
+        "CREATE EXTERNAL TABLE foo (id INT) COMMENT 'test comment'",
+        "CREATE EXTERNAL TABLE foo (id INT, val STRING) CLUSTERED BY (id, val) INTO 10 BUCKETS",
+        "CREATE EXTERNAL TABLE foo (id INT) COMMENT 'c' PARTITIONED BY (a INT) CLUSTERED BY (id) INTO 5 BUCKETS",
+        "CREATE EXTERNAL TABLE foo (id INT) CLUSTERED BY (id) SORTED BY (id ASC) INTO 8 BUCKETS",
+    ];
+    for sql in cases {
+        hive()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
