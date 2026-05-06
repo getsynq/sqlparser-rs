@@ -2533,3 +2533,21 @@ fn parse_bigquery_for_system_time_after_alias() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_bigquery_reserved_keyword_in_parenthesised_list() {
+    // BigQuery wildcards with EXCEPT can name reserved-as-alias keywords:
+    //   SELECT * EXCEPT(id, CLUSTER, MONTH) FROM t
+    // Previously the trailing-comma terminator misread `, CLUSTER )` as a
+    // trailing comma + clause keyword, leaving CLUSTER unconsumed.
+    let cases = [
+        "SELECT * EXCEPT(id_2, CLUSTER) FROM tbl",
+        "SELECT * EXCEPT(MONTH, CLUSTER) FROM tbl",
+        "SELECT t.* EXCEPT(id, CLUSTER, MONTH) FROM tbl t",
+    ];
+    for sql in cases {
+        bigquery()
+            .parse_sql_statements(sql)
+            .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
+    }
+}
