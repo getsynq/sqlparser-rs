@@ -8471,11 +8471,7 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<Option<ColumnOption>, ParserError> {
         if self.parse_keywords(&[Keyword::ALWAYS, Keyword::AS, Keyword::IDENTITY]) {
-            let mut sequence_options = vec![];
-            if self.expect_token(&Token::LParen).is_ok() {
-                sequence_options = self.parse_create_sequence_options()?;
-                self.expect_token(&Token::RParen)?;
-            }
+            let sequence_options = self.parse_identity_paren_options()?;
             Ok(Some(ColumnOption::Generated {
                 generated_as: GeneratedAs::Always,
                 sequence_options: Some(sequence_options),
@@ -8487,11 +8483,7 @@ impl<'a> Parser<'a> {
             Keyword::AS,
             Keyword::IDENTITY,
         ]) {
-            let mut sequence_options = vec![];
-            if self.expect_token(&Token::LParen).is_ok() {
-                sequence_options = self.parse_create_sequence_options()?;
-                self.expect_token(&Token::RParen)?;
-            }
+            let sequence_options = self.parse_identity_paren_options()?;
             Ok(Some(ColumnOption::Generated {
                 generated_as: GeneratedAs::ByDefault,
                 sequence_options: Some(sequence_options),
@@ -17497,6 +17489,30 @@ impl<'a> Parser<'a> {
         // Snowflake uses `=` syntax: START=1, INCREMENT=1
         let _ = self.consume_token(&Token::Eq);
         self.parse_number_value()
+    }
+
+    /// Parse the optional paren block after `GENERATED [ALWAYS|BY DEFAULT] AS
+    /// IDENTITY`. Two shapes are accepted:
+    /// - `(START WITH n INCREMENT BY n …)` — Postgres-style keyword options.
+    /// - `(<seed>, <step>)` — Redshift two-arg shorthand.
+    /// https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_NEW.html
+    fn parse_identity_paren_options(&mut self) -> Result<Vec<SequenceOptions>, ParserError> {
+        let mut sequence_options = vec![];
+        if self.expect_token(&Token::LParen).is_ok() {
+            // Detect Redshift `(seed, step)` shorthand by peeking for a
+            // bare number before any keyword.
+            if matches!(self.peek_token_kind(), Token::Number(_, _) | Token::Minus | Token::Plus) {
+                let seed = Expr::Value(self.parse_sequence_number_value()?);
+                self.expect_token(&Token::Comma)?;
+                let step = Expr::Value(self.parse_sequence_number_value()?);
+                sequence_options.push(SequenceOptions::StartWith(seed, false));
+                sequence_options.push(SequenceOptions::IncrementBy(step, false));
+            } else {
+                sequence_options = self.parse_create_sequence_options()?;
+            }
+            self.expect_token(&Token::RParen)?;
+        }
+        Ok(sequence_options)
     }
 
     fn parse_create_sequence_options(&mut self) -> Result<Vec<SequenceOptions>, ParserError> {
