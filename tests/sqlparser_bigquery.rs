@@ -1307,6 +1307,39 @@ fn test_select_wildcard_with_replace() {
 }
 
 #[test]
+fn parse_export_data() {
+    // EXPORT DATA OPTIONS(...) AS <query> — BigQuery writes a query result
+    // to GCS. Lineage payload lives in the AS query.
+    let parsed = bigquery_and_generic().parse_sql_statements(
+        "EXPORT DATA OPTIONS(uri='gs://b/p/*.parquet', format='PARQUET', overwrite=true) AS SELECT * FROM tbl",
+    );
+    assert!(parsed.is_ok(), "parse failed: {:?}", parsed.err());
+    // BigQuery-only: WITH CONNECTION uses backtick-quoted connection names.
+    let parsed2 = bigquery().parse_sql_statements(
+        "EXPORT DATA WITH CONNECTION `proj.us.conn` OPTIONS(uri='gs://b/p/*.parquet') AS SELECT 1 FROM t",
+    );
+    assert!(parsed2.is_ok(), "WITH CONNECTION parse failed: {:?}", parsed2.err());
+}
+
+#[test]
+fn parse_load_data() {
+    // LOAD DATA INTO target ... FROM FILES (...) — BigQuery loads external
+    // files. Only the target is lineage-relevant; rest is preserved verbatim.
+    for sql in [
+        "LOAD DATA INTO mydataset.mytable FROM FILES (uris=['gs://b/p/*'], format='PARQUET')",
+        "LOAD DATA OVERWRITE mydataset.mytable FROM FILES (uris=['gs://b/p/*'], format='PARQUET')",
+    ] {
+        let parsed = bigquery_and_generic().parse_sql_statements(sql);
+        assert!(parsed.is_ok(), "parse failed for {sql:?}: {:?}", parsed.err());
+    }
+    // BigQuery-only: backtick-quoted target with embedded dots.
+    let parsed = bigquery().parse_sql_statements(
+        "LOAD DATA INTO `proj.ds.t` (a STRING, b INT64) FROM FILES (uris=['gs://b/*'])",
+    );
+    assert!(parsed.is_ok(), "parse failed: {:?}", parsed.err());
+}
+
+#[test]
 fn parse_return_statement() {
     // RETURN inside BigQuery scripting / IF blocks. Bare and value forms.
     bigquery_and_generic().verified_stmt("RETURN");

@@ -2542,6 +2542,33 @@ pub enum Statement {
     /// See: <https://docs.snowflake.com/en/sql-reference/sql/execute-task>
     ExecuteTask { name: ObjectName },
     /// ```sql
+    /// EXPORT DATA [WITH CONNECTION conn] OPTIONS ( <opts> ) AS <query>
+    /// ```
+    ///
+    /// BigQuery: writes the result of `query` to GCS/Bigtable/etc. according
+    /// to the options. The OPTIONS body is preserved verbatim because its
+    /// contents (uri, format, overwrite, …) carry no lineage; the AS query
+    /// is the lineage input.
+    /// See: <https://cloud.google.com/bigquery/docs/reference/standard-sql/export-statements>
+    ExportData { options: String, query: Box<Query> },
+    /// ```sql
+    /// LOAD DATA [OVERWRITE | INTO] <target> [<column_list>]
+    ///   [PARTITION BY ...] [CLUSTER BY ...] [OPTIONS (...)]
+    ///   FROM FILES ( <opts> )
+    ///   [WITH PARTITION COLUMNS [(<columns>)]]
+    ///   [WITH CONNECTION <conn>]
+    /// ```
+    ///
+    /// BigQuery: loads external files into a table. Only the target name
+    /// matters for lineage; everything after `FROM FILES` is captured as
+    /// opaque text since FROM FILES options carry no table refs.
+    /// See: <https://cloud.google.com/bigquery/docs/reference/standard-sql/load-statements>
+    LoadData {
+        overwrite: bool,
+        target: ObjectName,
+        rest: String,
+    },
+    /// ```sql
     /// RETURN [ <expr> ]
     /// ```
     ///
@@ -4339,6 +4366,26 @@ impl fmt::Display for Statement {
             }
             Statement::ExecuteTask { name } => {
                 write!(f, "EXECUTE TASK {name}")
+            }
+            Statement::ExportData { options, query } => {
+                write!(f, "EXPORT DATA OPTIONS ({options}) AS {query}")
+            }
+            Statement::LoadData {
+                overwrite,
+                target,
+                rest,
+            } => {
+                write!(f, "LOAD DATA ")?;
+                if *overwrite {
+                    write!(f, "OVERWRITE ")?;
+                } else {
+                    write!(f, "INTO ")?;
+                }
+                write!(f, "{target}")?;
+                if !rest.is_empty() {
+                    write!(f, " {rest}")?;
+                }
+                Ok(())
             }
             Statement::Return { value } => {
                 write!(f, "RETURN")?;

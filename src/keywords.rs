@@ -298,6 +298,7 @@ define_keywords!(
     EXP,
     EXPANSION,
     EXPLAIN,
+    EXPORT,
     EXTENDED,
     EXTERNAL,
     EXTERNAL_QUERY,
