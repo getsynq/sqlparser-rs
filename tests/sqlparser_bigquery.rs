@@ -1307,6 +1307,13 @@ fn test_select_wildcard_with_replace() {
 }
 
 #[test]
+fn parse_return_statement() {
+    // RETURN inside BigQuery scripting / IF blocks. Bare and value forms.
+    bigquery_and_generic().verified_stmt("RETURN");
+    bigquery_and_generic().verified_stmt("RETURN 1");
+}
+
+#[test]
 fn parse_top_as_table_alias() {
     // BigQuery does not reserve TOP — only MSSQL uses `SELECT TOP n`.
     // It can appear as a table alias in JOIN/FROM positions.
