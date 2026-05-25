@@ -1306,6 +1306,14 @@ fn test_select_wildcard_with_replace() {
     assert_eq!(expected, select.projection[0]);
 }
 
+#[test]
+fn parse_top_as_table_alias() {
+    // BigQuery does not reserve TOP — only MSSQL uses `SELECT TOP n`.
+    // It can appear as a table alias in JOIN/FROM positions.
+    bigquery_and_generic()
+        .verified_stmt("SELECT TOP.id_1 FROM t AS id_2 LEFT JOIN s AS TOP ON TOP.id_3 = id_2.id_3");
+}
+
 fn bigquery() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(BigQueryDialect {})],

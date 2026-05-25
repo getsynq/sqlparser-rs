@@ -10840,6 +10840,17 @@ impl<'a> Parser<'a> {
             {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
+            // TOP is reserved only for MSSQL/T-SQL `SELECT TOP n` — in
+            // BigQuery/Snowflake/etc. it can appear as a table alias.
+            // When the following token isn't a numeric/paren that would
+            // start the `TOP n [PERCENT]` form, treat it as an identifier.
+            Token::Word(w)
+                if w.keyword == Keyword::TOP
+                    && !dialect_of!(self is MsSqlDialect)
+                    && !matches!(self.peek_token_kind(), Token::Number(_, _) | Token::LParen,) =>
+            {
+                Ok(Some(w.to_ident().spanning(next_token.span)))
+            }
             // VIEW is reserved only because of Hive's `LATERAL VIEW` clause
             // (always consumed as a 2-keyword pair before we get here). When
             // it appears in alias position alone — e.g. customer SQL with
