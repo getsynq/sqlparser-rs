@@ -1757,6 +1757,14 @@ fn parse_extract_comma_form() {
 }
 
 #[test]
+fn parse_trim_as_table_alias() {
+    // Snowflake does not reserve TRIM as an identifier, so it can be used
+    // as a column name or table alias when not followed by `(`.
+    snowflake_and_generic().verified_stmt("SELECT TRIM, t.TRIM FROM t");
+    snowflake_and_generic().verified_stmt("SELECT TRIM.id_1 FROM t AS TRIM");
+}
+
+#[test]
 fn parse_extract_as_table_alias() {
     // Snowflake does not reserve EXTRACT as an identifier, so it can be used
     // as a table alias. The qualified reference `EXTRACT.col` must parse as a

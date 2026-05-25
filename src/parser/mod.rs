@@ -1420,7 +1420,33 @@ impl<'a> Parser<'a> {
                     self.parse_substring_expr()
                 }
                 Keyword::OVERLAY => self.parse_overlay_expr(),
-                Keyword::TRIM => self.parse_trim_expr(),
+                Keyword::TRIM if self.peek_token_is(&Token::LParen) => self.parse_trim_expr(),
+                Keyword::TRIM if self.peek_token_is(&Token::Period) => {
+                    // `trim` used as a qualifier in a compound reference
+                    // (e.g. `trim.col` where `trim` is a table alias).
+                    let mut id_parts: Vec<Ident> = vec![w.to_ident()];
+                    while self.consume_token(&Token::Period) {
+                        let next_token = self.next_token();
+                        match next_token.token {
+                            Token::Word(w) => id_parts.push(w.to_ident()),
+                            Token::Placeholder(ref s) => {
+                                id_parts.push(Ident::new(s.clone()));
+                            }
+                            _ => {
+                                return self
+                                    .expected("an identifier or a '*' after '.'", next_token);
+                            }
+                        }
+                    }
+                    Ok(Expr::CompoundIdentifier(
+                        id_parts.spanning(self.span_from_index(start_idx)),
+                    ))
+                }
+                Keyword::TRIM => {
+                    // Bare `trim` used as a column reference (Snowflake/
+                    // BigQuery do not reserve TRIM as an identifier).
+                    Ok(Expr::Identifier(w.to_ident().spanning(next_token.span)))
+                }
                 Keyword::INTERVAL if self.parse_interval_guard() => self.parse_interval(),
                 // Treat ARRAY[1,2,3] as an array [1,2,3], otherwise try as subquery or a function call
                 Keyword::ARRAY if self.peek_token_is(&Token::LBracket) => {
