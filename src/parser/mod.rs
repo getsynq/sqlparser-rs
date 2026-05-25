@@ -747,6 +747,40 @@ impl<'a> Parser<'a> {
                     Ok(Statement::ExchangeTables { first, second })
                 }
                 Keyword::CALL => Ok(self.parse_call()?),
+                Keyword::EXPORT
+                    if dialect_of!(self is BigQueryDialect | GenericDialect)
+                        && matches!(
+                            self.peek_token_kind(),
+                            Token::Word(w) if w.keyword == Keyword::DATA
+                        ) =>
+                {
+                    self.expect_keyword(Keyword::DATA)?;
+                    // Optional `WITH CONNECTION <name>` — consume but discard.
+                    if self.parse_keywords(&[Keyword::WITH, Keyword::CONNECTION]) {
+                        let _ = self.parse_object_name(false)?;
+                    }
+                    self.expect_keyword(Keyword::OPTIONS)?;
+                    // OPTIONS body is opaque key=value list; consume balanced parens.
+                    self.expect_token(&Token::LParen)?;
+                    let start = self.index;
+                    let mut depth = 1i32;
+                    while depth > 0 {
+                        match self.next_token().token {
+                            Token::LParen => depth += 1,
+                            Token::RParen => depth -= 1,
+                            Token::EOF => break,
+                            _ => {}
+                        }
+                    }
+                    let options: String = self.tokens[start..self.index - 1]
+                        .iter()
+                        .map(|t| t.token.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    self.expect_keyword(Keyword::AS)?;
+                    let query = self.parse_boxed_query()?;
+                    Ok(Statement::ExportData { options, query })
+                }
                 Keyword::RETURN => {
                     // `RETURN [ <expr> ]` — used in BigQuery/Snowflake
                     // procedure bodies and Postgres functions. The optional
@@ -885,6 +919,44 @@ impl<'a> Parser<'a> {
                 // `INSTALL` is duckdb specific https://duckdb.org/docs/extensions/overview
                 Keyword::INSTALL if dialect_of!(self is DuckDbDialect | GenericDialect) => {
                     Ok(self.parse_install()?)
+                }
+                // BigQuery `LOAD DATA [OVERWRITE | INTO] <target> ... FROM FILES (...)`.
+                // Recognize before the DuckDB `LOAD <extension>` branch so the
+                // `DATA` keyword distinguishes the two forms.
+                Keyword::LOAD
+                    if dialect_of!(self is BigQueryDialect | GenericDialect)
+                        && matches!(
+                            self.peek_token_kind(),
+                            Token::Word(w) if w.keyword == Keyword::DATA
+                        ) =>
+                {
+                    self.expect_keyword(Keyword::DATA)?;
+                    let overwrite = if self.parse_keyword(Keyword::OVERWRITE) {
+                        true
+                    } else {
+                        self.expect_keyword(Keyword::INTO)?;
+                        false
+                    };
+                    let target = self.parse_object_name(true)?;
+                    // Everything from here to end-of-statement is opaque
+                    // (column list, OPTIONS, FROM FILES, WITH PARTITION
+                    // COLUMNS …). No further lineage payload — `target` is
+                    // the only output reference.
+                    let start = self.index;
+                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
+                    {
+                        self.next_token();
+                    }
+                    let rest: String = self.tokens[start..self.index]
+                        .iter()
+                        .map(|t| t.token.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    Ok(Statement::LoadData {
+                        overwrite,
+                        target,
+                        rest,
+                    })
                 }
                 // `LOAD` is duckdb specific https://duckdb.org/docs/extensions/overview
                 Keyword::LOAD if dialect_of!(self is DuckDbDialect | GenericDialect) => {
