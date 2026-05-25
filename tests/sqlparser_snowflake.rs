@@ -1757,6 +1757,17 @@ fn parse_extract_comma_form() {
 }
 
 #[test]
+fn parse_declare_only_fragment() {
+    // Warehouse loggers sometimes capture only the DECLARE prologue of a
+    // procedure body. Accept that shape so the declared variables still
+    // surface for lineage instead of erroring at EOF.
+    snowflake().one_statement_parses_to(
+        "DECLARE id_1 VARCHAR",
+        "DECLARE id_1 VARCHAR; BEGIN END",
+    );
+}
+
+#[test]
 fn parse_bind_parameter_as_table() {
     // Snowflake bind parameter as table reference (used in stored
     // procedures / EXECUTE IMMEDIATE where `$1` holds the resolved
