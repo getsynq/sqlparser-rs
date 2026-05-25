@@ -1387,6 +1387,21 @@ fn test_snowflake_stage_object_names() {
 }
 
 #[test]
+fn test_snowflake_stage_partitioned_path() {
+    // Stage URLs with partitioned segments such as `key=value` are valid
+    // Snowflake references. The `=` character must be part of the same
+    // word token as the rest of the stage path.
+    let sql = "SELECT * FROM @stage/partition=value/file AS t";
+    let select = snowflake().verified_only_select(sql);
+    match &select.from[0].relation {
+        TableFactor::Table { name, .. } => {
+            assert_eq!(name.0, vec![Ident::new("@stage/partition=value/file")],);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn test_snowflake_stage_with_quoted_identifiers() {
     // Stage paths with quoted identifiers should be collapsed into a single Ident
     // just like unquoted stage paths (e.g., @namespace.stage/path).

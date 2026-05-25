@@ -1231,7 +1231,9 @@ impl<'a> Tokenizer<'a> {
                             }
                         }
                         Some(' ') => Ok(Some(Token::AtSign)),
-                        // Snowflake stage identifier, this should be consumed as multiple dot separated word tokens
+                        // Snowflake stage identifier, this should be consumed as multiple dot separated word tokens.
+                        // `=` is included so partitioned paths like `@stage/key=value/...`
+                        // are kept in a single token.
                         Some(_) if dialect_of!(self is SnowflakeDialect) => {
                             let mut s = "@".to_string();
                             s.push_str(&peeking_take_while(chars, |ch| {
@@ -1241,6 +1243,7 @@ impl<'a> Tokenizer<'a> {
                                     || ch == '%'
                                     || ch == '.'
                                     || ch == '-'
+                                    || ch == '='
                             }));
                             Ok(Some(Token::make_word(&s, None)))
                         }
