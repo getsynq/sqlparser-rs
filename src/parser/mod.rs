@@ -1375,6 +1375,29 @@ impl<'a> Parser<'a> {
                     {
                         let name = ObjectName(vec![Ident::new("extract")]);
                         self.parse_function(name)
+                    } else if self.peek_token_is(&Token::Period) {
+                        // `extract` used as a qualifier in a compound
+                        // reference (e.g. `extract.col` where `extract`
+                        // is a table alias). Build the compound identifier
+                        // — Snowflake/BigQuery/Databricks do not reserve
+                        // EXTRACT as an identifier.
+                        let mut id_parts: Vec<Ident> = vec![w.to_ident()];
+                        while self.consume_token(&Token::Period) {
+                            let next_token = self.next_token();
+                            match next_token.token {
+                                Token::Word(w) => id_parts.push(w.to_ident()),
+                                Token::Placeholder(ref s) => {
+                                    id_parts.push(Ident::new(s.clone()));
+                                }
+                                _ => {
+                                    return self
+                                        .expected("an identifier or a '*' after '.'", next_token);
+                                }
+                            }
+                        }
+                        Ok(Expr::CompoundIdentifier(
+                            id_parts.spanning(self.span_from_index(start_idx)),
+                        ))
                     } else if !self.peek_token_is(&Token::LParen) {
                         // Bare identifier `extract` used as a column reference,
                         // e.g. `nullif(extract, '')` — Redshift/Postgres allow
@@ -3423,9 +3446,7 @@ impl<'a> Parser<'a> {
                             // BigQuery accepts both single- and double-quoted
                             // strings as string literals; the time-zone arg
                             // is just a string. e.g. `AT TIME ZONE "Asia/Tokyo"`.
-                            Token::DoubleQuotedString(time_zone)
-                                if dialect_of!(self is BigQueryDialect | GenericDialect) =>
-                            {
+                            Token::DoubleQuotedString(time_zone) if dialect_of!(self is BigQueryDialect | GenericDialect) => {
                                 Ok(Expr::AtTimeZone {
                                     timestamp: Box::new(expr),
                                     time_zone,
@@ -4951,7 +4972,10 @@ impl<'a> Parser<'a> {
         {
             let _source = self.parse_object_name(false)?;
             // Optional time-travel suffix: AT|BEFORE (kind => expr).
-            if self.parse_one_of_keywords(&[Keyword::AT, Keyword::BEFORE]).is_some() {
+            if self
+                .parse_one_of_keywords(&[Keyword::AT, Keyword::BEFORE])
+                .is_some()
+            {
                 self.expect_token(&Token::LParen)?;
                 let mut depth = 1i32;
                 while depth > 0 {
@@ -7721,101 +7745,101 @@ impl<'a> Parser<'a> {
                 }
                 None
             } else {
-            match self.peek_token().token {
-                Token::Word(ref w)
-                    if !matches!(
-                        w.keyword,
-                        Keyword::SELECT | Keyword::WITH | Keyword::VALUES | Keyword::TABLE
-                    ) =>
-                {
-                    // ClickHouse/Redshift: CREATE TABLE t1 AS t2 or AS func(args)
-                    // Wrap as SELECT * FROM t2 / SELECT * FROM func(args)
-                    let table_name = self.parse_object_name(false)?;
-                    // Parse optional function arguments: AS func(1, 5)
-                    let args = if self.consume_token(&Token::LParen) {
-                        let args = self.parse_comma_separated(Parser::parse_function_args)?;
-                        self.expect_token(&Token::RParen)?;
-                        Some(args)
-                    } else {
-                        None
-                    };
-                    // ClickHouse: CREATE TABLE t1 AS t2 ENGINE = Buffer(...)
-                    // Parse ENGINE after AS table_name if not already set
-                    if engine.is_none() {
-                        engine = if self.parse_keyword(Keyword::ENGINE) {
-                            self.expect_token(&Token::Eq)?;
-                            let next_token = self.next_token();
-                            let engine_name = match next_token.token {
-                                Token::Word(w) => w.value,
-                                _ => self.expected("identifier", next_token)?,
-                            };
-                            let engine_options = if self.consume_token(&Token::LParen) {
-                                let columns = if !self.peek_token_is(&Token::RParen) {
-                                    self.parse_comma_separated(|p| p.parse_expr())?
-                                } else {
-                                    vec![]
-                                };
-                                self.expect_token(&Token::RParen)?;
-                                Some(columns)
-                            } else {
-                                None
-                            };
-                            Some(EngineSpec {
-                                name: engine_name,
-                                options: engine_options,
-                            })
+                match self.peek_token().token {
+                    Token::Word(ref w)
+                        if !matches!(
+                            w.keyword,
+                            Keyword::SELECT | Keyword::WITH | Keyword::VALUES | Keyword::TABLE
+                        ) =>
+                    {
+                        // ClickHouse/Redshift: CREATE TABLE t1 AS t2 or AS func(args)
+                        // Wrap as SELECT * FROM t2 / SELECT * FROM func(args)
+                        let table_name = self.parse_object_name(false)?;
+                        // Parse optional function arguments: AS func(1, 5)
+                        let args = if self.consume_token(&Token::LParen) {
+                            let args = self.parse_comma_separated(Parser::parse_function_args)?;
+                            self.expect_token(&Token::RParen)?;
+                            Some(args)
                         } else {
                             None
                         };
+                        // ClickHouse: CREATE TABLE t1 AS t2 ENGINE = Buffer(...)
+                        // Parse ENGINE after AS table_name if not already set
+                        if engine.is_none() {
+                            engine = if self.parse_keyword(Keyword::ENGINE) {
+                                self.expect_token(&Token::Eq)?;
+                                let next_token = self.next_token();
+                                let engine_name = match next_token.token {
+                                    Token::Word(w) => w.value,
+                                    _ => self.expected("identifier", next_token)?,
+                                };
+                                let engine_options = if self.consume_token(&Token::LParen) {
+                                    let columns = if !self.peek_token_is(&Token::RParen) {
+                                        self.parse_comma_separated(|p| p.parse_expr())?
+                                    } else {
+                                        vec![]
+                                    };
+                                    self.expect_token(&Token::RParen)?;
+                                    Some(columns)
+                                } else {
+                                    None
+                                };
+                                Some(EngineSpec {
+                                    name: engine_name,
+                                    options: engine_options,
+                                })
+                            } else {
+                                None
+                            };
+                        }
+                        Some(Box::new(Query {
+                            with: None,
+                            body: Box::new(SetExpr::Select(Box::new(Select {
+                                distinct: None,
+                                top: None,
+                                projection: vec![SelectItem::Wildcard(
+                                    WildcardAdditionalOptions::default(),
+                                )
+                                .spanning(Span::default())],
+                                into: None,
+                                from: vec![TableWithJoins {
+                                    relation: TableFactor::Table {
+                                        name: table_name,
+                                        alias: None,
+                                        args,
+                                        with_hints: vec![],
+                                        version: None,
+                                        partitions: vec![],
+                                        with_ordinality: false,
+                                    },
+                                    joins: vec![],
+                                }],
+                                lateral_views: vec![],
+                                sample: None,
+                                selection: None,
+                                group_by: GroupByExpr::Expressions(vec![], vec![]),
+                                cluster_by: vec![],
+                                distribute_by: vec![],
+                                sort_by: vec![],
+                                having: None,
+                                named_window: vec![],
+                                qualify: None,
+                                value_table_mode: None,
+                                start_with: None,
+                                connect_by: None,
+                            }))),
+                            order_by: None,
+                            limit: None,
+                            limit_by: vec![],
+                            offset: None,
+                            fetch: None,
+                            locks: vec![],
+                            settings: None,
+                            format_clause: None,
+                        }))
                     }
-                    Some(Box::new(Query {
-                        with: None,
-                        body: Box::new(SetExpr::Select(Box::new(Select {
-                            distinct: None,
-                            top: None,
-                            projection: vec![SelectItem::Wildcard(
-                                WildcardAdditionalOptions::default(),
-                            )
-                            .spanning(Span::default())],
-                            into: None,
-                            from: vec![TableWithJoins {
-                                relation: TableFactor::Table {
-                                    name: table_name,
-                                    alias: None,
-                                    args,
-                                    with_hints: vec![],
-                                    version: None,
-                                    partitions: vec![],
-                                    with_ordinality: false,
-                                },
-                                joins: vec![],
-                            }],
-                            lateral_views: vec![],
-                            sample: None,
-                            selection: None,
-                            group_by: GroupByExpr::Expressions(vec![], vec![]),
-                            cluster_by: vec![],
-                            distribute_by: vec![],
-                            sort_by: vec![],
-                            having: None,
-                            named_window: vec![],
-                            qualify: None,
-                            value_table_mode: None,
-                            start_with: None,
-                            connect_by: None,
-                        }))),
-                        order_by: None,
-                        limit: None,
-                        limit_by: vec![],
-                        offset: None,
-                        fetch: None,
-                        locks: vec![],
-                        settings: None,
-                        format_clause: None,
-                    }))
+                    _ => Some(self.parse_boxed_query()?),
                 }
-                _ => Some(self.parse_boxed_query()?),
-            }
             }
         } else {
             None
@@ -13429,11 +13453,8 @@ impl<'a> Parser<'a> {
             self.next_token();
             // Optional `FOR { JOIN | ORDER BY | GROUP BY }`.
             if self.parse_keyword(Keyword::FOR) {
-                let _ = self.parse_one_of_keywords(&[
-                    Keyword::JOIN,
-                    Keyword::ORDER,
-                    Keyword::GROUP,
-                ]);
+                let _ =
+                    self.parse_one_of_keywords(&[Keyword::JOIN, Keyword::ORDER, Keyword::GROUP]);
                 let _ = self.parse_keyword(Keyword::BY);
             }
             // Required `(name [, name]*)` — empty list also accepted.
@@ -13463,7 +13484,7 @@ impl<'a> Parser<'a> {
         {
             self.next_token(); // USING
             self.next_token(); // SAMPLE
-            // Skip an optional method keyword (SYSTEM | RESERVOIR | BERNOULLI).
+                               // Skip an optional method keyword (SYSTEM | RESERVOIR | BERNOULLI).
             if let Token::Word(w) = self.peek_token_kind() {
                 if matches!(
                     w.value.to_ascii_uppercase().as_str(),
@@ -13602,7 +13623,7 @@ impl<'a> Parser<'a> {
                             }
                         }
                         let _ = self.parse_keyword(Keyword::INNER); // [ INNER ]
-                        // ClickHouse: `INNER [ANY|ASOF|ALL] JOIN`
+                                                                    // ClickHouse: `INNER [ANY|ASOF|ALL] JOIN`
                         if dialect_of!(self is ClickHouseDialect | GenericDialect) {
                             let _ = self.parse_one_of_keywords(&[
                                 Keyword::ANY,
@@ -13836,8 +13857,7 @@ impl<'a> Parser<'a> {
                 }
             }
             if ok && !name.is_empty() {
-                let alias =
-                    self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+                let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
                 return Ok(TableFactor::Table {
                     name: ObjectName(vec![Ident::with_quote('`', name)]),
                     alias,
@@ -17594,7 +17614,10 @@ impl<'a> Parser<'a> {
         if self.expect_token(&Token::LParen).is_ok() {
             // Detect Redshift `(seed, step)` shorthand by peeking for a
             // bare number before any keyword.
-            if matches!(self.peek_token_kind(), Token::Number(_, _) | Token::Minus | Token::Plus) {
+            if matches!(
+                self.peek_token_kind(),
+                Token::Number(_, _) | Token::Minus | Token::Plus
+            ) {
                 let seed = Expr::Value(self.parse_sequence_number_value()?);
                 self.expect_token(&Token::Comma)?;
                 let step = Expr::Value(self.parse_sequence_number_value()?);
