@@ -1434,10 +1434,7 @@ fn test_snowflake_trim() {
     // https://docs.snowflake.com/en/sql-reference/data-types-text#string-constants
     // (No roundtrip — parser produces `'xyza'`, which doesn't re-render to
     // the two-literal source form.)
-    snowflake().one_statement_parses_to(
-        "SELECT TRIM('xyz' 'a')",
-        "SELECT TRIM('xyza')",
-    );
+    snowflake().one_statement_parses_to("SELECT TRIM('xyz' 'a')", "SELECT TRIM('xyza')");
 }
 
 #[test]
@@ -1742,6 +1739,14 @@ fn parse_extract_comma_form() {
         "SELECT EXTRACT(YEAR FROM birthdate) AS year_of_birth FROM t",
     );
     assert!(matches!(select, Statement::Query(_)));
+}
+
+#[test]
+fn parse_extract_as_table_alias() {
+    // Snowflake does not reserve EXTRACT as an identifier, so it can be used
+    // as a table alias. The qualified reference `EXTRACT.col` must parse as a
+    // compound identifier, not as the EXTRACT function call.
+    snowflake_and_generic().verified_stmt("SELECT EXTRACT.id_1 FROM t AS EXTRACT");
 }
 
 #[test]
@@ -3453,10 +3458,7 @@ fn parse_adjacent_string_literal_concatenation() {
     // customer SQL relies on this — typically as a forgotten comma in an IN
     // list, but the SQL still runs correctly because of concatenation.
     // https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical#string_and_bytes_literals
-    snowflake().one_statement_parses_to(
-        "SELECT 'a' 'b' 'c' FROM t",
-        "SELECT 'abc' FROM t",
-    );
+    snowflake().one_statement_parses_to("SELECT 'a' 'b' 'c' FROM t", "SELECT 'abc' FROM t");
     snowflake().one_statement_parses_to(
         "SELECT * FROM t WHERE x IN ('a', 'b' 'c', 'd')",
         "SELECT * FROM t WHERE x IN ('a', 'bc', 'd')",
