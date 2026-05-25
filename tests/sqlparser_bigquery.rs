@@ -1318,7 +1318,11 @@ fn parse_export_data() {
     let parsed2 = bigquery().parse_sql_statements(
         "EXPORT DATA WITH CONNECTION `proj.us.conn` OPTIONS(uri='gs://b/p/*.parquet') AS SELECT 1 FROM t",
     );
-    assert!(parsed2.is_ok(), "WITH CONNECTION parse failed: {:?}", parsed2.err());
+    assert!(
+        parsed2.is_ok(),
+        "WITH CONNECTION parse failed: {:?}",
+        parsed2.err()
+    );
 }
 
 #[test]
@@ -1330,7 +1334,11 @@ fn parse_load_data() {
         "LOAD DATA OVERWRITE mydataset.mytable FROM FILES (uris=['gs://b/p/*'], format='PARQUET')",
     ] {
         let parsed = bigquery_and_generic().parse_sql_statements(sql);
-        assert!(parsed.is_ok(), "parse failed for {sql:?}: {:?}", parsed.err());
+        assert!(
+            parsed.is_ok(),
+            "parse failed for {sql:?}: {:?}",
+            parsed.err()
+        );
     }
     // BigQuery-only: backtick-quoted target with embedded dots.
     let parsed = bigquery().parse_sql_statements(

@@ -1761,10 +1761,21 @@ fn parse_declare_only_fragment() {
     // Warehouse loggers sometimes capture only the DECLARE prologue of a
     // procedure body. Accept that shape so the declared variables still
     // surface for lineage instead of erroring at EOF.
-    snowflake().one_statement_parses_to(
-        "DECLARE id_1 VARCHAR",
-        "DECLARE id_1 VARCHAR; BEGIN END",
-    );
+    snowflake().one_statement_parses_to("DECLARE id_1 VARCHAR", "DECLARE id_1 VARCHAR; BEGIN END");
+}
+
+#[test]
+fn parse_grant_to_database_and_application_role() {
+    // Snowflake `GRANT ... TO [DATABASE|APPLICATION] ROLE <name>` —
+    // 2-keyword grantee prefixes for db-scoped and app-scoped roles.
+    // The name can be qualified (`db.role`); it collapses to a single
+    // dotted Ident in the AST.
+    snowflake().verified_stmt("GRANT SELECT ON TABLE t TO DATABASE ROLE db1.role1");
+    snowflake().verified_stmt("GRANT SELECT ON TABLE t TO APPLICATION ROLE app1.role1");
+    // `GRANT ROLE <r> TO …` re-Displays via the synthetic
+    // USAGE-ON-SCHEMA path, so use parse-only assertion.
+    let parsed = snowflake().parse_sql_statements("GRANT ROLE myrole TO DATABASE ROLE db.parent");
+    assert!(parsed.is_ok(), "{:?}", parsed.err());
 }
 
 #[test]

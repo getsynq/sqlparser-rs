@@ -41,6 +41,10 @@ pub enum GranteesType {
     Share,
     Group,
     Application,
+    /// Snowflake `DATABASE ROLE <name>` — a role scoped to a database.
+    DatabaseRole,
+    /// Snowflake `APPLICATION ROLE <name>` — a role exposed by a Native App.
+    ApplicationRole,
 }
 
 impl fmt::Display for GranteesType {
@@ -51,6 +55,8 @@ impl fmt::Display for GranteesType {
             GranteesType::Share => write!(f, "SHARE"),
             GranteesType::Group => write!(f, "GROUP"),
             GranteesType::Application => write!(f, "APPLICATION"),
+            GranteesType::DatabaseRole => write!(f, "DATABASE ROLE"),
+            GranteesType::ApplicationRole => write!(f, "APPLICATION ROLE"),
         }
     }
 }
