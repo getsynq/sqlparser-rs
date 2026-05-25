@@ -2542,6 +2542,14 @@ pub enum Statement {
     /// See: <https://docs.snowflake.com/en/sql-reference/sql/execute-task>
     ExecuteTask { name: ObjectName },
     /// ```sql
+    /// RETURN [ <expr> ]
+    /// ```
+    ///
+    /// Control-flow statement used inside BigQuery / Snowflake / Postgres
+    /// procedure and function bodies. The optional expression carries
+    /// lineage when present (e.g. `RETURN (SELECT ... FROM t)`).
+    Return { value: Option<Expr> },
+    /// ```sql
     /// EXECUTE NOTEBOOK <name> [ ( args ) ]
     /// EXECUTE NOTEBOOK PROJECT <name> [ <option> = <value> ]...
     /// EXECUTE ALERT <name>
@@ -4331,6 +4339,13 @@ impl fmt::Display for Statement {
             }
             Statement::ExecuteTask { name } => {
                 write!(f, "EXECUTE TASK {name}")
+            }
+            Statement::Return { value } => {
+                write!(f, "RETURN")?;
+                if let Some(v) = value {
+                    write!(f, " {v}")?;
+                }
+                Ok(())
             }
             Statement::ExecuteSnowflakeAdmin { command, name } => {
                 write!(f, "EXECUTE {command} {name}")

@@ -747,6 +747,21 @@ impl<'a> Parser<'a> {
                     Ok(Statement::ExchangeTables { first, second })
                 }
                 Keyword::CALL => Ok(self.parse_call()?),
+                Keyword::RETURN => {
+                    // `RETURN [ <expr> ]` — used in BigQuery/Snowflake
+                    // procedure bodies and Postgres functions. The optional
+                    // value can be any expression (including a query).
+                    let value = match self.peek_token_kind() {
+                        Token::EOF | Token::SemiColon => None,
+                        Token::Word(w)
+                            if matches!(w.keyword, Keyword::END | Keyword::EXCEPTION) =>
+                        {
+                            None
+                        }
+                        _ => Some(self.parse_expr()?),
+                    };
+                    Ok(Statement::Return { value })
+                }
                 Keyword::COPY => Ok(self.parse_copy()?),
                 Keyword::CLOSE => Ok(self.parse_close()?),
                 Keyword::RENAME => {
