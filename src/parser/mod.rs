@@ -17424,6 +17424,17 @@ impl<'a> Parser<'a> {
                 }
                 declarations.push(self.parse_snowflake_block_declaration()?);
             }
+            // Stored-procedure bodies are sometimes captured as DECLARE-only
+            // fragments (no BEGIN/END) by warehouse loggers. When we reach
+            // EOF without seeing BEGIN, return the declarations on their
+            // own so the variable list still surfaces for lineage.
+            if matches!(self.peek_token_kind(), Token::EOF) && !declarations.is_empty() {
+                return Ok(Statement::SnowflakeBlock {
+                    declarations,
+                    body: vec![],
+                    exception: None,
+                });
+            }
             self.expect_keyword(Keyword::BEGIN)?;
         }
         // Parse body statements until END / EXCEPTION. Snowflake scripting has
