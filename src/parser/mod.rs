@@ -15381,6 +15381,26 @@ impl<'a> Parser<'a> {
 
     /// Parse a single grantee, optionally prefixed with ROLE/USER/GROUP/SHARE/APPLICATION.
     pub fn parse_grantee(&mut self) -> Result<Grantee, ParserError> {
+        // Snowflake: `DATABASE ROLE <name>` and `APPLICATION ROLE <name>`
+        // — 2-keyword grantee type prefixes. Recognize before the single-
+        // keyword branch so `DATABASE ROLE x.y` isn't mis-parsed as the
+        // `DATABASE` grantee with `ROLE x.y` as the name. The role name
+        // can be qualified (`db.role`); collapse to a single dotted Ident
+        // to fit the Grantee.name shape.
+        if self.parse_keywords(&[Keyword::DATABASE, Keyword::ROLE]) {
+            let name = self.parse_grantee_name()?;
+            return Ok(Grantee {
+                grantee_type: Some(GranteesType::DatabaseRole),
+                name,
+            });
+        }
+        if self.parse_keywords(&[Keyword::APPLICATION, Keyword::ROLE]) {
+            let name = self.parse_grantee_name()?;
+            return Ok(Grantee {
+                grantee_type: Some(GranteesType::ApplicationRole),
+                name,
+            });
+        }
         let grantee_type = match self.parse_one_of_keywords(&[
             Keyword::ROLE,
             Keyword::USER,
@@ -15436,6 +15456,28 @@ impl<'a> Parser<'a> {
             self.parse_identifier(false).map(WithSpan::unwrap)?
         };
         Ok(Grantee { grantee_type, name })
+    }
+
+    /// Parse a possibly-qualified grantee name (`role`, `db.role`) into a
+    /// single dotted Ident, since Grantee.name is not a multi-part ObjectName.
+    fn parse_grantee_name(&mut self) -> Result<Ident, ParserError> {
+        let first = self.parse_identifier(false)?.unwrap();
+        let mut parts = vec![first];
+        while self.consume_token(&Token::Period) {
+            parts.push(self.parse_identifier(false)?.unwrap());
+        }
+        if parts.len() == 1 {
+            Ok(parts.pop().unwrap())
+        } else {
+            let combined: Vec<String> = parts
+                .iter()
+                .map(|p| match p.quote_style {
+                    Some(q) => format!("{q}{}{q}", p.value),
+                    None => p.value.clone(),
+                })
+                .collect();
+            Ok(Ident::new(combined.join(".")))
+        }
     }
 
     pub fn parse_grant_revoke_privileges_objects(
