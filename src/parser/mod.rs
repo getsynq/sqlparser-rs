@@ -14246,6 +14246,27 @@ impl<'a> Parser<'a> {
             let expr = self.parse_expr()?;
             let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
             Ok(TableFactor::FieldAccessor { expr, alias })
+        } else if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && matches!(self.peek_token_ref().token, Token::Placeholder(ref s) if s.starts_with('$'))
+        {
+            // Snowflake bind parameter as a table reference: `FROM $1`.
+            // Used in stored procedures / EXECUTE IMMEDIATE where the
+            // parameter holds the resolved table name.
+            let tok = self.next_token();
+            let placeholder = match tok.token {
+                Token::Placeholder(s) => s,
+                _ => unreachable!(),
+            };
+            let alias = self.parse_optional_table_alias(keywords::RESERVED_FOR_TABLE_ALIAS)?;
+            Ok(TableFactor::Table {
+                name: ObjectName(vec![Ident::new(placeholder)]),
+                alias,
+                args: None,
+                with_hints: vec![],
+                version: None,
+                partitions: vec![],
+                with_ordinality: false,
+            })
         } else {
             let name = self.parse_object_name(true)?;
 
