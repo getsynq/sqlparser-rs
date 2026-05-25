@@ -1757,6 +1757,15 @@ fn parse_extract_comma_form() {
 }
 
 #[test]
+fn parse_bind_parameter_as_table() {
+    // Snowflake bind parameter as table reference (used in stored
+    // procedures / EXECUTE IMMEDIATE where `$1` holds the resolved
+    // table name).
+    snowflake().verified_stmt("SELECT * FROM $1");
+    snowflake().verified_stmt("SELECT * FROM $1 WHERE x = 1");
+}
+
+#[test]
 fn parse_trim_as_table_alias() {
     // Snowflake does not reserve TRIM as an identifier, so it can be used
     // as a column name or table alias when not followed by `(`.
