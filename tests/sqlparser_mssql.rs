@@ -240,10 +240,8 @@ fn parse_mssql_declare_variable() {
     ms().parse_sql_statements("DECLARE @x INT = 5").unwrap();
     ms().parse_sql_statements("DECLARE @CheckDate AS DATETIME = GETDATE()")
         .unwrap();
-    ms().parse_sql_statements(
-        "DECLARE @x INT, @y VARCHAR(50), @z DATETIME = GETDATE()",
-    )
-    .unwrap();
+    ms().parse_sql_statements("DECLARE @x INT, @y VARCHAR(50), @z DATETIME = GETDATE()")
+        .unwrap();
     // Cursor declarations (no `@` prefix) keep the existing path.
     ms().parse_sql_statements("DECLARE c CURSOR FOR SELECT 1")
         .unwrap();
@@ -652,12 +650,16 @@ fn ms_and_generic() -> TestedDialects {
 fn parse_mssql_varchar_max() {
     // T-SQL allows `MAX` instead of an integer for variable-length types.
     // https://learn.microsoft.com/en-us/sql/t-sql/data-types/nchar-and-nvarchar-transact-sql
-    ms().parse_sql_statements("DECLARE @x NVARCHAR(MAX)").unwrap();
-    ms().parse_sql_statements("DECLARE @x VARBINARY(MAX)").unwrap();
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(MAX)")
+        .unwrap();
+    ms().parse_sql_statements("DECLARE @x VARBINARY(MAX)")
+        .unwrap();
     // Lowercase `max` should also work.
-    ms().parse_sql_statements("DECLARE @x NVARCHAR(max)").unwrap();
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(max)")
+        .unwrap();
     // Numeric precision still works.
-    ms().parse_sql_statements("DECLARE @x NVARCHAR(50)").unwrap();
+    ms().parse_sql_statements("DECLARE @x NVARCHAR(50)")
+        .unwrap();
 }
 
 #[test]
@@ -667,7 +669,8 @@ fn parse_mssql_exec_statement() {
     // `@var = ` return-status assignment.
     // https://learn.microsoft.com/en-us/sql/t-sql/language-elements/execute-transact-sql
     ms().parse_sql_statements("EXEC sp_help").unwrap();
-    ms().parse_sql_statements("EXEC dbo.uspGetWhere @x").unwrap();
+    ms().parse_sql_statements("EXEC dbo.uspGetWhere @x")
+        .unwrap();
     ms().parse_sql_statements("EXEC dbo.uspGetWhereUsedProductID 819, @CheckDate")
         .unwrap();
     ms().parse_sql_statements("EXEC @return_status = checkstate '2'")
@@ -679,8 +682,10 @@ fn parse_mssql_execute_as_login() {
     // T-SQL EXECUTE AS supports `LOGIN = '...'` / `USER = '...'` forms in
     // addition to the bare CALLER / OWNER / SELF / `<name>` shapes.
     // https://learn.microsoft.com/en-us/sql/t-sql/statements/execute-as-clause-transact-sql
-    ms().parse_sql_statements("EXECUTE AS LOGIN = 'foo'").unwrap();
-    ms().parse_sql_statements("EXECUTE AS USER = 'bar'").unwrap();
+    ms().parse_sql_statements("EXECUTE AS LOGIN = 'foo'")
+        .unwrap();
+    ms().parse_sql_statements("EXECUTE AS USER = 'bar'")
+        .unwrap();
     ms().parse_sql_statements("EXECUTE AS CALLER").unwrap();
 }
 
@@ -727,8 +732,7 @@ fn parse_mssql_temporal_table() {
          PERIOD FOR SYSTEM_TIME (b, c)) WITH(SYSTEM_VERSIONING=ON)",
     ];
     for sql in cases {
-        ms()
-            .parse_sql_statements(sql)
+        ms().parse_sql_statements(sql)
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }

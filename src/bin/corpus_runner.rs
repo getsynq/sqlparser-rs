@@ -49,8 +49,7 @@ fn dialect_for_name(name: &str) -> Box<dyn sqlparser::dialect::Dialect> {
         _ => "generic",
     };
     dialect_from_str(alias).unwrap_or_else(|| {
-        Box::new(sqlparser::dialect::GenericDialect)
-            as Box<dyn sqlparser::dialect::Dialect>
+        Box::new(sqlparser::dialect::GenericDialect) as Box<dyn sqlparser::dialect::Dialect>
     })
 }
 

@@ -4598,8 +4598,7 @@ fn parse_create_table_as_with_data_clause() {
         "CREATE TABLE a.b AS SELECT 1 WITH NO DATA AND NO STATISTICS",
     ];
     for sql in cases {
-        pg()
-            .parse_sql_statements(sql)
+        pg().parse_sql_statements(sql)
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
