@@ -7421,7 +7421,12 @@ impl<'a> Parser<'a> {
         let mut dist_key = None;
         let mut sort_key = None;
         loop {
-            if dist_style.is_none() && self.parse_keyword(Keyword::DISTSTYLE) {
+            // Redshift CTAS: BACKUP { YES | NO } may precede the distribution
+            // attributes and the AS keyword. Consume and discard (no lineage
+            // value); the attributes that follow still populate the AST below.
+            if self.parse_keyword(Keyword::BACKUP) {
+                let _ = self.parse_one_of_keywords(&[Keyword::YES, Keyword::NO]);
+            } else if dist_style.is_none() && self.parse_keyword(Keyword::DISTSTYLE) {
                 dist_style = match self.parse_one_of_keywords(&[
                     Keyword::EVEN,
                     Keyword::ALL,

@@ -432,6 +432,15 @@ fn test_distribution_styles() {
     // Redshift CTAS with numeric column references in DISTKEY/SORTKEY
     let sql = "CREATE TABLE eventdistsort DISTKEY(1) SORTKEY(1, 3) AS SELECT eventid, venueid, dateid, eventname FROM event";
     redshift().one_statement_parses_to(sql, sql);
+
+    // Redshift CTAS: BACKUP { YES | NO } may precede the distribution
+    // attributes and AS. BACKUP carries no lineage and is discarded; the
+    // distribution style is preserved.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_TABLE_AS.html
+    redshift().one_statement_parses_to(
+        "CREATE TABLE foo BACKUP NO DISTSTYLE EVEN AS SELECT b.c1, b.c2 FROM bar AS b",
+        "CREATE TABLE foo DISTSTYLE EVEN AS SELECT b.c1, b.c2 FROM bar AS b",
+    );
 }
 
 #[test]
