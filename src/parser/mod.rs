@@ -17694,19 +17694,62 @@ impl<'a> Parser<'a> {
     /// The body has no lineage payload, so tokens are consumed to end-of-statement
     /// and joined as a string for roundtrip display.
     pub fn parse_stage_file_operation(&mut self, command: &str) -> Result<Statement, ParserError> {
-        let mut parts: Vec<String> = Vec::new();
+        // These commands (PUT / REMOVE / GET) are single-line statements whose
+        // body is captured opaquely — no lineage payload exists to preserve.
+        //
+        // We must walk the *raw* token stream (whitespace and comments
+        // included) rather than `next_token()`, because in Snowflake `//`
+        // begins a single-line comment. A `file://...` URI therefore tokenizes
+        // as `file`, `:`, then a `SingleLineComment` swallowing the rest of the
+        // line (including any trailing `;`). Skipping whitespace would drop the
+        // URI path entirely and could even pull the following statement into
+        // this one.
+        let mut body = String::new();
         loop {
-            match self.peek_token().token {
+            let tok = self.peek_token_no_skip();
+            match &tok.token {
                 Token::SemiColon | Token::EOF => break,
-                _ => {
-                    let tok = self.next_token();
-                    parts.push(tok.token.to_string());
+                Token::Whitespace(Whitespace::Newline) => {
+                    // PUT / REMOVE / GET are single-line; a newline ends the body.
+                    self.next_token_no_skip();
+                    break;
+                }
+                Token::Whitespace(Whitespace::SingleLineComment { prefix, comment }) => {
+                    // Re-attach the `//`-prefixed text that the tokenizer split
+                    // off (e.g. the bulk of a `file://` URI). The comment runs
+                    // to the end of the line, so the statement ends here.
+                    let trimmed = comment.trim_end();
+                    match trimmed.find(';') {
+                        Some(semi) => {
+                            // The line comment swallowed the statement's `;`
+                            // terminator. Keep the body up to it, then restore a
+                            // real `Token::SemiColon` so any following statement
+                            // still parses (text after `;` was a true comment).
+                            body.push_str(prefix);
+                            body.push_str(trimmed[..semi].trim_end());
+                            let span = tok.span;
+                            self.tokens[self.index] = TokenWithLocation {
+                                token: Token::SemiColon,
+                                span,
+                            };
+                        }
+                        None => {
+                            body.push_str(prefix);
+                            body.push_str(trimmed);
+                            self.next_token_no_skip();
+                        }
+                    }
+                    break;
+                }
+                other => {
+                    body.push_str(&other.to_string());
+                    self.next_token_no_skip();
                 }
             }
         }
         Ok(Statement::StageFileOperation {
             command: command.to_string(),
-            body: parts.join(" "),
+            body: body.trim().to_string(),
         })
     }
 
