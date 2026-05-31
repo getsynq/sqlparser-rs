@@ -2358,54 +2358,99 @@ fn parse_snowflake_begin_end_block_no_declare() {
 
 #[test]
 fn parse_snowflake_stage_file_operations() {
-    // Snowflake file-management commands against internal stages.
-    // Parsed but the body is opaque — no lineage payload.
-    // https://docs.snowflake.com/en/sql-reference/sql/remove
-    // https://docs.snowflake.com/en/sql-reference/sql/put
-    let stmt = snowflake()
-        .parse_sql_statements("REMOVE @~/staging_dir/")
-        .unwrap();
-    assert_eq!(stmt.len(), 1);
-    match &stmt[0] {
-        sqlparser::ast::Statement::StageFileOperation { command, body } => {
-            assert_eq!(command, "REMOVE");
-            assert_eq!(body, "@~/staging_dir/");
+    use sqlparser::ast::Statement;
+
+    // Snowflake's file-staging command family (PUT / GET / LIST·LS / REMOVE·RM)
+    // run against internal stages. They neither read nor write table data, so
+    // the body after the command keyword is captured as one opaque string — no
+    // lineage payload exists to preserve.
+    //   https://docs.snowflake.com/en/sql-reference/sql/put
+    //   https://docs.snowflake.com/en/sql-reference/sql/get
+    //   https://docs.snowflake.com/en/sql-reference/sql/list
+    //   https://docs.snowflake.com/en/sql-reference/sql/remove
+    //
+    // The hard part is that Snowflake treats `//` as a single-line comment, so
+    // a `file://` URI tokenizes as `file`, `:`, then a comment swallowing the
+    // rest of the line. The body must be reconstructed from the raw token
+    // stream, otherwise it is truncated to `file :`.
+    let cases = [
+        // (sql, expected command, expected body) — examples adapted from the
+        // Snowflake PUT / GET / LIST / REMOVE documentation.
+        // -- PUT: named stage, user stage (@~), table stage (@%table) --
+        (
+            "PUT file:///tmp/data/mydata.csv @my_int_stage",
+            "PUT",
+            "file:///tmp/data/mydata.csv @my_int_stage",
+        ),
+        (
+            "PUT file:///tmp/data/orders_001.csv @%orders;",
+            "PUT",
+            "file:///tmp/data/orders_001.csv @%orders",
+        ),
+        // Windows-style backslash path + user stage + option.
+        (
+            "PUT file://C:\\temp\\data\\mydata.csv @~ AUTO_COMPRESS=TRUE;",
+            "PUT",
+            "file://C:\\temp\\data\\mydata.csv @~ AUTO_COMPRESS=TRUE",
+        ),
+        // Wildcard in the local path.
+        (
+            "PUT file:///tmp/data/*.csv @%orders;",
+            "PUT",
+            "file:///tmp/data/*.csv @%orders",
+        ),
+        // Full option list.
+        (
+            "PUT file:///tmp/data/mydata.csv @my_int_stage AUTO_COMPRESS=FALSE PARALLEL=4 SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE;",
+            "PUT",
+            "file:///tmp/data/mydata.csv @my_int_stage AUTO_COMPRESS=FALSE PARALLEL=4 SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE",
+        ),
+        // The exact query from QUA-85.
+        (
+            "PUT file:///tmp/08707734-7670-45a2-a0c9-912fe8a7c727/427d8e97-ea4f-4b51-aeaf-6a9d80f474c4 @flow_v1/08707734-7670-45a2-a0c9-912fe8a7c727 AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE;",
+            "PUT",
+            "file:///tmp/08707734-7670-45a2-a0c9-912fe8a7c727/427d8e97-ea4f-4b51-aeaf-6a9d80f474c4 @flow_v1/08707734-7670-45a2-a0c9-912fe8a7c727 AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE",
+        ),
+        // -- GET: download from a stage to a local directory --
+        (
+            "GET @my_int_stage/mydata.csv.gz file:///tmp/data/;",
+            "GET",
+            "@my_int_stage/mydata.csv.gz file:///tmp/data/",
+        ),
+        (
+            "GET @%orders file:///tmp/data/ PATTERN='.*data.*';",
+            "GET",
+            "@%orders file:///tmp/data/ PATTERN='.*data.*'",
+        ),
+        // -- LIST / LS --
+        ("LIST @my_int_stage;", "LIST", "@my_int_stage"),
+        ("LIST @~/staging_dir/", "LIST", "@~/staging_dir/"),
+        ("LS @~;", "LS", "@~"),
+        // -- REMOVE / RM --
+        ("REMOVE @~/staging_dir/", "REMOVE", "@~/staging_dir/"),
+        ("RM @%orders/myfile;", "RM", "@%orders/myfile"),
+    ];
+
+    for (sql, expected_command, expected_body) in cases {
+        let stmt = snowflake().parse_sql_statements(sql).unwrap();
+        assert_eq!(stmt.len(), 1, "expected one statement for {sql:?}");
+        match &stmt[0] {
+            Statement::StageFileOperation { command, body } => {
+                assert_eq!(command, expected_command, "command mismatch for {sql:?}");
+                assert_eq!(body, expected_body, "body mismatch for {sql:?}");
+            }
+            other => panic!("expected StageFileOperation for {sql:?}, got {other:?}"),
         }
-        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
     }
 
-    // The `//` in a `file://` URI is a Snowflake single-line comment, so the
-    // body must be reconstructed from the raw token stream — otherwise the
-    // path is truncated to `file :`. This is the exact query from QUA-85.
-    let sql = "PUT file:///tmp/08707734-7670-45a2-a0c9-912fe8a7c727/427d8e97-ea4f-4b51-aeaf-6a9d80f474c4 \
-               @flow_v1/08707734-7670-45a2-a0c9-912fe8a7c727 \
-               AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE;";
-    let stmt = snowflake().parse_sql_statements(sql).unwrap();
-    assert_eq!(stmt.len(), 1);
+    // Lower-case command keyword normalizes to upper-case in the AST.
+    let stmt = snowflake().parse_sql_statements("ls @~").unwrap();
     match &stmt[0] {
-        sqlparser::ast::Statement::StageFileOperation { command, body } => {
-            assert_eq!(command, "PUT");
-            assert_eq!(
-                body,
-                "file:///tmp/08707734-7670-45a2-a0c9-912fe8a7c727/427d8e97-ea4f-4b51-aeaf-6a9d80f474c4 \
-                 @flow_v1/08707734-7670-45a2-a0c9-912fe8a7c727 \
-                 AUTO_COMPRESS=FALSE SOURCE_COMPRESSION=GZIP OVERWRITE=TRUE"
-            );
+        Statement::StageFileOperation { command, body } => {
+            assert_eq!(command, "LS");
+            assert_eq!(body, "@~");
         }
-        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
-    }
-
-    // A simple PUT without a trailing `;` still captures the full file:// URI.
-    let stmt = snowflake()
-        .parse_sql_statements("PUT file:///tmp/data.csv @mystage")
-        .unwrap();
-    assert_eq!(stmt.len(), 1);
-    match &stmt[0] {
-        sqlparser::ast::Statement::StageFileOperation { command, body } => {
-            assert_eq!(command, "PUT");
-            assert_eq!(body, "file:///tmp/data.csv @mystage");
-        }
-        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
+        other => panic!("expected StageFileOperation, got {other:?}"),
     }
 
     // The `//`-comment must not swallow the `;` terminator and pull a
@@ -2415,13 +2460,13 @@ fn parse_snowflake_stage_file_operations() {
         .unwrap();
     assert_eq!(stmt.len(), 2);
     match &stmt[0] {
-        sqlparser::ast::Statement::StageFileOperation { command, body } => {
+        Statement::StageFileOperation { command, body } => {
             assert_eq!(command, "PUT");
             assert_eq!(body, "file:///tmp/data.csv @mystage OVERWRITE=TRUE");
         }
-        _ => panic!("expected StageFileOperation, got {:?}", stmt[0]),
+        other => panic!("expected StageFileOperation, got {other:?}"),
     }
-    assert!(matches!(stmt[1], sqlparser::ast::Statement::Query(_)));
+    assert!(matches!(stmt[1], Statement::Query(_)));
 }
 
 #[test]
