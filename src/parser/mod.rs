@@ -902,6 +902,9 @@ impl<'a> Parser<'a> {
                 }
                 Keyword::REMOVE => Ok(self.parse_stage_file_operation("REMOVE")?),
                 Keyword::PUT => Ok(self.parse_stage_file_operation("PUT")?),
+                Keyword::GET if dialect_of!(self is SnowflakeDialect | GenericDialect) => {
+                    Ok(self.parse_stage_file_operation("GET")?)
+                }
                 Keyword::SAVEPOINT => Ok(self.parse_savepoint()?),
                 Keyword::RELEASE => Ok(self.parse_release_savepoint()?),
                 Keyword::COMMIT => Ok(self.parse_commit()?),
@@ -1026,6 +1029,22 @@ impl<'a> Parser<'a> {
                         value: vec![expr],
                         additional_assignments: vec![],
                     })
+                }
+                // Snowflake stage-file commands that are not (reserved) keywords:
+                // `LIST`/`LS` enumerate staged files and `RM` is the documented
+                // alias for `REMOVE`. Their bodies are opaque, like PUT/GET.
+                // https://docs.snowflake.com/en/sql-reference/sql/list
+                // https://docs.snowflake.com/en/sql-reference/sql/remove
+                Keyword::NoKeyword
+                    if dialect_of!(self is SnowflakeDialect | GenericDialect)
+                        && w.quote_style.is_none()
+                        && matches!(
+                            w.value.to_ascii_uppercase().as_str(),
+                            "LIST" | "LS" | "RM"
+                        ) =>
+                {
+                    let command = w.value.to_ascii_uppercase();
+                    Ok(self.parse_stage_file_operation(&command)?)
                 }
                 _ => self.expected("an SQL statement", next_token),
             },
