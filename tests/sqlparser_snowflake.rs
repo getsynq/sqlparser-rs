@@ -2257,6 +2257,38 @@ fn test_snowflake_create_policy_definitions() {
 }
 
 #[test]
+fn test_snowflake_alter_and_drop_policies() {
+    // ALTER TABLE SET/UNSET AGGREGATION/JOIN POLICY, UNSET TAG.
+    // https://docs.snowflake.com/en/sql-reference/sql/alter-table
+    snowflake().verified_stmt("ALTER TABLE join_table UNSET JOIN POLICY");
+    snowflake().verified_stmt("ALTER TABLE t UNSET AGGREGATION POLICY");
+    snowflake().verified_stmt("ALTER TABLE t SET AGGREGATION POLICY ap ENTITY KEY (id) FORCE");
+    snowflake().verified_stmt("ALTER TABLE t SET JOIN POLICY jp");
+    snowflake().verified_stmt("ALTER TABLE t UNSET TAG a, b.c");
+
+    // DROP <kind> POLICY / DROP TAG (reuses Statement::Drop with policy ObjectTypes).
+    // https://docs.snowflake.com/en/sql-reference/sql/drop-masking-policy
+    snowflake().verified_stmt("DROP JOIN POLICY jp1");
+    snowflake().verified_stmt("DROP MASKING POLICY IF EXISTS p");
+    snowflake().verified_stmt("DROP ROW ACCESS POLICY rap");
+    snowflake().verified_stmt("DROP AGGREGATION POLICY ap");
+    snowflake().verified_stmt("DROP PROJECTION POLICY pp");
+    snowflake().verified_stmt("DROP TAG cost_center");
+
+    match snowflake().verified_stmt("ALTER TABLE t SET JOIN POLICY jp") {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::SetTablePolicy { policy, force } => {
+                assert_eq!(policy.kind, TablePolicyKind::Join);
+                assert_eq!(policy.policy_name.to_string(), "jp");
+                assert!(!force);
+            }
+            other => panic!("expected SetTablePolicy, got {other:?}"),
+        },
+        other => panic!("expected AlterTable, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_snowflake_conditional_masking_using_after_columns() {
     // Snowflake conditional masking places the masking policy's USING (cols)
     // *after* the column-list parens. For CREATE TABLE the columns are attached

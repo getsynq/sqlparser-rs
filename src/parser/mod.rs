@@ -6769,6 +6769,18 @@ impl<'a> Parser<'a> {
             ObjectType::Stage
         } else if self.parse_keyword(Keyword::TYPE) {
             ObjectType::Type
+        } else if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            ObjectType::Policy(PolicyKind::Masking)
+        } else if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+            ObjectType::Policy(PolicyKind::RowAccess)
+        } else if self.parse_keywords(&[Keyword::AGGREGATION, Keyword::POLICY]) {
+            ObjectType::Policy(PolicyKind::Aggregation)
+        } else if self.parse_keywords(&[Keyword::PROJECTION, Keyword::POLICY]) {
+            ObjectType::Policy(PolicyKind::Projection)
+        } else if self.parse_keywords(&[Keyword::JOIN, Keyword::POLICY]) {
+            ObjectType::Policy(PolicyKind::Join)
+        } else if self.parse_keyword(Keyword::TAG) {
+            ObjectType::Tag
         } else if self.parse_keyword(Keyword::FUNCTION) {
             return self.parse_drop_function();
         } else if self.parse_keyword(Keyword::PROCEDURE) {
@@ -9812,6 +9824,10 @@ impl<'a> Parser<'a> {
                     options,
                     has_options_keyword: false,
                 }
+            } else if let Some(policy) = self.maybe_parse_table_policy(false)? {
+                // Snowflake: SET { AGGREGATION | JOIN } POLICY <name> [...] [FORCE]
+                let force = self.parse_keyword(Keyword::FORCE);
+                AlterTableOperation::SetTablePolicy { policy, force }
             } else {
                 // Snowflake: SET [TAG] key = value, ...
                 // The TAG keyword is optional (e.g., SET TAG db.schema.tag_name = 'value')
@@ -9821,6 +9837,30 @@ impl<'a> Parser<'a> {
                     options,
                     has_options_keyword: false,
                 }
+            }
+        } else if self.parse_keyword(Keyword::UNSET) {
+            // Snowflake: UNSET { AGGREGATION | JOIN | ROW ACCESS } POLICY | TAG <name> [, ...]
+            // https://docs.snowflake.com/en/sql-reference/sql/alter-table
+            if self.parse_keywords(&[Keyword::AGGREGATION, Keyword::POLICY]) {
+                AlterTableOperation::UnsetTablePolicy {
+                    kind: TablePolicyKind::Aggregation,
+                }
+            } else if self.parse_keywords(&[Keyword::JOIN, Keyword::POLICY]) {
+                AlterTableOperation::UnsetTablePolicy {
+                    kind: TablePolicyKind::Join,
+                }
+            } else if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+                AlterTableOperation::UnsetTablePolicy {
+                    kind: TablePolicyKind::RowAccess,
+                }
+            } else if self.parse_keyword(Keyword::TAG) {
+                let keys = self.parse_comma_separated(|p| p.parse_object_name(false))?;
+                AlterTableOperation::UnsetTag { keys }
+            } else {
+                return self.expected(
+                    "AGGREGATION POLICY, JOIN POLICY, ROW ACCESS POLICY, or TAG after UNSET",
+                    self.peek_token(),
+                );
             }
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::ATTACH)

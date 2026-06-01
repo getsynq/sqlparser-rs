@@ -165,6 +165,18 @@ pub enum AlterTableOperation {
     /// Note: this is Snowflake specific <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
     DropRowAccessPolicy { policy: ObjectName },
 
+    /// `SET { AGGREGATION | JOIN } POLICY <name> [ENTITY KEY (...) | ALLOWED JOIN KEYS (...)] [FORCE]`
+    ///
+    /// Snowflake table-level policy application via ALTER.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/alter-table>
+    SetTablePolicy { policy: TablePolicy, force: bool },
+
+    /// `UNSET { AGGREGATION | JOIN | ROW ACCESS } POLICY` (Snowflake).
+    UnsetTablePolicy { kind: TablePolicyKind },
+
+    /// `UNSET TAG <name> [, ...]` (Snowflake).
+    UnsetTag { keys: Vec<ObjectName> },
+
     /// `ADD PROJECTION [IF NOT EXISTS] <name> (<select> [ORDER BY ...]) [WITH SETTINGS (...)]`
     ///
     /// Note: this is a ClickHouse-specific operation
@@ -404,6 +416,26 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::DropRowAccessPolicy { policy } => {
                 write!(f, "DROP ROW ACCESS POLICY {policy}")
+            }
+            AlterTableOperation::SetTablePolicy { policy, force } => {
+                write!(f, "SET {policy}")?;
+                if *force {
+                    write!(f, " FORCE")?;
+                }
+                Ok(())
+            }
+            AlterTableOperation::UnsetTablePolicy { kind } => {
+                let command = match kind {
+                    TablePolicyKind::RowAccess => "ROW ACCESS POLICY",
+                    TablePolicyKind::Aggregation => "AGGREGATION POLICY",
+                    TablePolicyKind::Join => "JOIN POLICY",
+                    TablePolicyKind::StorageLifecycle => "STORAGE LIFECYCLE POLICY",
+                    TablePolicyKind::RowFilter => "ROW FILTER",
+                };
+                write!(f, "UNSET {command}")
+            }
+            AlterTableOperation::UnsetTag { keys } => {
+                write!(f, "UNSET TAG {}", display_comma_separated(keys))
             }
             AlterTableOperation::AddProjection {
                 if_not_exists,
@@ -1421,7 +1453,7 @@ pub struct TablePolicy {
 
 /// The kind of a Snowflake policy *definition* (`CREATE ... POLICY`). Each
 /// selects the keyword sequence and the shape of the policy body.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum PolicyKind {
