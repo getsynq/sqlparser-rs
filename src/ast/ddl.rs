@@ -878,7 +878,7 @@ pub struct ColumnDef {
     pub codec: Option<Vec<Expr>>,
     pub options: Vec<ColumnOptionDef>,
     pub column_options: Vec<SqlOption>,
-    pub mask: Option<ObjectName>,
+    pub mask: Option<ColumnMask>,
     pub column_location: Option<ColumnLocation>,
     pub column_policy: Option<ColumnPolicy>,
     /// Column-level tag associations (Snowflake `[WITH] TAG (k = 'v', ...)`).
@@ -909,7 +909,7 @@ impl fmt::Display for ColumnDef {
             )?;
         }
         if let Some(mask) = &self.mask {
-            write!(f, " MASK {mask}")?;
+            write!(f, " {mask}")?;
         }
 
         if let Some(column_policy) = &self.column_policy {
@@ -1419,6 +1419,38 @@ pub struct TablePolicy {
     pub columns: Vec<WithSpan<Ident>>,
 }
 
+/// A Databricks column mask applied in a column definition or `ALTER COLUMN`:
+/// `MASK <function> [ USING COLUMNS ( <col> | <literal> [ , ... ] ) ]`.
+///
+/// The masking logic itself lives in the referenced scalar UDF; the optional
+/// `USING COLUMNS` list supplies extra arguments (other column names and/or
+/// constant literals) to that function.
+///
+/// [Databricks]: https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-column-mask
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ColumnMask {
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub function: ObjectName,
+    /// `USING COLUMNS (...)` arguments: other column names and/or literals.
+    pub using_columns: Vec<Expr>,
+}
+
+impl fmt::Display for ColumnMask {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MASK {}", self.function)?;
+        if !self.using_columns.is_empty() {
+            write!(
+                f,
+                " USING COLUMNS ({})",
+                display_comma_separated(&self.using_columns)
+            )?;
+        }
+        Ok(())
+    }
+}
+
 /// A tag association `<tag_name> = '<value>'` applied to a table, view, or
 /// column (Snowflake `[ WITH ] TAG ( <tag_name> = '<value>' [ , ... ] )`).
 ///
@@ -1458,6 +1490,10 @@ pub enum TablePolicyKind {
     Join,
     /// Snowflake dynamic table `STORAGE LIFECYCLE POLICY <name> ON (cols)`.
     StorageLifecycle,
+    /// Databricks `ROW FILTER <function> ON (cols)`. The `<name>` is a scalar
+    /// UDF returning BOOLEAN; `ON (cols)` supplies its arguments.
+    /// <https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-row-filter>
+    RowFilter,
 }
 
 impl fmt::Display for TablePolicy {
@@ -1470,6 +1506,7 @@ impl fmt::Display for TablePolicy {
             TablePolicyKind::Aggregation => ("AGGREGATION POLICY", "ENTITY KEY"),
             TablePolicyKind::Join => ("JOIN POLICY", "ALLOWED JOIN KEYS"),
             TablePolicyKind::StorageLifecycle => ("STORAGE LIFECYCLE POLICY", "ON"),
+            TablePolicyKind::RowFilter => ("ROW FILTER", "ON"),
         };
         write!(f, "{command} {}", self.policy_name)?;
         if !self.columns.is_empty() {

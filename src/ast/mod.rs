@@ -37,11 +37,11 @@ pub use self::dcl::{
 };
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
-    ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
-    CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition,
-    ProcedureParam, ReferentialAction, TableConstraint, TablePolicy, TablePolicyKind,
-    TableProjection, Tag, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
-    ViewSecurity,
+    ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
+    ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
+    KeyOrIndexDisplay, Partition, ProcedureParam, ReferentialAction, TableConstraint, TablePolicy,
+    TablePolicyKind, TableProjection, Tag, UserDefinedTypeCompositeAttributeDef,
+    UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{

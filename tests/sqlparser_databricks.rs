@@ -154,6 +154,49 @@ fn test_underscore_column_name() {
 #[test]
 fn test_create_table_column_mask() {
     databricks().verified_stmt("CREATE TABLE persons (name STRING, ssn STRING MASK mask_ssn)");
+
+    // Column mask with USING COLUMNS (other column names and/or literals).
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-column-mask
+    databricks().verified_stmt(
+        "CREATE TABLE persons (name STRING, address STRING MASK mask_pii USING COLUMNS (region), region STRING)",
+    );
+    match databricks().verified_stmt(
+        "CREATE TABLE t (address STRING MASK mask_addr USING COLUMNS (country, '_viewers'))",
+    ) {
+        Statement::CreateTable { columns, .. } => {
+            let mask = columns[0].mask.as_ref().expect("mask captured");
+            assert_eq!(mask.function.to_string(), "mask_addr");
+            assert_eq!(mask.using_columns.len(), 2);
+            assert_eq!(mask.using_columns[0].to_string(), "country");
+            assert_eq!(mask.using_columns[1].to_string(), "'_viewers'");
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_create_table_row_filter() {
+    // Databricks table-level row filter: `WITH ROW FILTER <func> ON (cols)`.
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-row-filter
+    databricks().verified_stmt(
+        "CREATE TABLE employees (emp_name STRING, dept STRING) WITH ROW FILTER filter_emps ON (dept)",
+    );
+    match databricks()
+        .verified_stmt("CREATE TABLE sales (region STRING) WITH ROW FILTER us_filter ON (region)")
+    {
+        Statement::CreateTable { table_policies, .. } => {
+            assert_eq!(table_policies.len(), 1);
+            assert_eq!(table_policies[0].kind, TablePolicyKind::RowFilter);
+            assert_eq!(table_policies[0].policy_name.to_string(), "us_filter");
+            let cols: Vec<String> = table_policies[0]
+                .columns
+                .iter()
+                .map(|c| c.to_string())
+                .collect();
+            assert_eq!(cols, vec!["region".to_string()]);
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
 }
 
 #[test]
