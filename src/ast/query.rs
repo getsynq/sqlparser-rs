@@ -726,6 +726,9 @@ impl fmt::Display for IdentWithAlias {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct WildcardAdditionalOptions {
+    /// `[ILIKE '<pattern>']` — Snowflake: select only columns whose names match
+    /// the case-insensitive pattern. <https://docs.snowflake.com/en/sql-reference/sql/select#parameters>
+    pub opt_ilike: Option<IlikeSelectItem>,
     /// `[EXCLUDE...]`.
     pub opt_exclude: Option<ExcludeSelectItem>,
     /// `[EXCEPT...]`.
@@ -745,6 +748,9 @@ pub struct WildcardAdditionalOptions {
 
 impl fmt::Display for WildcardAdditionalOptions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ilike) = &self.opt_ilike {
+            write!(f, " {ilike}")?;
+        }
         if let Some(exclude) = &self.opt_exclude {
             write!(f, " {exclude}")?;
         }
@@ -760,6 +766,31 @@ impl fmt::Display for WildcardAdditionalOptions {
         for func in &self.opt_apply {
             write!(f, " APPLY({func})")?;
         }
+        Ok(())
+    }
+}
+
+/// Snowflake `ILIKE '<pattern>'` wildcard filter: keep only columns whose
+/// names match the (case-insensitive) pattern.
+///
+/// # Syntax
+/// ```plaintext
+/// ILIKE '<pattern>'
+/// ```
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct IlikeSelectItem {
+    pub pattern: String,
+}
+
+impl fmt::Display for IlikeSelectItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ILIKE '{}'",
+            crate::ast::value::escape_single_quote_string(&self.pattern)
+        )?;
         Ok(())
     }
 }

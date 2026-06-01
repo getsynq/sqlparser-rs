@@ -16423,6 +16423,12 @@ impl<'a> Parser<'a> {
     pub fn parse_wildcard_additional_options(
         &mut self,
     ) -> Result<WildcardAdditionalOptions, ParserError> {
+        // Snowflake `* ILIKE '<pattern>'` comes first, before EXCLUDE/RENAME/etc.
+        let opt_ilike = if dialect_of!(self is GenericDialect | SnowflakeDialect) {
+            self.parse_optional_select_item_ilike()?
+        } else {
+            None
+        };
         let opt_exclude = if dialect_of!(self is GenericDialect | DuckDbDialect | SnowflakeDialect | RedshiftSqlDialect)
         {
             self.parse_optional_select_item_exclude()?
@@ -16459,12 +16465,26 @@ impl<'a> Parser<'a> {
         }
 
         Ok(WildcardAdditionalOptions {
+            opt_ilike,
             opt_exclude,
             opt_except,
             opt_rename,
             opt_replace,
             opt_apply,
         })
+    }
+
+    /// Parse a Snowflake `* ILIKE '<pattern>'` wildcard filter, if present.
+    pub fn parse_optional_select_item_ilike(
+        &mut self,
+    ) -> Result<Option<IlikeSelectItem>, ParserError> {
+        let opt_ilike = if self.parse_keyword(Keyword::ILIKE) {
+            let pattern = self.parse_literal_string()?;
+            Some(IlikeSelectItem { pattern })
+        } else {
+            None
+        };
+        Ok(opt_ilike)
     }
 
     /// Check if an expression is a COLUMNS function call (for ClickHouse column transformers)
