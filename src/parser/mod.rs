@@ -8899,6 +8899,31 @@ impl<'a> Parser<'a> {
                 if (w.keyword == Keyword::INDEX || w.keyword == Keyword::KEY)
                     && dialect_of!(self is GenericDialect | MySqlDialect) =>
             {
+                // `KEY`/`INDEX` introduce a MySQL-style inline index constraint
+                // only when followed by `(cols)`, `USING`, or `<name> (cols)`.
+                // Otherwise the word is a column name (e.g. `key VARBINARY`,
+                // `index INTEGER`) — backtrack and let the column parser take
+                // it. INDEX/KEY are non-reserved in Trino (→ GenericDialect).
+                // https://trino.io/docs/current/language/reserved.html
+                // Unnamed: `KEY (cols)` / `KEY USING ...`. Named: `KEY <name>
+                // (cols)` / `KEY <name> USING ...` — the name may be an
+                // identifier or a quoted string, so key off the token after it
+                // being `(` or `USING` rather than the name's token type.
+                let next_is_paren = matches!(self.peek_token_kind(), Token::LParen);
+                let next_is_using = matches!(
+                    self.peek_token_kind(),
+                    Token::Word(w) if w.keyword == Keyword::USING
+                );
+                let named_index = matches!(self.peek_nth_token(1).token, Token::LParen)
+                    || matches!(
+                        self.peek_nth_token(1).token,
+                        Token::Word(w) if w.keyword == Keyword::USING
+                    );
+                if !(next_is_paren || next_is_using || named_index) {
+                    self.prev_token();
+                    return Ok(None);
+                }
+
                 let display_as_key = w.keyword == Keyword::KEY;
 
                 let name = match self.peek_token_kind().clone() {

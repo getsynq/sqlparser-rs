@@ -2807,6 +2807,31 @@ fn parse_create_table() {
 }
 
 #[test]
+fn parse_create_table_index_key_as_column_names() {
+    // INDEX / KEY are non-reserved in Trino (which maps to GenericDialect), so
+    // they are legal unquoted column names. They only introduce a MySQL-style
+    // inline index constraint when followed by `(cols)` / `USING` / `<name>
+    // (cols)`. https://trino.io/docs/current/language/reserved.html
+    for sql in [
+        "CREATE TABLE t (index INTEGER)",
+        "CREATE TABLE t (a INTEGER, key VARBINARY)",
+        "CREATE TABLE t (key INTEGER, index VARCHAR)",
+    ] {
+        let stmts =
+            Parser::parse_sql(&GenericDialect {}, sql).unwrap_or_else(|e| panic!("{sql:?}: {e}"));
+        assert_eq!(stmts.len(), 1, "sql: {sql}");
+    }
+    // MySQL-style inline index constraints are unaffected.
+    for sql in [
+        "CREATE TABLE t (a INT, KEY (a))",
+        "CREATE TABLE t (a INT, INDEX idx (a))",
+        "CREATE TABLE t (a INT, KEY idx USING BTREE (a))",
+    ] {
+        Parser::parse_sql(&MySqlDialect {}, sql).unwrap_or_else(|e| panic!("{sql:?}: {e}"));
+    }
+}
+
+#[test]
 fn parse_create_table_with_constraint_characteristics() {
     let sql = "CREATE TABLE uk_cities (\
                name VARCHAR(100) NOT NULL,\
