@@ -3139,6 +3139,35 @@ fn test_snowflake_create_dynamic_table() {
 }
 
 #[test]
+fn parse_snowflake_merge_all_by_name() {
+    // Snowflake MERGE ... ALL BY NAME: insert/update every column matched by
+    // name between source and target, without an explicit column/assignment
+    // list. https://docs.snowflake.com/en/sql-reference/sql/merge
+    let sql = "MERGE INTO t USING s ON t.id = s.id \
+        WHEN MATCHED THEN UPDATE ALL BY NAME \
+        WHEN NOT MATCHED THEN INSERT ALL BY NAME";
+    match snowflake().verified_stmt(sql) {
+        Statement::Merge { clauses, .. } => {
+            assert!(matches!(
+                clauses[0],
+                sqlparser::ast::MergeClause::MatchedUpdateAllByName(None)
+            ));
+            assert!(matches!(
+                clauses[1],
+                sqlparser::ast::MergeClause::NotMatchedInsertAllByName(None)
+            ));
+        }
+        other => panic!("expected Merge, got {other:?}"),
+    }
+    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
+
+    // Conditional predicate is preserved.
+    snowflake().verified_stmt(
+        "MERGE INTO t USING s ON t.id = s.id WHEN NOT MATCHED AND s.flag = true THEN INSERT ALL BY NAME",
+    );
+}
+
+#[test]
 fn test_snowflake_create_dynamic_table_storage_lifecycle_policy() {
     // CREATE DYNAMIC TABLE ... WITH STORAGE LIFECYCLE POLICY <name> ON (cols) AS
     // <query>. The storage clause is consumed opaquely; the AS query lineage

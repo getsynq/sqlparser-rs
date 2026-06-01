@@ -17515,11 +17515,19 @@ impl<'a> Parser<'a> {
                                 "UPDATE in NOT MATCHED merge clause".to_string().into(),
                             ));
                         }
-                        self.expect_keyword(Keyword::SET)?;
-                        let assignments = self.parse_comma_separated(Parser::parse_assignment)?;
-                        MergeClause::MatchedUpdate {
-                            predicate,
-                            assignments,
+                        // Snowflake `UPDATE ALL BY NAME` — update every target
+                        // column from the same-named source column.
+                        if self.parse_keyword(Keyword::ALL) {
+                            self.expect_keywords(&[Keyword::BY, Keyword::NAME])?;
+                            MergeClause::MatchedUpdateAllByName(predicate)
+                        } else {
+                            self.expect_keyword(Keyword::SET)?;
+                            let assignments =
+                                self.parse_comma_separated(Parser::parse_assignment)?;
+                            MergeClause::MatchedUpdate {
+                                predicate,
+                                assignments,
+                            }
                         }
                     }
                     Some(Keyword::DELETE) => {
@@ -17545,6 +17553,11 @@ impl<'a> Parser<'a> {
                                 columns: vec![],
                                 values: None,
                             }
+                        } else if self.parse_keyword(Keyword::ALL) {
+                            // Snowflake `INSERT ALL BY NAME` — insert every column
+                            // matched by name between source and target.
+                            self.expect_keywords(&[Keyword::BY, Keyword::NAME])?;
+                            MergeClause::NotMatchedInsertAllByName(predicate)
                         } else {
                             let columns =
                                 self.parse_parenthesized_column_list(Optional, is_mysql)?;

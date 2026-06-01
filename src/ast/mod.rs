@@ -6050,6 +6050,14 @@ pub enum MergeClause {
     /// `WHEN NOT MATCHED BY SOURCE THEN DELETE`
     /// BigQuery extension: applies to target rows not present in the source
     NotMatchedBySourceDelete(Option<Expr>),
+    /// Snowflake `WHEN MATCHED THEN UPDATE ALL BY NAME` — updates every target
+    /// column from the same-named source column (no explicit assignment list).
+    /// <https://docs.snowflake.com/en/sql-reference/sql/merge>
+    MatchedUpdateAllByName(Option<Expr>),
+    /// Snowflake `WHEN NOT MATCHED THEN INSERT ALL BY NAME` — inserts every
+    /// column matched by name between source and target (no explicit column
+    /// list / VALUES). <https://docs.snowflake.com/en/sql-reference/sql/merge>
+    NotMatchedInsertAllByName(Option<Expr>),
 }
 
 impl fmt::Display for MergeClause {
@@ -6117,6 +6125,20 @@ impl fmt::Display for MergeClause {
                     write!(f, " AND {pred}")?;
                 }
                 write!(f, " THEN DELETE")
+            }
+            MatchedUpdateAllByName(predicate) => {
+                write!(f, " MATCHED")?;
+                if let Some(pred) = predicate {
+                    write!(f, " AND {pred}")?;
+                }
+                write!(f, " THEN UPDATE ALL BY NAME")
+            }
+            NotMatchedInsertAllByName(predicate) => {
+                write!(f, " NOT MATCHED")?;
+                if let Some(pred) = predicate {
+                    write!(f, " AND {pred}")?;
+                }
+                write!(f, " THEN INSERT ALL BY NAME")
             }
         }
     }
