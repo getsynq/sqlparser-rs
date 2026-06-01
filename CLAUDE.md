@@ -119,6 +119,7 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - Analyze failures: parse `target/corpus-report.json` with Python to filter/group `test_results` by dialect or error pattern
 - **Always rebuild before corpus run**: `cargo build --release --bin corpus-runner` — stale binary produces stale reports
 - **Refresh baseline after each accepted commit**: `cp target/corpus-report.json target/corpus-report-baseline.json`. Otherwise `compare-corpus-reports.js` credits old deltas and can hide fresh regressions.
+- **If the symlinked corpus changes mid-session** (someone runs `make process` in kernel-cll-corpus — it can add tens of thousands of files), your saved baseline is stale and deltas are meaningless (you'll see bogus +50k/-16k swings). Re-isolate *your* change: `git stash` your edits → rebuild + run corpus → `cp` baseline → `git stash pop` → rebuild + run + compare.
 - `compare-corpus-reports.js` only lists *added* tests under "New Tests" — deleted/pruned files don't appear there. After a kernel-cll-corpus pipeline run, also check `git status -s` in that repo to see what was removed.
 - **Pipeline reprocess (`make process` in kernel-cll-corpus) takes ~10 minutes** for the full corpus. Don't poll — arm a Monitor on `while pgrep -f pipeline.process; do sleep 15; done` and let it wake you.
 - **Anonymizer-corruption signature**: `'s'<word>` (the `'s'` placeholder string directly abutting an identifier/keyword, e.g. `'s'HOUR`, `'s'id_5`) is unique to anonymizer misalignment. Filter on exactly `'s'<word>` — a broader `'<anything>'<word>` regex misaligns on multi-string SQL (`'foo','bar'`) and silently deletes hand-written sqlglot fixtures.
@@ -189,6 +190,7 @@ Each dialect module defines parsing behavior variations:
 - `AnsiDialect` - Strict ANSI SQL:2011
 - `SnowflakeDialect`, `PostgreSqlDialect`, `BigQueryDialect`, `MySqlDialect`, etc.
 - **Note**: `customer_*` prefixed dialects (e.g., `customer_bigquery`) map to their base dialect
+- **`trino` maps to `GenericDialect`** (`parse_dialect` in `src/dialect/mod.rs`), so any `dialect_of!(self is GenericDialect | MySqlDialect)` block also runs for Trino. Gate MySQL-only constructs (e.g. inline `KEY`/`INDEX` table constraints) so they don't shadow legal Trino identifiers/column names.
 
 Dialects control:
 - Quote character handling for identifiers
@@ -232,6 +234,8 @@ if !matches!(self.peek_token().token, Token::Word(w) if w.keyword == Keyword::PA
     // Parse as identifier, not as PARTITION keyword
 }
 ```
+
+**Speculative parse with backtrack:** `Parser::maybe_parse(|p| {...})` (`pub(crate)`) runs a closure and reverts `self.index` on `Err` (errors discarded). Use for "try the structured grammar, fall back to a general parse" — e.g. Snowflake COPY INTO `(...)` sources try the `StageLoadSelectItem` transformation grammar, then fall back to `parse_query()` for shapes it can't represent (`$1[0]`, `NULLIF($1, ...)`).
 
 **Reserved keyword lists** (`src/keywords.rs`):
 - `RESERVED_FOR_COLUMN_ALIAS` - Keywords that can't be column aliases in SELECT
