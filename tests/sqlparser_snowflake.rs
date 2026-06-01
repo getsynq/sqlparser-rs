@@ -1290,6 +1290,38 @@ fn test_copy_into_load_transformation_with_expressions() {
 }
 
 #[test]
+fn test_copy_into_comma_separated_options() {
+    // Most Snowflake option lists are space-separated, but a few are
+    // comma-separated — notably `INCLUDE_METADATA = (col = METADATA$..., ...)`.
+    // The shared option-list parser tolerates either separator.
+    // https://docs.snowflake.com/en/sql-reference/sql/copy-into-table
+    let sql = concat!(
+        "COPY INTO table1 FROM @stage1 ",
+        "MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE ",
+        "INCLUDE_METADATA = (ingestdate = METADATA$START_SCAN_TIME, filename = METADATA$FILENAME)"
+    );
+    let stmt = snowflake().parse_sql_statements(sql).unwrap();
+    assert_eq!(stmt.len(), 1);
+    match &stmt[0] {
+        Statement::CopyIntoSnowflake {
+            into, copy_options, ..
+        } => {
+            assert_eq!(into, &ObjectName(vec![Ident::new("table1")]));
+            // Both the comma-separated metadata columns are captured.
+            assert!(copy_options
+                .options
+                .iter()
+                .any(|o| o.option_name.eq_ignore_ascii_case("ingestdate")));
+            assert!(copy_options
+                .options
+                .iter()
+                .any(|o| o.option_name.eq_ignore_ascii_case("filename")));
+        }
+        other => panic!("expected CopyIntoSnowflake, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_copy_into_file_format() {
     // Use SQL without backslash escaping issues in string literals
     let sql = concat!(
