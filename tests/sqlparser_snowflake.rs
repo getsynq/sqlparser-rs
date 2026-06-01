@@ -1290,6 +1290,35 @@ fn test_copy_into_load_transformation_with_expressions() {
 }
 
 #[test]
+fn test_copy_files_into_stage() {
+    // Snowflake `COPY FILES INTO <stage> FROM (<query>)` — stage-to-stage file
+    // copy. The FROM query's tables are real lineage inputs; the target stage is
+    // an external output. https://docs.snowflake.com/en/sql-reference/sql/copy-files
+    let sql = "COPY FILES INTO @trg_stage FROM (SELECT src_file, trg_file FROM urls)";
+    match snowflake().verified_stmt(sql) {
+        Statement::CopyIntoSnowflake {
+            copy_files,
+            into,
+            from_query,
+            ..
+        } => {
+            assert!(copy_files);
+            assert_eq!(into, ObjectName(vec![Ident::new("@trg_stage")]));
+            let q = from_query.expect("from_query should be Some");
+            assert!(q.to_string().contains("urls"));
+        }
+        other => panic!("expected CopyIntoSnowflake, got {other:?}"),
+    }
+    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
+
+    // Plain `COPY INTO` keeps copy_files = false.
+    match snowflake().verified_stmt("COPY INTO @trg_stage FROM (SELECT * FROM t LIMIT 5)") {
+        Statement::CopyIntoSnowflake { copy_files, .. } => assert!(!copy_files),
+        other => panic!("expected CopyIntoSnowflake, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_copy_into_comma_separated_options() {
     // Most Snowflake option lists are space-separated, but a few are
     // comma-separated — notably `INCLUDE_METADATA = (col = METADATA$..., ...)`.

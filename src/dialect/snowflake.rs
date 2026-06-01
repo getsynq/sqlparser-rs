@@ -75,8 +75,12 @@ impl Dialect for SnowflakeDialect {
             }
         }
         if parser.parse_keywords(&[Keyword::COPY, Keyword::INTO]) {
-            // COPY INTO
-            return Some(parse_copy_into(parser));
+            // COPY INTO <table|stage>
+            return Some(parse_copy_into(parser, false));
+        }
+        if parser.parse_keywords(&[Keyword::COPY, Keyword::FILES, Keyword::INTO]) {
+            // COPY FILES INTO <stage> FROM <stage|(query)> — stage-to-stage copy.
+            return Some(parse_copy_into(parser, true));
         }
         if parser.parse_keyword(Keyword::COMMENT) {
             return Some(crate::dialect::postgresql::parse_comment(parser));
@@ -205,7 +209,7 @@ pub fn parse_create_stage(
     })
 }
 
-pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
+pub fn parse_copy_into(parser: &mut Parser, copy_files: bool) -> Result<Statement, ParserError> {
     let into: ObjectName = parser.parse_object_name(false)?;
     let columns = parser.parse_parenthesized_column_list(IsOptional::Optional, false)?;
     let mut files: Vec<String> = vec![];
@@ -439,6 +443,7 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
     }
 
     Ok(Statement::CopyIntoSnowflake {
+        copy_files,
         into,
         columns,
         from_stage,
