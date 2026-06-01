@@ -2374,39 +2374,81 @@ fn parse_create_view_with_masking_policy() {
 
 #[test]
 fn parse_create_table_with_row_access_policy() {
-    // Snowflake CREATE TABLE trailing [WITH] ROW ACCESS POLICY <name> ON (cols)
-    // and [WITH] TAG (...). The WITH prefix is optional per
+    // Snowflake CREATE TABLE trailing [WITH] ROW ACCESS POLICY <name> ON (cols).
+    // The WITH prefix is optional per
     // https://docs.snowflake.com/en/sql-reference/sql/create-table
-    snowflake().one_statement_parses_to(
+    // The policy application (name + scoped columns) is preserved in the AST so
+    // column-level lineage can surface which policy guards the table.
+    snowflake().verified_stmt(
         "CREATE TABLE t1 (id VARCHAR, dept VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
-        "CREATE TABLE t1 (id VARCHAR, dept VARCHAR)",
     );
-    snowflake().one_statement_parses_to(
-        "CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY p1 ON (id)",
-        "CREATE TABLE t1 (id VARCHAR)",
-    );
+    snowflake().verified_stmt("CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY p1 ON (id)");
+    // TAG (...) is still consumed without an AST node — drop it on round-trip.
     snowflake().one_statement_parses_to(
         "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id) WITH TAG (k = 'v')",
-        "CREATE TABLE t1 (id VARCHAR)",
+        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
     );
     snowflake().one_statement_parses_to(
         "CREATE TABLE t1 (id VARCHAR) WITH TAG (k = 'v') WITH ROW ACCESS POLICY p1 ON (id)",
-        "CREATE TABLE t1 (id VARCHAR)",
+        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
     );
     // Snowflake's GET_DDL omits `ON (cols)` when the caller lacks privilege to
     // see the policy — it returns `WITH ROW ACCESS POLICY unknown_policy` only.
-    snowflake().one_statement_parses_to(
-        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY unknown_policy",
-        "CREATE TABLE t1 (id VARCHAR)",
-    );
-    snowflake().one_statement_parses_to(
-        "CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY unknown_policy",
-        "CREATE TABLE t1 (id VARCHAR)",
-    );
+    snowflake().verified_stmt("CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY unknown_policy");
+    snowflake().verified_stmt("CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY unknown_policy");
     snowflake().one_statement_parses_to(
         "CREATE VIEW v1 WITH ROW ACCESS POLICY unknown_policy AS SELECT * FROM t1",
         "CREATE VIEW v1 AS SELECT * FROM t1",
     );
+
+    // Assert the application is exposed in the AST (name + scoped columns).
+    match snowflake()
+        .verified_stmt("CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id, dept)")
+    {
+        Statement::CreateTable { table_policies, .. } => {
+            assert_eq!(table_policies.len(), 1);
+            let policy = &table_policies[0];
+            assert_eq!(policy.kind, TablePolicyKind::RowAccess);
+            assert!(policy.with);
+            assert_eq!(policy.policy_name.to_string(), "p1");
+            let cols: Vec<String> = policy.columns.iter().map(|c| c.to_string()).collect();
+            assert_eq!(cols, vec!["id".to_string(), "dept".to_string()]);
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_snowflake_create_table_aggregation_join_policy() {
+    // AGGREGATION POLICY uses ENTITY KEY (cols); JOIN POLICY uses ALLOWED JOIN
+    // KEYS (cols); both column lists are optional. WITH prefix is optional.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-aggregation-policy
+    // https://docs.snowflake.com/en/sql-reference/sql/create-join-policy
+    snowflake().verified_stmt(
+        "CREATE TABLE t (id VARCHAR, grp VARCHAR) WITH AGGREGATION POLICY agg_pol ENTITY KEY (id)",
+    );
+    snowflake().verified_stmt("CREATE TABLE t (id VARCHAR) AGGREGATION POLICY agg_pol");
+    snowflake().verified_stmt(
+        "CREATE TABLE t (a VARCHAR, b VARCHAR) WITH JOIN POLICY jp ALLOWED JOIN KEYS (a, b)",
+    );
+    snowflake().verified_stmt("CREATE TABLE t (a VARCHAR) JOIN POLICY jp");
+
+    match snowflake().verified_stmt(
+        "CREATE TABLE t (a VARCHAR, b VARCHAR) WITH JOIN POLICY jp ALLOWED JOIN KEYS (a, b)",
+    ) {
+        Statement::CreateTable { table_policies, .. } => {
+            assert_eq!(table_policies.len(), 1);
+            assert_eq!(table_policies[0].kind, TablePolicyKind::Join);
+            assert_eq!(table_policies[0].policy_name.to_string(), "jp");
+            let cols: Vec<String> = table_policies[0]
+                .columns
+                .iter()
+                .map(|c| c.to_string())
+                .collect();
+            assert_eq!(cols, vec!["a".to_string(), "b".to_string()]);
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
 }
 
 #[test]
@@ -3178,11 +3220,26 @@ fn test_snowflake_create_dynamic_table_storage_lifecycle_policy() {
         WITH STORAGE LIFECYCLE POLICY expire_after_1w ON (order_date) \
         AS SELECT order_id, order_date FROM raw_orders";
     match snowflake().parse_sql_statements(sql).unwrap().remove(0) {
-        Statement::CreateTable { dynamic, query, .. } => {
+        Statement::CreateTable {
+            dynamic,
+            query,
+            table_policies,
+            ..
+        } => {
             assert!(dynamic);
             let q = query.expect("AS query should be preserved");
             assert!(q.to_string().contains("raw_orders"));
             assert!(q.to_string().contains("order_id"));
+            // The storage lifecycle policy application is captured.
+            assert_eq!(table_policies.len(), 1);
+            assert_eq!(table_policies[0].kind, TablePolicyKind::StorageLifecycle);
+            assert_eq!(table_policies[0].policy_name.to_string(), "expire_after_1w");
+            let cols: Vec<String> = table_policies[0]
+                .columns
+                .iter()
+                .map(|c| c.to_string())
+                .collect();
+            assert_eq!(cols, vec!["order_date".to_string()]);
         }
         other => panic!("expected CreateTable, got {other:?}"),
     }

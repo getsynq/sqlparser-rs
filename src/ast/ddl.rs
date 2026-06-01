@@ -1386,6 +1386,73 @@ impl fmt::Display for ColumnPolicy {
     }
 }
 
+/// Table-level security/governance policy applied in a `CREATE TABLE`
+/// (or `CREATE DYNAMIC TABLE`) statement.
+///
+/// Snowflake:
+/// ```sql
+/// [ WITH ] ROW ACCESS POLICY <policy_name> ON ( <col>, ... )
+/// [ WITH ] AGGREGATION POLICY <policy_name> [ ENTITY KEY ( <col>, ... ) ]
+/// [ WITH ] JOIN POLICY <policy_name> [ ALLOWED JOIN KEYS ( <col>, ... ) ]
+/// [ WITH ] STORAGE LIFECYCLE POLICY <policy_name> ON ( <col>, ... )
+/// ```
+/// [Snowflake CREATE TABLE]: https://docs.snowflake.com/en/sql-reference/sql/create-table
+/// [Snowflake CREATE DYNAMIC TABLE]: https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct TablePolicy {
+    pub kind: TablePolicyKind,
+    /// Whether the application carried the optional `WITH` prefix.
+    pub with: bool,
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub policy_name: ObjectName,
+    /// Columns the policy is scoped to. Empty when the column list is omitted
+    /// (e.g. Snowflake `GET_DDL` emits `WITH ROW ACCESS POLICY p` with no `ON`
+    /// when the caller lacks privilege to see the policy).
+    pub columns: Vec<WithSpan<Ident>>,
+}
+
+/// The kind of a table-level [`TablePolicy`] application. Each kind selects the
+/// keyword used to introduce its column list (`ON`, `ENTITY KEY`, `ALLOWED JOIN
+/// KEYS`).
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum TablePolicyKind {
+    /// Snowflake `ROW ACCESS POLICY <name> ON (cols)`.
+    RowAccess,
+    /// Snowflake `AGGREGATION POLICY <name> [ENTITY KEY (cols)]`.
+    Aggregation,
+    /// Snowflake `JOIN POLICY <name> [ALLOWED JOIN KEYS (cols)]`.
+    Join,
+    /// Snowflake dynamic table `STORAGE LIFECYCLE POLICY <name> ON (cols)`.
+    StorageLifecycle,
+}
+
+impl fmt::Display for TablePolicy {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.with {
+            write!(f, "WITH ")?;
+        }
+        let (command, columns_keyword) = match self.kind {
+            TablePolicyKind::RowAccess => ("ROW ACCESS POLICY", "ON"),
+            TablePolicyKind::Aggregation => ("AGGREGATION POLICY", "ENTITY KEY"),
+            TablePolicyKind::Join => ("JOIN POLICY", "ALLOWED JOIN KEYS"),
+            TablePolicyKind::StorageLifecycle => ("STORAGE LIFECYCLE POLICY", "ON"),
+        };
+        write!(f, "{command} {}", self.policy_name)?;
+        if !self.columns.is_empty() {
+            write!(
+                f,
+                " {columns_keyword} ({})",
+                display_comma_separated(&self.columns)
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
