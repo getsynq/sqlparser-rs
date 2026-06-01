@@ -2257,6 +2257,24 @@ fn test_snowflake_create_policy_definitions() {
 }
 
 #[test]
+fn test_snowflake_format_and_prior_as_identifiers() {
+    // FORMAT is reserved only for the ClickHouse FORMAT clause; in Snowflake it
+    // is a regular identifier and implicit column alias.
+    snowflake().one_statement_parses_to(
+        "SELECT CASE WHEN a THEN b END FORMAT FROM t",
+        "SELECT CASE WHEN a THEN b END AS FORMAT FROM t",
+    );
+    snowflake().verified_stmt("SELECT t.FORMAT FROM t");
+
+    // PRIOR is the CONNECT BY hierarchical prefix operator, but is also a legal
+    // column name in an ordinary SELECT list.
+    snowflake().verified_stmt("SELECT a, PRIOR, b FROM t");
+    snowflake().verified_stmt("SELECT t.PRIOR FROM t");
+    // CONNECT BY PRIOR still parses as the prefix operator.
+    snowflake().verified_stmt("SELECT id FROM t CONNECT BY PRIOR id = pid");
+}
+
+#[test]
 fn test_snowflake_alter_and_drop_policies() {
     // ALTER TABLE SET/UNSET AGGREGATION/JOIN POLICY, UNSET TAG.
     // https://docs.snowflake.com/en/sql-reference/sql/alter-table

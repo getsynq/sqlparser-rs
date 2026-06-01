@@ -1577,13 +1577,20 @@ impl<'a> Parser<'a> {
                 // DuckDB MAP literal: MAP {'key': value, ...}
                 Keyword::MAP if self.peek_token_is(&Token::LBrace) => self.parse_map_literal(),
                 Keyword::NOT => self.parse_not(),
-                // Oracle/Snowflake hierarchical query prefix operators
+                // Oracle/Snowflake hierarchical query prefix operator (CONNECT BY
+                // PRIOR ...). PRIOR is also a legal column name; if the following
+                // tokens don't form an operand (e.g. a trailing `,` / `FROM`),
+                // treat PRIOR as a plain identifier.
                 Keyword::PRIOR => {
-                    let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
-                    Ok(Expr::UnaryOp {
-                        op: UnaryOperator::Prior,
-                        expr: Box::new(expr),
-                    })
+                    if let Some(expr) = self.maybe_parse(|p| p.parse_subexpr(Self::UNARY_NOT_PREC))
+                    {
+                        Ok(Expr::UnaryOp {
+                            op: UnaryOperator::Prior,
+                            expr: Box::new(expr),
+                        })
+                    } else {
+                        Ok(Expr::Identifier(w.to_ident().spanning(next_token.span)))
+                    }
                 }
                 Keyword::CONNECT_BY_ROOT => {
                     let expr = self.parse_subexpr(Self::UNARY_NOT_PREC)?;
@@ -11346,6 +11353,16 @@ impl<'a> Parser<'a> {
             // is a regular identifier — e.g. `FROM (...) final`.
             Token::Word(w)
                 if w.keyword == Keyword::FINAL && !dialect_of!(self is ClickHouseDialect) =>
+            {
+                Ok(Some(w.to_ident().spanning(next_token.span)))
+            }
+            // FORMAT is reserved only for the ClickHouse `SELECT ... FORMAT <fmt>`
+            // clause (also honored by GenericDialect). Elsewhere
+            // (Snowflake/BigQuery/...) it is a regular identifier — e.g. a
+            // `FORMAT` column or an implicit alias `CASE ... END FORMAT`.
+            Token::Word(w)
+                if w.keyword == Keyword::FORMAT
+                    && !dialect_of!(self is ClickHouseDialect | GenericDialect) =>
             {
                 Ok(Some(w.to_ident().spanning(next_token.span)))
             }
