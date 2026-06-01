@@ -39,9 +39,10 @@ pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
     ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
-    KeyOrIndexDisplay, Partition, PolicyArg, PolicyKind, ProcedureParam, ReferentialAction,
-    TableConstraint, TablePolicy, TablePolicyKind, TableProjection, Tag,
-    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewSecurity,
+    KeyOrIndexDisplay, Partition, PolicyArg, PolicyCommand, PolicyKind, ProcedureParam,
+    ReferentialAction, RowLevelSecurityMode, TableConstraint, TablePolicy, TablePolicyKind,
+    TableProjection, Tag, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
+    ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -2102,6 +2103,52 @@ pub enum Statement {
         #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
         table_name: ObjectName,
     },
+    /// ```sql
+    /// CREATE POLICY <name> ON <table>
+    ///   [ AS { PERMISSIVE | RESTRICTIVE } ]
+    ///   [ FOR { ALL | SELECT | INSERT | UPDATE | DELETE } ]
+    ///   [ TO <role> [, ...] ]
+    ///   [ USING ( <using_expr> ) ] [ WITH CHECK ( <check_expr> ) ]
+    /// ```
+    /// PostgreSQL row-security policy.
+    /// [Postgres]: https://www.postgresql.org/docs/current/sql-createpolicy.html
+    CreatePostgresPolicy {
+        name: Ident,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+        /// `AS PERMISSIVE` (Some(true)) / `AS RESTRICTIVE` (Some(false)).
+        permissive: Option<bool>,
+        /// `FOR <command>`.
+        command: Option<PolicyCommand>,
+        /// `TO <role> [, ...]` (includes PUBLIC / CURRENT_ROLE / ...).
+        to_roles: Vec<Ident>,
+        using: Option<Box<Expr>>,
+        with_check: Option<Box<Expr>>,
+    },
+    /// ```sql
+    /// ALTER POLICY <name> ON <table> RENAME TO <new_name>
+    /// ALTER POLICY <name> ON <table> [ TO <role> [, ...] ] [ USING (...) ] [ WITH CHECK (...) ]
+    /// ```
+    /// [Postgres]: https://www.postgresql.org/docs/current/sql-alterpolicy.html
+    AlterPostgresPolicy {
+        name: Ident,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+        /// `RENAME TO <new_name>` (mutually exclusive with the other fields).
+        rename_to: Option<Ident>,
+        to_roles: Vec<Ident>,
+        using: Option<Box<Expr>>,
+        with_check: Option<Box<Expr>>,
+    },
+    /// `DROP POLICY [IF EXISTS] <name> ON <table> [CASCADE | RESTRICT]`
+    /// [Postgres]: https://www.postgresql.org/docs/current/sql-droppolicy.html
+    DropPostgresPolicy {
+        if_exists: bool,
+        name: Ident,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+        option: Option<ReferentialAction>,
+    },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -3994,6 +4041,81 @@ impl fmt::Display for Statement {
                     write!(f, " GRANT TO ({})", display_comma_separated(grant_to))?;
                 }
                 write!(f, " FILTER USING ({filter_using})")?;
+                Ok(())
+            }
+            Statement::CreatePostgresPolicy {
+                name,
+                table_name,
+                permissive,
+                command,
+                to_roles,
+                using,
+                with_check,
+            } => {
+                write!(f, "CREATE POLICY {name} ON {table_name}")?;
+                if let Some(permissive) = permissive {
+                    write!(
+                        f,
+                        " AS {}",
+                        if *permissive {
+                            "PERMISSIVE"
+                        } else {
+                            "RESTRICTIVE"
+                        }
+                    )?;
+                }
+                if let Some(command) = command {
+                    write!(f, " FOR {command}")?;
+                }
+                if !to_roles.is_empty() {
+                    write!(f, " TO {}", display_comma_separated(to_roles))?;
+                }
+                if let Some(using) = using {
+                    write!(f, " USING ({using})")?;
+                }
+                if let Some(with_check) = with_check {
+                    write!(f, " WITH CHECK ({with_check})")?;
+                }
+                Ok(())
+            }
+            Statement::AlterPostgresPolicy {
+                name,
+                table_name,
+                rename_to,
+                to_roles,
+                using,
+                with_check,
+            } => {
+                write!(f, "ALTER POLICY {name} ON {table_name}")?;
+                if let Some(rename_to) = rename_to {
+                    write!(f, " RENAME TO {rename_to}")?;
+                } else {
+                    if !to_roles.is_empty() {
+                        write!(f, " TO {}", display_comma_separated(to_roles))?;
+                    }
+                    if let Some(using) = using {
+                        write!(f, " USING ({using})")?;
+                    }
+                    if let Some(with_check) = with_check {
+                        write!(f, " WITH CHECK ({with_check})")?;
+                    }
+                }
+                Ok(())
+            }
+            Statement::DropPostgresPolicy {
+                if_exists,
+                name,
+                table_name,
+                option,
+            } => {
+                write!(
+                    f,
+                    "DROP POLICY {}{name} ON {table_name}",
+                    if *if_exists { "IF EXISTS " } else { "" },
+                )?;
+                if let Some(option) = option {
+                    write!(f, " {option}")?;
+                }
                 Ok(())
             }
             Statement::DropRowAccessPolicy {
