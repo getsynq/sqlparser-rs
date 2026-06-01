@@ -2480,6 +2480,44 @@ fn parse_snowflake_stage_file_operations() {
         }
     }
 
+    // Multi-line: the option list on a continuation line is part of the body
+    // (a newline does not terminate the statement — only `;` / EOF does).
+    let multiline = [
+        (
+            "PUT 'file://C:/temp/data/my data.csv' @my_int_stage\n  AUTO_COMPRESS = TRUE;",
+            "PUT",
+            "'file://C:/temp/data/my data.csv' @my_int_stage AUTO_COMPRESS = TRUE",
+        ),
+        (
+            "PUT file://path/to/macros.jinja @my_stage/scripts/\n  AUTO_COMPRESS=FALSE;",
+            "PUT",
+            "file://path/to/macros.jinja @my_stage/scripts/ AUTO_COMPRESS=FALSE",
+        ),
+    ];
+    for (sql, expected_command, expected_body) in multiline {
+        let stmt = snowflake().parse_sql_statements(sql).unwrap();
+        assert_eq!(stmt.len(), 1, "expected one statement for {sql:?}");
+        match &stmt[0] {
+            Statement::StageFileOperation { command, body } => {
+                assert_eq!(command, expected_command, "command mismatch for {sql:?}");
+                assert_eq!(body, expected_body, "body mismatch for {sql:?}");
+            }
+            other => panic!("expected StageFileOperation for {sql:?}, got {other:?}"),
+        }
+    }
+
+    // Multi-statement block: two multi-line PUTs separated by `;` parse as two.
+    let stmt = snowflake()
+        .parse_sql_statements(
+            "PUT file://~/sql/a.sql @my_stage/scripts/\n  AUTO_COMPRESS=FALSE;\n\n\
+             PUT file://~/sql/b.sql @my_stage/scripts/\n  AUTO_COMPRESS=FALSE;",
+        )
+        .unwrap();
+    assert_eq!(stmt.len(), 2);
+    assert!(stmt
+        .iter()
+        .all(|s| matches!(s, Statement::StageFileOperation { command, .. } if command == "PUT")));
+
     // Lower-case command keyword normalizes to upper-case in the AST.
     let stmt = snowflake().parse_sql_statements("ls @~").unwrap();
     match &stmt[0] {
