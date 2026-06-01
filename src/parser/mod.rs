@@ -8325,13 +8325,16 @@ impl<'a> Parser<'a> {
             None
         };
 
-        // Skip optional [WITH] TAG (...) clause on columns (Snowflake)
+        // Optional [WITH] TAG (...) clause on columns (Snowflake), captured.
+        let mut tags = vec![];
         if self.parse_keyword(Keyword::WITH) {
-            if !self.parse_optional_tag_clause() {
+            if let Some(parsed) = self.maybe_parse_tags()? {
+                tags = parsed;
+            } else {
                 self.prev_token();
             }
-        } else {
-            self.parse_optional_tag_clause();
+        } else if let Some(parsed) = self.maybe_parse_tags()? {
+            tags = parsed;
         }
 
         // COMMENT may appear after MASKING POLICY / TAG (Snowflake)
@@ -8372,6 +8375,7 @@ impl<'a> Parser<'a> {
             mask,
             column_location,
             column_policy,
+            tags,
         })
     }
 

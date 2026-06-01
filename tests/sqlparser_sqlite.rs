@@ -103,6 +103,7 @@ fn parse_create_table_auto_increment() {
                     mask: None,
                     column_location: None,
                     column_policy: None,
+                    tags: vec![],
                 }],
                 columns
             );
@@ -129,6 +130,7 @@ fn parse_create_sqlite_quote() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::with_quote('[', "INDEX").empty_span(),
@@ -140,6 +142,7 @@ fn parse_create_sqlite_quote() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                 ],
                 columns

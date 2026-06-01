@@ -759,6 +759,7 @@ fn parse_create_table_with_variant_default_expressions() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("b").empty_span(),
@@ -787,6 +788,7 @@ fn parse_create_table_with_variant_default_expressions() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("c").empty_span(),
@@ -801,6 +803,7 @@ fn parse_create_table_with_variant_default_expressions() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("d").empty_span(),
@@ -831,6 +834,7 @@ fn parse_create_table_with_variant_default_expressions() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("x").empty_span(),
@@ -846,6 +850,7 @@ fn parse_create_table_with_variant_default_expressions() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     }
                 ]
             )
@@ -865,6 +870,7 @@ fn column_def(name: Ident, data_type: DataType) -> ColumnDef {
         mask: None,
         column_location: None,
         column_policy: None,
+        tags: vec![],
     }
 }
 
@@ -962,6 +968,7 @@ fn parse_create_table_with_nullable() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     }
                 ]
             );
@@ -1008,6 +1015,7 @@ fn parse_create_table_with_nested_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("k").empty_span(),
@@ -1036,6 +1044,7 @@ fn parse_create_table_with_nested_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("l").empty_span(),
@@ -1064,6 +1073,7 @@ fn parse_create_table_with_nested_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("m").empty_span(),
@@ -1078,6 +1088,7 @@ fn parse_create_table_with_nested_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                 ]
             );
@@ -1114,6 +1125,7 @@ fn parse_create_view_with_fields_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                     ColumnDef {
                         name: Ident::new("f").empty_span(),
@@ -1131,6 +1143,7 @@ fn parse_create_view_with_fields_data_types() {
                         mask: None,
                         column_location: None,
                         column_policy: None,
+                        tags: vec![],
                     },
                 ]
             );

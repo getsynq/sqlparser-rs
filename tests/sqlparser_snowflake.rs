@@ -2175,21 +2175,32 @@ fn test_table_with_tag() {
 #[test]
 fn test_column_with_tag() {
     // Column-level WITH TAG (...) — Snowflake docs allow `[ WITH ] TAG (...)` on columns,
-    // same shape as the table-level form.
-    snowflake().one_statement_parses_to(
-        "CREATE TABLE t (col NUMBER(18, 4) WITH TAG (a.b.c = 'True'))",
-        "CREATE TABLE t (col NUMBER(18, 4))",
-    );
+    // same shape as the table-level form. The associations are preserved in the AST.
+    snowflake().verified_stmt("CREATE TABLE t (col NUMBER(18, 4) WITH TAG (a.b.c = 'True'))");
     // Multiple columns, mixed with regular options.
-    snowflake().one_statement_parses_to(
+    snowflake().verified_stmt(
         "CREATE TABLE t (id INT, amt NUMBER(18, 4) WITH TAG (schema.tag = 'val'), name VARCHAR)",
-        "CREATE TABLE t (id INT, amt NUMBER(18, 4), name VARCHAR)",
     );
-    // Bare TAG (no WITH) still works (existing behavior).
+    // Bare TAG (no WITH) is normalized to the canonical `WITH TAG`.
     snowflake().one_statement_parses_to(
         "CREATE TABLE t (col NUMBER(18, 4) TAG (a.b = 'v'))",
-        "CREATE TABLE t (col NUMBER(18, 4))",
+        "CREATE TABLE t (col NUMBER(18, 4) WITH TAG (a.b = 'v'))",
     );
+
+    // The associations are exposed on the ColumnDef (tag name + value).
+    match snowflake().verified_stmt(
+        "CREATE TABLE t (amt NUMBER(18, 4) WITH TAG (schema.tag = 'val', cost = 'eng'))",
+    ) {
+        Statement::CreateTable { columns, .. } => {
+            assert_eq!(columns.len(), 1);
+            assert_eq!(columns[0].tags.len(), 2);
+            assert_eq!(columns[0].tags[0].name.to_string(), "schema.tag");
+            assert_eq!(columns[0].tags[0].value, "val");
+            assert_eq!(columns[0].tags[1].name.to_string(), "cost");
+            assert_eq!(columns[0].tags[1].value, "eng");
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
 }
 
 #[test]
@@ -2716,10 +2727,11 @@ fn parse_column_comment_after_masking_policy() {
         "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description' MASKING POLICY p1)",
     );
 
-    // Column COMMENT after TAG in CREATE TABLE
+    // Column COMMENT after TAG in CREATE TABLE — both preserved (COMMENT renders
+    // with the column options, the tag association after).
     snowflake().one_statement_parses_to(
         "CREATE TABLE t1 (col1 VARCHAR TAG (t1 = 'v1') COMMENT 'description')",
-        "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description')",
+        "CREATE TABLE t1 (col1 VARCHAR COMMENT 'description' WITH TAG (t1 = 'v1'))",
     );
 }
 
