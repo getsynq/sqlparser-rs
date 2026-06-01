@@ -6206,6 +6206,15 @@ impl<'a> Parser<'a> {
                 self.expect_token(&Token::RParen)?;
             }
         }
+        // Databricks (materialized) view-level `WITH ROW FILTER <func> ON (cols)`.
+        // Consumed (view-level filters aren't represented in the AST).
+        // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-row-filter
+        if self.parse_keywords(&[Keyword::WITH, Keyword::ROW, Keyword::FILTER]) {
+            let _ = self.parse_object_name(false)?;
+            if self.parse_keyword(Keyword::ON) {
+                let _ = self.parse_parenthesized_column_list(Mandatory, false)?;
+            }
+        }
 
         let with_options = self.parse_options(Keyword::WITH)?;
 
@@ -11866,6 +11875,19 @@ impl<'a> Parser<'a> {
             // Optionally skip data type for PostgreSQL/Redshift table function column definitions.
             // e.g. FROM func() alias(col_name data_type, ...) where data_type is `name`, `varchar`, `int`, etc.
             let _ = self.maybe_parse(|p| p.parse_data_type());
+            // Databricks (materialized) view column defs carry a type then a
+            // column mask: `<col> <type> MASK <func> [USING COLUMNS (...)]`. The
+            // mask follows the type, so consume it here. View column policies
+            // aren't represented in the AST, so this is consume-and-drop.
+            // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-column-mask
+            if self.parse_keyword(Keyword::MASK) {
+                let _ = self.parse_object_name(false)?;
+                if self.parse_keywords(&[Keyword::USING, Keyword::COLUMNS]) {
+                    self.expect_token(&Token::LParen)?;
+                    let _ = self.parse_comma_separated(|p| p.parse_expr())?;
+                    self.expect_token(&Token::RParen)?;
+                }
+            }
         }
         Ok(ident)
     }
