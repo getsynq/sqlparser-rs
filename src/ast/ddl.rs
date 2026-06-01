@@ -1503,6 +1503,48 @@ impl fmt::Display for PolicyKind {
     }
 }
 
+/// Kind of an Amazon Redshift governance policy.
+/// <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_RLS_POLICY.html>
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum RedshiftPolicyKind {
+    /// Row-level security policy (`RLS POLICY`).
+    Rls,
+    /// Dynamic data-masking policy (`MASKING POLICY`).
+    Masking,
+}
+
+impl fmt::Display for RedshiftPolicyKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            RedshiftPolicyKind::Rls => "RLS POLICY",
+            RedshiftPolicyKind::Masking => "MASKING POLICY",
+        })
+    }
+}
+
+/// A grantee target in a Redshift `ATTACH`/`DETACH` policy statement
+/// (`{ <user> | ROLE <role> | PUBLIC }`).
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum RedshiftGrantee {
+    User(Ident),
+    Role(Ident),
+    Public,
+}
+
+impl fmt::Display for RedshiftGrantee {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RedshiftGrantee::User(name) => write!(f, "{name}"),
+            RedshiftGrantee::Role(name) => write!(f, "ROLE {name}"),
+            RedshiftGrantee::Public => write!(f, "PUBLIC"),
+        }
+    }
+}
+
 /// One predicate action inside a SQL Server `CREATE/ALTER SECURITY POLICY`.
 /// `{ ADD | ALTER | DROP } { FILTER | BLOCK } PREDICATE [<tvf>(<args>)] ON <table>
 /// [<block_dml_operation>]`.

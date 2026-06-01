@@ -318,6 +318,58 @@ fn redshift() -> TestedDialects {
 }
 
 #[test]
+fn parse_rls_and_masking_policies() {
+    // Row-level security.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_RLS_POLICY.html
+    redshift().verified_stmt(
+        "CREATE RLS POLICY policy_concerts WITH (catgroup VARCHAR(10)) USING (catgroup = 'Concerts')",
+    );
+    redshift().verified_stmt("CREATE RLS POLICY p USING (true)");
+    redshift().verified_stmt(
+        "ATTACH RLS POLICY policy_concerts ON tickit_category TO ROLE analyst, ROLE dbadmin",
+    );
+    redshift()
+        .verified_stmt("DETACH RLS POLICY policy_concerts ON tickit_category FROM ROLE analyst");
+    redshift().verified_stmt("DROP RLS POLICY policy_concerts");
+    redshift().verified_stmt("DROP RLS POLICY IF EXISTS p CASCADE");
+
+    // Dynamic data masking.
+    // https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_MASKING_POLICY.html
+    redshift().verified_stmt(
+        "CREATE MASKING POLICY mask_cc IF NOT EXISTS WITH (credit_card VARCHAR(256)) USING ('000000XXXX0000')",
+    );
+    redshift().verified_stmt(
+        "ATTACH MASKING POLICY mask_cc ON credit_cards (credit_card) TO ROLE analyst PRIORITY 30",
+    );
+    redshift().verified_stmt(
+        "DETACH MASKING POLICY mask_cc ON credit_cards (credit_card) FROM ROLE analyst",
+    );
+    redshift().verified_stmt("DROP MASKING POLICY mask_cc");
+    redshift().verified_stmt("ALTER MASKING POLICY mask_cc USING ('000000XXXX0000')");
+
+    // The RLS predicate keeps its column references for lineage.
+    match redshift()
+        .verified_stmt("CREATE RLS POLICY pol WITH (region VARCHAR(10)) AS t USING (region = 'US')")
+    {
+        Statement::CreateRedshiftPolicy {
+            kind,
+            name,
+            with_columns,
+            alias,
+            using,
+            ..
+        } => {
+            assert_eq!(kind, RedshiftPolicyKind::Rls);
+            assert_eq!(name.to_string(), "pol");
+            assert_eq!(with_columns.len(), 1);
+            assert_eq!(alias.unwrap().to_string(), "t");
+            assert!(using[0].to_string().contains("region"));
+        }
+        other => panic!("expected CreateRedshiftPolicy, got {other:?}"),
+    }
+}
+
+#[test]
 fn parse_pg_like_match_ops_in_view_body() {
     // `pg_get_viewdef` / `SHOW VIEW` in Redshift normalize ILIKE / NOT ILIKE
     // to their operator-form aliases `~~*` and `!~~*` (and LIKE / NOT LIKE to

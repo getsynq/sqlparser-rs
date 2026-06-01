@@ -739,6 +739,13 @@ impl<'a> Parser<'a> {
                 Keyword::REFRESH => Ok(self.parse_refresh_materialized_view()?),
                 Keyword::UPDATE => Ok(self.parse_update()?),
                 Keyword::ALTER => Ok(self.parse_alter()?),
+                // Redshift `{ ATTACH | DETACH } { RLS | MASKING } POLICY ...`.
+                Keyword::ATTACH if self.peek_redshift_policy_kind() => {
+                    Ok(self.parse_redshift_attach_policy(false)?)
+                }
+                Keyword::DETACH if self.peek_redshift_policy_kind() => {
+                    Ok(self.parse_redshift_attach_policy(true)?)
+                }
                 Keyword::EXCHANGE => {
                     self.expect_keyword(Keyword::TABLES)?;
                     let first = self.parse_object_name(false)?;
@@ -4903,6 +4910,13 @@ impl<'a> Parser<'a> {
         } else if self.parse_keywords(&[Keyword::SECURITY, Keyword::POLICY]) {
             // SQL Server row-level security: `CREATE SECURITY POLICY <name> ADD ...`
             self.parse_create_security_policy()
+        } else if self.peek_word_ci("RLS")
+            && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::POLICY)
+        {
+            // Redshift row-level security: `CREATE RLS POLICY <name> [WITH (...)] USING (...)`
+            self.next_token(); // RLS
+            self.next_token(); // POLICY
+            self.parse_create_redshift_policy(RedshiftPolicyKind::Rls)
         } else if self.parse_keyword(Keyword::POLICY) {
             // PostgreSQL row-security policy: `CREATE POLICY <name> ON <table> ...`
             self.parse_create_postgres_policy()
@@ -4911,8 +4925,17 @@ impl<'a> Parser<'a> {
             // Snowflake security/governance policy definitions
             // (CREATE { MASKING | ROW ACCESS | AGGREGATION | PROJECTION | JOIN }
             // POLICY ... AS (sig) RETURNS type -> body). maybe_parse reverts and
-            // falls through for non-Snowflake shapes (e.g. BigQuery's
-            // `ROW ACCESS POLICY ... ON table`), handled next.
+            // falls through for non-Snowflake shapes (handled next).
+            Ok(stmt)
+        } else if let Some(stmt) = self.maybe_parse(|p| {
+            // Redshift dynamic data masking (the Snowflake AS-form was tried
+            // above and reverted): `CREATE MASKING POLICY [IF NOT EXISTS] <name>
+            // WITH (...) USING (...)`. maybe_parse reverts for other dialects'
+            // `MASKING POLICY` shapes (e.g. ClickHouse `... ON ... UPDATE ...`),
+            // which the generic fallback then handles.
+            p.expect_keywords(&[Keyword::MASKING, Keyword::POLICY])?;
+            p.parse_create_redshift_policy(RedshiftPolicyKind::Masking)
+        }) {
             Ok(stmt)
         } else if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
             // BigQuery row-level security:
@@ -5203,6 +5226,157 @@ impl<'a> Parser<'a> {
             self.index = start; // not a row-level-security toggle; revert
             Ok(None)
         }
+    }
+
+    /// Parse a Redshift `CREATE { RLS | MASKING } POLICY`. The kind keyword(s)
+    /// and `POLICY` have already been consumed.
+    /// <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_RLS_POLICY.html>
+    /// <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_MASKING_POLICY.html>
+    fn parse_create_redshift_policy(
+        &mut self,
+        kind: RedshiftPolicyKind,
+    ) -> Result<Statement, ParserError> {
+        let name = self.parse_object_name(false)?;
+        // Redshift places `IF NOT EXISTS` after the policy name (masking only).
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let (with_columns, alias) = if self.parse_keyword(Keyword::WITH) {
+            self.expect_token(&Token::LParen)?;
+            let cols = self.parse_comma_separated(|p| {
+                let name = p.parse_identifier_no_span()?;
+                let data_type = p.parse_data_type()?;
+                Ok(PolicyArg { name, data_type })
+            })?;
+            self.expect_token(&Token::RParen)?;
+            // RLS only: optional `[AS] <relation_alias>`.
+            let alias = if kind == RedshiftPolicyKind::Rls {
+                if self.parse_keyword(Keyword::AS) {
+                    Some(self.parse_identifier_no_span()?)
+                } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::USING)
+                {
+                    None
+                } else {
+                    Some(self.parse_identifier_no_span()?)
+                }
+            } else {
+                None
+            };
+            (cols, alias)
+        } else {
+            (vec![], None)
+        };
+        self.expect_keyword(Keyword::USING)?;
+        self.expect_token(&Token::LParen)?;
+        let using = self.parse_comma_separated(|p| p.parse_expr())?;
+        self.expect_token(&Token::RParen)?;
+        Ok(Statement::CreateRedshiftPolicy {
+            kind,
+            if_not_exists,
+            name,
+            with_columns,
+            alias,
+            using,
+        })
+    }
+
+    /// Parse a Redshift `{ ATTACH | DETACH } { RLS | MASKING } POLICY ...`.
+    /// The `ATTACH`/`DETACH` keyword has already been consumed.
+    /// <https://docs.aws.amazon.com/redshift/latest/dg/r_ATTACH_RLS_POLICY.html>
+    fn parse_redshift_attach_policy(&mut self, detach: bool) -> Result<Statement, ParserError> {
+        let kind = self
+            .parse_redshift_policy_kind()
+            .ok_or_else(|| ParserError::ParserError("expected RLS or MASKING POLICY".into()))?;
+        let name = self.parse_object_name(false)?;
+        self.expect_keyword(Keyword::ON)?;
+        let _ = self.parse_keyword(Keyword::TABLE); // optional [TABLE]
+        let tables = self.parse_comma_separated(|p| p.parse_object_name(false))?;
+        // Masking: output column list directly after the relation, optional
+        // `USING (input cols)`.
+        let output_columns = if self.peek_token_is(&Token::LParen) {
+            self.parse_parenthesized_column_list_no_span()?
+        } else {
+            vec![]
+        };
+        let using_columns = if self.parse_keyword(Keyword::USING) {
+            self.parse_parenthesized_column_list_no_span()?
+        } else {
+            vec![]
+        };
+        if detach {
+            self.expect_keyword(Keyword::FROM)?;
+        } else {
+            self.expect_keyword(Keyword::TO)?;
+        }
+        let grantees = self.parse_comma_separated(Parser::parse_redshift_grantee)?;
+        let priority = if self.parse_word_ci("PRIORITY") {
+            Some(self.parse_literal_uint()?)
+        } else {
+            None
+        };
+        Ok(Statement::AttachRedshiftPolicy {
+            kind,
+            detach,
+            name,
+            tables,
+            output_columns,
+            using_columns,
+            grantees,
+            priority,
+        })
+    }
+
+    /// Parse a Redshift `ALTER MASKING POLICY <name> USING (...)`. `MASKING
+    /// POLICY` has already been consumed.
+    fn parse_alter_redshift_masking_policy(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_object_name(false)?;
+        self.expect_keyword(Keyword::USING)?;
+        self.expect_token(&Token::LParen)?;
+        let using = self.parse_comma_separated(|p| p.parse_expr())?;
+        self.expect_token(&Token::RParen)?;
+        Ok(Statement::AlterRedshiftMaskingPolicy { name, using })
+    }
+
+    /// `{ <user> | ROLE <role> | PUBLIC }` grantee in a Redshift attach/detach.
+    fn parse_redshift_grantee(&mut self) -> Result<RedshiftGrantee, ParserError> {
+        if self.parse_word_ci("PUBLIC") {
+            Ok(RedshiftGrantee::Public)
+        } else if self.parse_keyword(Keyword::ROLE) {
+            Ok(RedshiftGrantee::Role(self.parse_identifier_no_span()?))
+        } else {
+            Ok(RedshiftGrantee::User(self.parse_identifier_no_span()?))
+        }
+    }
+
+    /// True if the next tokens are a Redshift policy kind (`RLS POLICY` /
+    /// `MASKING POLICY`). Non-consuming; used to guard ATTACH/DETACH dispatch.
+    fn peek_redshift_policy_kind(&self) -> bool {
+        let kind_ok = self.peek_word_ci("RLS")
+            || matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::MASKING);
+        kind_ok
+            && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::POLICY)
+    }
+
+    /// Peek-and-consume a Redshift policy kind: `RLS POLICY` / `MASKING POLICY`.
+    fn parse_redshift_policy_kind(&mut self) -> Option<RedshiftPolicyKind> {
+        if self.peek_word_ci("RLS")
+            && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::POLICY)
+        {
+            self.next_token();
+            self.next_token();
+            Some(RedshiftPolicyKind::Rls)
+        } else if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            Some(RedshiftPolicyKind::Masking)
+        } else {
+            None
+        }
+    }
+
+    /// Parse a parenthesized comma-separated identifier list, returning plain
+    /// `Ident`s (no span).
+    fn parse_parenthesized_column_list_no_span(&mut self) -> Result<Vec<Ident>, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let cols = self.parse_comma_separated(|p| p.parse_identifier_no_span())?;
+        self.expect_token(&Token::RParen)?;
+        Ok(cols)
     }
 
     /// Parse a SQL Server `CREATE SECURITY POLICY`. `SECURITY POLICY` consumed.
@@ -7112,6 +7286,28 @@ impl<'a> Parser<'a> {
             let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
             let name = self.parse_object_name(false)?;
             return Ok(Statement::DropSecurityPolicy { if_exists, name });
+        }
+
+        // Redshift `DROP RLS POLICY [IF EXISTS] <name> [CASCADE|RESTRICT]`.
+        if !temporary
+            && self.peek_word_ci("RLS")
+            && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::POLICY)
+        {
+            self.next_token(); // RLS
+            self.next_token(); // POLICY
+            let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+            let name = self.parse_object_name(false)?;
+            let option = match self.parse_one_of_keywords(&[Keyword::CASCADE, Keyword::RESTRICT]) {
+                Some(Keyword::CASCADE) => Some(ReferentialAction::Cascade),
+                Some(Keyword::RESTRICT) => Some(ReferentialAction::Restrict),
+                _ => None,
+            };
+            return Ok(Statement::DropRedshiftPolicy {
+                kind: RedshiftPolicyKind::Rls,
+                if_exists,
+                name,
+                option,
+            });
         }
 
         // PostgreSQL `DROP POLICY [IF EXISTS] <name> ON <table> [CASCADE|RESTRICT]`.
@@ -10405,6 +10601,10 @@ impl<'a> Parser<'a> {
         // SQL Server `ALTER SECURITY POLICY <name> ...`.
         if self.parse_keywords(&[Keyword::SECURITY, Keyword::POLICY]) {
             return self.parse_alter_security_policy();
+        }
+        // Redshift `ALTER MASKING POLICY <name> USING (...)`.
+        if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            return self.parse_alter_redshift_masking_policy();
         }
         // PostgreSQL `ALTER POLICY <name> ON <table> ...`.
         if self.parse_keyword(Keyword::POLICY) {
