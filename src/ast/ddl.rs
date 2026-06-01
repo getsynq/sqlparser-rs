@@ -177,6 +177,11 @@ pub enum AlterTableOperation {
     /// `UNSET TAG <name> [, ...]` (Snowflake).
     UnsetTag { keys: Vec<ObjectName> },
 
+    /// PostgreSQL row-level security toggle:
+    /// `{ ENABLE | DISABLE | FORCE | NO FORCE } ROW LEVEL SECURITY`.
+    /// <https://www.postgresql.org/docs/current/sql-altertable.html>
+    RowLevelSecurity { mode: RowLevelSecurityMode },
+
     /// `ADD PROJECTION [IF NOT EXISTS] <name> (<select> [ORDER BY ...]) [WITH SETTINGS (...)]`
     ///
     /// Note: this is a ClickHouse-specific operation
@@ -436,6 +441,9 @@ impl fmt::Display for AlterTableOperation {
             }
             AlterTableOperation::UnsetTag { keys } => {
                 write!(f, "UNSET TAG {}", display_comma_separated(keys))
+            }
+            AlterTableOperation::RowLevelSecurity { mode } => {
+                write!(f, "{mode} ROW LEVEL SECURITY")
             }
             AlterTableOperation::AddProjection {
                 if_not_exists,
@@ -1477,6 +1485,53 @@ impl fmt::Display for PolicyKind {
             PolicyKind::Aggregation => "AGGREGATION POLICY",
             PolicyKind::Projection => "PROJECTION POLICY",
             PolicyKind::Join => "JOIN POLICY",
+        })
+    }
+}
+
+/// PostgreSQL `ALTER TABLE ... { ENABLE | DISABLE | FORCE | NO FORCE } ROW LEVEL SECURITY`.
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum RowLevelSecurityMode {
+    Enable,
+    Disable,
+    Force,
+    NoForce,
+}
+
+impl fmt::Display for RowLevelSecurityMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            RowLevelSecurityMode::Enable => "ENABLE",
+            RowLevelSecurityMode::Disable => "DISABLE",
+            RowLevelSecurityMode::Force => "FORCE",
+            RowLevelSecurityMode::NoForce => "NO FORCE",
+        })
+    }
+}
+
+/// The command a PostgreSQL row-security policy applies to (`FOR <command>`).
+/// <https://www.postgresql.org/docs/current/sql-createpolicy.html>
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum PolicyCommand {
+    All,
+    Select,
+    Insert,
+    Update,
+    Delete,
+}
+
+impl fmt::Display for PolicyCommand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            PolicyCommand::All => "ALL",
+            PolicyCommand::Select => "SELECT",
+            PolicyCommand::Insert => "INSERT",
+            PolicyCommand::Update => "UPDATE",
+            PolicyCommand::Delete => "DELETE",
         })
     }
 }

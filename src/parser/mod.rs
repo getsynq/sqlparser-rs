@@ -4900,6 +4900,9 @@ impl<'a> Parser<'a> {
             self.parse_create_semantic_view(or_replace)
         } else if self.parse_keyword(Keyword::TAG) {
             self.parse_create_tag(or_replace)
+        } else if self.parse_keyword(Keyword::POLICY) {
+            // PostgreSQL row-security policy: `CREATE POLICY <name> ON <table> ...`
+            self.parse_create_postgres_policy()
         } else if let Some(stmt) = self.maybe_parse(|p| p.parse_create_snowflake_policy(or_replace))
         {
             // Snowflake security/governance policy definitions
@@ -5063,6 +5066,182 @@ impl<'a> Parser<'a> {
             grant_to,
             filter_using,
         })
+    }
+
+    /// Parse a PostgreSQL `CREATE POLICY`. `POLICY` has already been consumed.
+    /// `<name> ON <table> [AS {PERMISSIVE|RESTRICTIVE}] [FOR <cmd>] [TO <role>,...]
+    /// [USING (expr)] [WITH CHECK (expr)]`.
+    /// <https://www.postgresql.org/docs/current/sql-createpolicy.html>
+    fn parse_create_postgres_policy(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_identifier_no_span()?;
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+        let permissive = if self.parse_keyword(Keyword::AS) {
+            if self.parse_word_ci("PERMISSIVE") {
+                Some(true)
+            } else if self.parse_word_ci("RESTRICTIVE") {
+                Some(false)
+            } else {
+                return self.expected("PERMISSIVE or RESTRICTIVE after AS", self.peek_token());
+            }
+        } else {
+            None
+        };
+        let command = self.parse_optional_policy_command()?;
+        let to_roles = if self.parse_keyword(Keyword::TO) {
+            self.parse_comma_separated(|p| p.parse_identifier_no_span())?
+        } else {
+            vec![]
+        };
+        let using = self.parse_optional_parenthesized_expr(Keyword::USING)?;
+        let with_check = if self.parse_keywords(&[Keyword::WITH, Keyword::CHECK]) {
+            self.expect_token(&Token::LParen)?;
+            let expr = self.parse_expr()?;
+            self.expect_token(&Token::RParen)?;
+            Some(Box::new(expr))
+        } else {
+            None
+        };
+        Ok(Statement::CreatePostgresPolicy {
+            name,
+            table_name,
+            permissive,
+            command,
+            to_roles,
+            using,
+            with_check,
+        })
+    }
+
+    /// Parse a PostgreSQL `ALTER POLICY <name> ON <table> ...`. `POLICY` already consumed.
+    /// <https://www.postgresql.org/docs/current/sql-alterpolicy.html>
+    fn parse_alter_postgres_policy(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_identifier_no_span()?;
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+        if self.parse_keywords(&[Keyword::RENAME, Keyword::TO]) {
+            let rename_to = self.parse_identifier_no_span()?;
+            return Ok(Statement::AlterPostgresPolicy {
+                name,
+                table_name,
+                rename_to: Some(rename_to),
+                to_roles: vec![],
+                using: None,
+                with_check: None,
+            });
+        }
+        let to_roles = if self.parse_keyword(Keyword::TO) {
+            self.parse_comma_separated(|p| p.parse_identifier_no_span())?
+        } else {
+            vec![]
+        };
+        let using = self.parse_optional_parenthesized_expr(Keyword::USING)?;
+        let with_check = if self.parse_keywords(&[Keyword::WITH, Keyword::CHECK]) {
+            self.expect_token(&Token::LParen)?;
+            let expr = self.parse_expr()?;
+            self.expect_token(&Token::RParen)?;
+            Some(Box::new(expr))
+        } else {
+            None
+        };
+        Ok(Statement::AlterPostgresPolicy {
+            name,
+            table_name,
+            rename_to: None,
+            to_roles,
+            using,
+            with_check,
+        })
+    }
+
+    /// Parse a PostgreSQL `DROP POLICY [IF EXISTS] <name> ON <table> [CASCADE|RESTRICT]`.
+    /// `POLICY` has already been consumed.
+    /// <https://www.postgresql.org/docs/current/sql-droppolicy.html>
+    fn parse_drop_postgres_policy(&mut self) -> Result<Statement, ParserError> {
+        let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+        let name = self.parse_identifier_no_span()?;
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+        let option = match self.parse_one_of_keywords(&[Keyword::CASCADE, Keyword::RESTRICT]) {
+            Some(Keyword::CASCADE) => Some(ReferentialAction::Cascade),
+            Some(Keyword::RESTRICT) => Some(ReferentialAction::Restrict),
+            _ => None,
+        };
+        Ok(Statement::DropPostgresPolicy {
+            if_exists,
+            name,
+            table_name,
+            option,
+        })
+    }
+
+    /// PostgreSQL `{ ENABLE | DISABLE | FORCE | NO FORCE } ROW LEVEL SECURITY`.
+    /// Consumes the whole clause only when `ROW LEVEL SECURITY` follows the mode
+    /// (so bare `FORCE` / `ENABLE` used by other clauses aren't swallowed).
+    fn parse_optional_row_level_security(
+        &mut self,
+    ) -> Result<Option<RowLevelSecurityMode>, ParserError> {
+        let start = self.index;
+        // ENABLE / DISABLE aren't reserved keywords; match by value.
+        let mode = if self.parse_word_ci("ENABLE") {
+            RowLevelSecurityMode::Enable
+        } else if self.parse_word_ci("DISABLE") {
+            RowLevelSecurityMode::Disable
+        } else if self.parse_keywords(&[Keyword::NO, Keyword::FORCE]) {
+            RowLevelSecurityMode::NoForce
+        } else if self.parse_keyword(Keyword::FORCE) {
+            RowLevelSecurityMode::Force
+        } else {
+            return Ok(None);
+        };
+        if self.parse_keywords(&[Keyword::ROW, Keyword::LEVEL, Keyword::SECURITY]) {
+            Ok(Some(mode))
+        } else {
+            self.index = start; // not a row-level-security toggle; revert
+            Ok(None)
+        }
+    }
+
+    /// `FOR { ALL | SELECT | INSERT | UPDATE | DELETE }` (PostgreSQL policy command).
+    fn parse_optional_policy_command(&mut self) -> Result<Option<PolicyCommand>, ParserError> {
+        if !self.parse_keyword(Keyword::FOR) {
+            return Ok(None);
+        }
+        let cmd = match self.parse_one_of_keywords(&[
+            Keyword::ALL,
+            Keyword::SELECT,
+            Keyword::INSERT,
+            Keyword::UPDATE,
+            Keyword::DELETE,
+        ]) {
+            Some(Keyword::ALL) => PolicyCommand::All,
+            Some(Keyword::SELECT) => PolicyCommand::Select,
+            Some(Keyword::INSERT) => PolicyCommand::Insert,
+            Some(Keyword::UPDATE) => PolicyCommand::Update,
+            Some(Keyword::DELETE) => PolicyCommand::Delete,
+            _ => {
+                return self.expected(
+                    "ALL, SELECT, INSERT, UPDATE or DELETE after FOR",
+                    self.peek_token(),
+                )
+            }
+        };
+        Ok(Some(cmd))
+    }
+
+    /// Parse an optional `<keyword> ( <expr> )` clause, returning the boxed expr.
+    fn parse_optional_parenthesized_expr(
+        &mut self,
+        keyword: Keyword,
+    ) -> Result<Option<Box<Expr>>, ParserError> {
+        if self.parse_keyword(keyword) {
+            self.expect_token(&Token::LParen)?;
+            let expr = self.parse_expr()?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(Box::new(expr)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Parse a Snowflake `CREATE TAG` definition. `TAG` has already been consumed.
@@ -6772,6 +6951,12 @@ impl<'a> Parser<'a> {
             if let Some(stmt) = self.maybe_parse(|p| p.parse_drop_row_access_policy()) {
                 return Ok(stmt);
             }
+        }
+
+        // PostgreSQL `DROP POLICY [IF EXISTS] <name> ON <table> [CASCADE|RESTRICT]`.
+        // (Snowflake `DROP <kind> POLICY` is prefixed, so bare `POLICY` is Postgres.)
+        if !temporary && self.parse_keyword(Keyword::POLICY) {
+            return self.parse_drop_postgres_policy();
         }
 
         let object_type = if self.parse_keyword(Keyword::TABLE) {
@@ -10008,6 +10193,9 @@ impl<'a> Parser<'a> {
             let exprs = self.parse_comma_separated(Parser::parse_order_by_expr)?;
             self.expect_token(&Token::RParen)?;
             AlterTableOperation::ClusterBy { exprs }
+        } else if let Some(mode) = self.parse_optional_row_level_security()? {
+            // PostgreSQL: { ENABLE | DISABLE | FORCE | NO FORCE } ROW LEVEL SECURITY
+            AlterTableOperation::RowLevelSecurity { mode }
         } else {
             return self.expected(
                 "ADD, RENAME, PARTITION, SWAP or DROP after ALTER TABLE",
@@ -10042,6 +10230,10 @@ impl<'a> Parser<'a> {
                 only: false,
                 operations,
             });
+        }
+        // PostgreSQL `ALTER POLICY <name> ON <table> ...`.
+        if self.parse_keyword(Keyword::POLICY) {
+            return self.parse_alter_postgres_policy();
         }
         let object_type = self.expect_one_of_keywords(&[
             Keyword::VIEW,

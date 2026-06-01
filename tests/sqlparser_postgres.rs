@@ -2882,6 +2882,46 @@ fn pg() -> TestedDialects {
     }
 }
 
+#[test]
+fn parse_create_alter_drop_policy() {
+    // PostgreSQL row-security policies.
+    // https://www.postgresql.org/docs/current/sql-createpolicy.html
+    pg().verified_stmt("CREATE POLICY my_policy ON my_table USING (user_id = current_user)");
+    pg().verified_stmt(
+        "CREATE POLICY p ON t AS RESTRICTIVE FOR SELECT TO PUBLIC, alice USING (a > 1) WITH CHECK (b < 2)",
+    );
+    pg().verified_stmt("ALTER POLICY p ON t RENAME TO p2");
+    pg().verified_stmt("ALTER POLICY p ON t TO r USING (x)");
+    pg().verified_stmt("DROP POLICY p ON t");
+    pg().verified_stmt("DROP POLICY IF EXISTS p ON t CASCADE");
+
+    // ALTER TABLE row-level-security toggles.
+    // https://www.postgresql.org/docs/current/sql-altertable.html
+    pg().verified_stmt("ALTER TABLE t ENABLE ROW LEVEL SECURITY");
+    pg().verified_stmt("ALTER TABLE t DISABLE ROW LEVEL SECURITY");
+    pg().verified_stmt("ALTER TABLE t FORCE ROW LEVEL SECURITY");
+    pg().verified_stmt("ALTER TABLE t NO FORCE ROW LEVEL SECURITY");
+
+    // The predicate (and its column/table refs) is preserved for lineage.
+    match pg().verified_stmt(
+        "CREATE POLICY pol ON accounts FOR SELECT TO mgr USING (dept IN (SELECT dept FROM allowed))",
+    ) {
+        Statement::CreatePostgresPolicy {
+            name,
+            table_name,
+            command,
+            using,
+            ..
+        } => {
+            assert_eq!(name.to_string(), "pol");
+            assert_eq!(table_name.to_string(), "accounts");
+            assert_eq!(command, Some(PolicyCommand::Select));
+            assert!(using.unwrap().to_string().contains("allowed"));
+        }
+        other => panic!("expected CreatePostgresPolicy, got {other:?}"),
+    }
+}
+
 fn pg_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(PostgreSqlDialect {}), Box::new(GenericDialect {})],
