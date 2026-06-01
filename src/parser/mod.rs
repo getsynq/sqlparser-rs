@@ -4727,7 +4727,7 @@ impl<'a> Parser<'a> {
     /// mark the scope as speculative to skip backtrace capture for the
     /// wasted work (see [`ParserErrorMessage`]).
     #[must_use]
-    fn maybe_parse<T, F>(&mut self, mut f: F) -> Option<T>
+    pub(crate) fn maybe_parse<T, F>(&mut self, mut f: F) -> Option<T>
     where
         F: FnMut(&mut Parser) -> Result<T, ParserError>,
     {

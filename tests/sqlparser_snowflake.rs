@@ -1229,6 +1229,43 @@ fn test_copy_into_unload_from_query() {
 }
 
 #[test]
+fn test_copy_into_load_transformation_with_expressions() {
+    // COPY INTO <table> FROM (SELECT <expr> ... FROM @stage) — a load
+    // transformation whose projection uses array subscripts (`$1[0]`) and a
+    // wrapping function (`NULLIF($1, ...)`). The structured `from_transformations`
+    // grammar can't represent these, so the parenthesized body is parsed as a
+    // full query into `from_query` (which carries the staged-file source and
+    // expressions for column lineage).
+    let sql = concat!(
+        "COPY INTO my_table (id, payload) FROM ",
+        "(SELECT $1[0] AS id, NULLIF($1[1], PARSE_JSON('null')) AS payload ",
+        "FROM @my_stage/path)"
+    );
+
+    match snowflake().verified_stmt(sql) {
+        Statement::CopyIntoSnowflake {
+            into,
+            from_query,
+            from_transformations,
+            from_stage,
+            ..
+        } => {
+            assert_eq!(into, ObjectName(vec![Ident::new("my_table")]));
+            // Falls back to the full-query representation, not the structured one.
+            assert!(from_transformations.is_none());
+            assert!(from_stage.0.is_empty());
+            let q = from_query.expect("from_query should be Some");
+            // The staged-file source survives inside the subquery (required for
+            // column-level lineage).
+            assert!(q.to_string().contains("@my_stage/path"));
+            assert!(q.to_string().contains("$1[0]"));
+        }
+        _ => unreachable!(),
+    }
+    assert_eq!(snowflake().verified_stmt(sql).to_string(), sql);
+}
+
+#[test]
 fn test_copy_into_file_format() {
     // Use SQL without backslash escaping issues in string literals
     let sql = concat!(
