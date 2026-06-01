@@ -40,7 +40,7 @@ pub use self::ddl::{
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
     CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition,
     ProcedureParam, ReferentialAction, TableConstraint, TablePolicy, TablePolicyKind,
-    TableProjection, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
+    TableProjection, Tag, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
     ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
@@ -1991,6 +1991,8 @@ pub enum Statement {
         /// `ROW ACCESS` / `AGGREGATION` / `JOIN` / `STORAGE LIFECYCLE POLICY`).
         /// Preserved so column-level lineage can surface which policies guard a table.
         table_policies: Vec<TablePolicy>,
+        /// Table-level tag associations (Snowflake `[WITH] TAG (k = 'v', ...)`).
+        table_tags: Vec<Tag>,
     },
     /// ```sql
     /// CREATE VIRTUAL TABLE .. USING <module_name> (<module_args>)`
@@ -3505,6 +3507,7 @@ impl fmt::Display for Statement {
                 iceberg,
                 hybrid,
                 table_policies,
+                table_tags,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3745,6 +3748,9 @@ impl fmt::Display for Statement {
                 }
                 for policy in table_policies {
                     write!(f, " {policy}")?;
+                }
+                if !table_tags.is_empty() {
+                    write!(f, " WITH TAG ({})", display_comma_separated(table_tags))?;
                 }
                 if let Some(query) = query {
                     write!(f, " AS {query}")?;

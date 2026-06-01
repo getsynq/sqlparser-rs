@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::ast::{
     ColumnDef, DistributionStyle, EngineSpec, Expr, FileFormat, HiveDistributionStyle, HiveFormat,
     Ident, ObjectName, OnCommit, PartitionBoundSpec, Query, SqlOption, Statement, TableConstraint,
-    TablePolicy,
+    TablePolicy, Tag,
 };
 use crate::parser::ParserError;
 use sqlparser::ast::TableProjection;
@@ -98,6 +98,7 @@ pub struct CreateTableBuilder {
     pub partition_of: Option<ObjectName>,
     pub partition_bound: Option<PartitionBoundSpec>,
     pub table_policies: Vec<TablePolicy>,
+    pub table_tags: Vec<Tag>,
 }
 
 impl CreateTableBuilder {
@@ -153,6 +154,7 @@ impl CreateTableBuilder {
             partition_of: None,
             partition_bound: None,
             table_policies: vec![],
+            table_tags: vec![],
         }
     }
     pub fn or_replace(mut self, or_replace: bool) -> Self {
@@ -398,6 +400,11 @@ impl CreateTableBuilder {
         self
     }
 
+    pub fn table_tags(mut self, table_tags: Vec<Tag>) -> Self {
+        self.table_tags = table_tags;
+        self
+    }
+
     pub fn build(self) -> Statement {
         Statement::CreateTable {
             or_replace: self.or_replace,
@@ -450,6 +457,7 @@ impl CreateTableBuilder {
             partition_of: self.partition_of,
             partition_bound: self.partition_bound,
             table_policies: self.table_policies,
+            table_tags: self.table_tags,
         }
     }
 }
@@ -512,6 +520,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 partition_of,
                 partition_bound,
                 table_policies,
+                table_tags,
             } => Ok(Self {
                 or_replace,
                 temporary,
@@ -563,6 +572,7 @@ impl TryFrom<Statement> for CreateTableBuilder {
                 partition_of,
                 partition_bound,
                 table_policies,
+                table_tags,
             }),
             _ => Err(ParserError::ParserError(
                 format!("Expected create table statement, but received: {stmt}").into(),
