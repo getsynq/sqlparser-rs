@@ -40,10 +40,10 @@ pub use self::ddl::{
     ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
     ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
     KeyOrIndexDisplay, Partition, PolicyArg, PolicyCommand, PolicyKind, ProcedureParam,
-    ReferentialAction, RowLevelSecurityMode, SecurityPolicyBlockDml, SecurityPolicyPredicate,
-    SecurityPolicyPredicateKind, SecurityPolicyPredicateOp, TableConstraint, TablePolicy,
-    TablePolicyKind, TableProjection, Tag, UserDefinedTypeCompositeAttributeDef,
-    UserDefinedTypeRepresentation, ViewSecurity,
+    RedshiftGrantee, RedshiftPolicyKind, ReferentialAction, RowLevelSecurityMode,
+    SecurityPolicyBlockDml, SecurityPolicyPredicate, SecurityPolicyPredicateKind,
+    SecurityPolicyPredicateOp, TableConstraint, TablePolicy, TablePolicyKind, TableProjection, Tag,
+    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -2178,6 +2178,59 @@ pub enum Statement {
     /// `DROP SECURITY POLICY [IF EXISTS] <name>`
     /// [T-SQL]: https://learn.microsoft.com/en-us/sql/t-sql/statements/drop-security-policy-transact-sql
     DropSecurityPolicy { if_exists: bool, name: ObjectName },
+    /// ```sql
+    /// CREATE RLS POLICY <name> [WITH (<col> <type> [, ...]) [[AS] <alias>]] USING (<predicate>)
+    /// CREATE MASKING POLICY [IF NOT EXISTS] <name> WITH (<col> <type> [, ...]) USING (<expr> [, ...])
+    /// ```
+    /// Amazon Redshift row-level-security / dynamic-data-masking policy.
+    /// [Redshift RLS]: https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_RLS_POLICY.html
+    /// [Redshift DDM]: https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_MASKING_POLICY.html
+    CreateRedshiftPolicy {
+        kind: RedshiftPolicyKind,
+        if_not_exists: bool,
+        name: ObjectName,
+        /// `WITH (<col> <type>, ...)` input columns.
+        with_columns: Vec<PolicyArg>,
+        /// RLS `[AS] <alias>` for the relation inside the predicate.
+        alias: Option<Ident>,
+        /// `USING (<expr> [, ...])` predicate (RLS) / masking expression(s).
+        using: Vec<Expr>,
+    },
+    /// ```sql
+    /// ATTACH { RLS | MASKING } POLICY <name> ON [TABLE] <table> [, ...]
+    ///   [ ( <out_col> [, ...] ) ] [ USING ( <in_col> [, ...] ) ]
+    ///   { TO | FROM } { <user> | ROLE <role> | PUBLIC } [, ...] [ PRIORITY <n> ]
+    /// ```
+    /// Redshift attach/detach of a policy to a relation.
+    /// [Redshift]: https://docs.aws.amazon.com/redshift/latest/dg/r_ATTACH_RLS_POLICY.html
+    AttachRedshiftPolicy {
+        kind: RedshiftPolicyKind,
+        /// `false` = `ATTACH ... TO`, `true` = `DETACH ... FROM`.
+        detach: bool,
+        name: ObjectName,
+        tables: Vec<ObjectName>,
+        /// Masking: output column list directly after the relation.
+        output_columns: Vec<Ident>,
+        /// Masking: `USING (<in_col>, ...)` input columns.
+        using_columns: Vec<Ident>,
+        grantees: Vec<RedshiftGrantee>,
+        /// Masking: `PRIORITY <n>`.
+        priority: Option<u64>,
+    },
+    /// ```sql
+    /// DROP RLS POLICY [IF EXISTS] <name> [CASCADE | RESTRICT]
+    /// DROP MASKING POLICY <name>
+    /// ```
+    /// [Redshift]: https://docs.aws.amazon.com/redshift/latest/dg/r_DROP_RLS_POLICY.html
+    DropRedshiftPolicy {
+        kind: RedshiftPolicyKind,
+        if_exists: bool,
+        name: ObjectName,
+        option: Option<ReferentialAction>,
+    },
+    /// `ALTER MASKING POLICY <name> USING (<expr> [, ...])` (Redshift).
+    /// [Redshift]: https://docs.aws.amazon.com/redshift/latest/dg/r_ALTER_MASKING_POLICY.html
+    AlterRedshiftMaskingPolicy { name: ObjectName, using: Vec<Expr> },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -4124,6 +4177,83 @@ impl fmt::Display for Statement {
                     f,
                     "DROP SECURITY POLICY {}{name}",
                     if *if_exists { "IF EXISTS " } else { "" }
+                )
+            }
+            Statement::CreateRedshiftPolicy {
+                kind,
+                if_not_exists,
+                name,
+                with_columns,
+                alias,
+                using,
+            } => {
+                write!(f, "CREATE {kind} {name}")?;
+                if *if_not_exists {
+                    write!(f, " IF NOT EXISTS")?;
+                }
+                if !with_columns.is_empty() {
+                    write!(f, " WITH ({}", display_comma_separated(with_columns))?;
+                    write!(f, ")")?;
+                    if let Some(alias) = alias {
+                        write!(f, " AS {alias}")?;
+                    }
+                }
+                write!(f, " USING ({})", display_comma_separated(using))
+            }
+            Statement::AttachRedshiftPolicy {
+                kind,
+                detach,
+                name,
+                tables,
+                output_columns,
+                using_columns,
+                grantees,
+                priority,
+            } => {
+                write!(
+                    f,
+                    "{} {kind} {name} ON {}",
+                    if *detach { "DETACH" } else { "ATTACH" },
+                    display_comma_separated(tables),
+                )?;
+                if !output_columns.is_empty() {
+                    write!(f, " ({})", display_comma_separated(output_columns))?;
+                }
+                if !using_columns.is_empty() {
+                    write!(f, " USING ({})", display_comma_separated(using_columns))?;
+                }
+                write!(
+                    f,
+                    " {} {}",
+                    if *detach { "FROM" } else { "TO" },
+                    display_comma_separated(grantees),
+                )?;
+                if let Some(priority) = priority {
+                    write!(f, " PRIORITY {priority}")?;
+                }
+                Ok(())
+            }
+            Statement::DropRedshiftPolicy {
+                kind,
+                if_exists,
+                name,
+                option,
+            } => {
+                write!(
+                    f,
+                    "DROP {kind} {}{name}",
+                    if *if_exists { "IF EXISTS " } else { "" },
+                )?;
+                if let Some(option) = option {
+                    write!(f, " {option}")?;
+                }
+                Ok(())
+            }
+            Statement::AlterRedshiftMaskingPolicy { name, using } => {
+                write!(
+                    f,
+                    "ALTER MASKING POLICY {name} USING ({})",
+                    display_comma_separated(using)
                 )
             }
             Statement::CreatePostgresPolicy {
