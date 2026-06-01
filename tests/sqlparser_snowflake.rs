@@ -2257,6 +2257,43 @@ fn test_snowflake_create_policy_definitions() {
 }
 
 #[test]
+fn test_snowflake_conditional_masking_using_after_columns() {
+    // Snowflake conditional masking places the masking policy's USING (cols)
+    // *after* the column-list parens. For CREATE TABLE the columns are attached
+    // to the column's masking policy (canonical form has USING inline).
+    // https://docs.snowflake.com/en/user-guide/security-column-intro
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE TABLE user_info (email STRING MASKING POLICY email_visibility) USING (email, visibility)",
+        "CREATE OR REPLACE TABLE user_info (email STRING MASKING POLICY email_visibility USING (email, visibility))",
+    );
+    match snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE user_info (email STRING MASKING POLICY email_visibility USING (email, visibility))",
+    ) {
+        Statement::CreateTable { columns, .. } => match &columns[0].column_policy {
+            Some(ColumnPolicy::MaskingPolicy(p)) => {
+                let using: Vec<String> = p
+                    .using_columns
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect();
+                assert_eq!(using, vec!["email".to_string(), "visibility".to_string()]);
+            }
+            other => panic!("expected MaskingPolicy, got {other:?}"),
+        },
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+
+    // For CREATE VIEW the trailing USING (cols) is consumed (view column
+    // policies aren't represented), leaving a clean column list.
+    snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE VIEW user_info_v (email MASKING POLICY email_visibility) USING (email, visibility) AS SELECT * FROM user_info",
+        "CREATE OR REPLACE VIEW user_info_v (email) AS SELECT * FROM user_info",
+    );
+}
+
+#[test]
 fn test_snowflake_create_tag() {
     // Snowflake tag definition.
     // https://docs.snowflake.com/en/sql-reference/sql/create-tag

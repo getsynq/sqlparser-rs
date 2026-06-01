@@ -6164,6 +6164,18 @@ impl<'a> Parser<'a> {
             )
         };
 
+        // Snowflake conditional masking: an optional `USING (col, ...)` clause
+        // after the column list supplies the masking policy's conditional
+        // columns. View column policies aren't represented, so consume it.
+        // https://docs.snowflake.com/en/user-guide/security-column-intro
+        if !columns.is_empty()
+            && matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::USING)
+            && matches!(self.peek_nth_token(1).token, Token::LParen)
+        {
+            self.next_token(); // USING
+            let _ = self.parse_parenthesized_column_list(Mandatory, false)?;
+        }
+
         // Snowflake view-level `WITH TAG (...)` before the regular WITH (...) options —
         // https://docs.snowflake.com/en/sql-reference/sql/create-view
         if self.parse_keywords(&[Keyword::WITH, Keyword::TAG]) {
@@ -7598,7 +7610,7 @@ impl<'a> Parser<'a> {
         };
 
         // parse optional column list (schema)
-        let (columns, constraints, projections) = self.parse_columns()?;
+        let (mut columns, constraints, projections) = self.parse_columns()?;
 
         // PostgreSQL: partition bound for `PARTITION OF parent`
         let partition_bound = if partition_of.is_some() {
@@ -7612,6 +7624,23 @@ impl<'a> Parser<'a> {
                 // Snowflake: USING TEMPLATE (query_expr)
                 let expr = self.parse_expr()?;
                 (None, Some(Box::new(expr)))
+            } else if self.peek_token_is(&Token::LParen) {
+                // Snowflake conditional masking: a `USING (col, cond_col, ...)`
+                // clause *after* the column-list parens supplies the masking
+                // policy's conditional columns. Attach them to the column whose
+                // MASKING POLICY they qualify (canonical form puts USING inline).
+                // https://docs.snowflake.com/en/user-guide/security-column-intro
+                let cols = self.parse_parenthesized_column_list(Mandatory, false)?;
+                if let Some(ColumnPolicy::MaskingPolicy(property)) = columns
+                    .iter_mut()
+                    .rev()
+                    .find_map(|c| c.column_policy.as_mut())
+                {
+                    if property.using_columns.is_none() {
+                        property.using_columns = Some(cols);
+                    }
+                }
+                (None, None)
             } else {
                 // Databricks: USING DELTA
                 (Some(self.parse_object_name(false)?), None)
