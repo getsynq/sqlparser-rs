@@ -175,6 +175,18 @@ fn test_create_table_column_mask() {
 }
 
 #[test]
+fn test_materialized_view_mask_and_row_filter() {
+    // Databricks (materialized) views may carry column masks and a table-level
+    // row filter. View-level policies aren't represented, so they're consumed
+    // while the AS query (its lineage) is preserved.
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-column-mask
+    databricks().one_statement_parses_to(
+        "CREATE MATERIALIZED VIEW mv (id int, ssn string MASK catalog.schema.ssn_fn) WITH ROW FILTER catalog.schema.us_filter ON (id) AS SELECT id, ssn FROM employees",
+        "CREATE MATERIALIZED VIEW mv (id, ssn) AS SELECT id, ssn FROM employees",
+    );
+}
+
+#[test]
 fn test_create_table_row_filter() {
     // Databricks table-level row filter: `WITH ROW FILTER <func> ON (cols)`.
     // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-row-filter
