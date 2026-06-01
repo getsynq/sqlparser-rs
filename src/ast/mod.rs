@@ -2087,6 +2087,21 @@ pub enum Statement {
         /// `FILTER USING (<predicate>)`.
         filter_using: Box<Expr>,
     },
+    /// ```sql
+    /// DROP ROW ACCESS POLICY [IF EXISTS] <name> ON <table>
+    /// DROP ALL ROW ACCESS POLICIES ON <table>
+    /// ```
+    /// BigQuery drop of one (or all) row access policies on a table.
+    /// [BigQuery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
+    DropRowAccessPolicy {
+        if_exists: bool,
+        /// `DROP ALL ROW ACCESS POLICIES` — drop every policy on the table.
+        all: bool,
+        /// Policy name (None for the `ALL` form).
+        name: Option<ObjectName>,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+    },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -3980,6 +3995,23 @@ impl fmt::Display for Statement {
                 }
                 write!(f, " FILTER USING ({filter_using})")?;
                 Ok(())
+            }
+            Statement::DropRowAccessPolicy {
+                if_exists,
+                all,
+                name,
+                table_name,
+            } => {
+                if *all {
+                    write!(f, "DROP ALL ROW ACCESS POLICIES ON {table_name}")
+                } else {
+                    write!(
+                        f,
+                        "DROP ROW ACCESS POLICY {}{} ON {table_name}",
+                        if *if_exists { "IF EXISTS " } else { "" },
+                        name.as_ref().expect("policy name required unless ALL"),
+                    )
+                }
             }
             Statement::CreateRole {
                 names,
