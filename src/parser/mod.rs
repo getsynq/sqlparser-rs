@@ -4891,6 +4891,14 @@ impl<'a> Parser<'a> {
             self.next_token(); // SEMANTIC
             self.next_token(); // VIEW
             self.parse_create_semantic_view(or_replace)
+        } else if let Some(stmt) = self.maybe_parse(|p| p.parse_create_snowflake_policy(or_replace))
+        {
+            // Snowflake security/governance policy definitions
+            // (CREATE { MASKING | ROW ACCESS | AGGREGATION | PROJECTION | JOIN }
+            // POLICY ... AS (sig) RETURNS type -> body). maybe_parse reverts and
+            // falls through for non-Snowflake shapes (e.g. BigQuery's
+            // `ROW ACCESS POLICY ... ON table`), which the generic fallback handles.
+            Ok(stmt)
         } else {
             // Generic fallback: skip tokens until end of statement
             // This handles dialect-specific CREATE statements like:
@@ -4932,6 +4940,78 @@ impl<'a> Parser<'a> {
                 _ => self.expected("an object type after CREATE", token),
             }
         }
+    }
+
+    /// Parse a Snowflake security/governance policy *definition*:
+    /// `{ MASKING | ROW ACCESS | AGGREGATION | PROJECTION | JOIN } POLICY
+    /// [IF NOT EXISTS] <name> AS ( [<arg> <type>, ...] ) RETURNS <type> -> <body>
+    /// [COMMENT = '...'] [EXEMPT_OTHER_POLICIES = { TRUE | FALSE }]`.
+    ///
+    /// Errors (so the caller's `maybe_parse` reverts) when the next tokens don't
+    /// form this shape — in particular the `AS` check rejects BigQuery's
+    /// `ROW ACCESS POLICY ... ON <table>` form, leaving it to other handlers.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-masking-policy>
+    fn parse_create_snowflake_policy(
+        &mut self,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
+        let kind = if self.parse_keywords(&[Keyword::MASKING, Keyword::POLICY]) {
+            PolicyKind::Masking
+        } else if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+            PolicyKind::RowAccess
+        } else if self.parse_keywords(&[Keyword::AGGREGATION, Keyword::POLICY]) {
+            PolicyKind::Aggregation
+        } else if self.parse_keywords(&[Keyword::PROJECTION, Keyword::POLICY]) {
+            PolicyKind::Projection
+        } else if self.parse_keywords(&[Keyword::JOIN, Keyword::POLICY]) {
+            PolicyKind::Join
+        } else {
+            return self.expected("a policy kind", self.peek_token());
+        };
+
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+
+        // The Snowflake form is `AS (sig) RETURNS type -> body`. If `AS` is not
+        // next, this is a different policy shape (BigQuery/Postgres/Redshift) —
+        // error so the caller falls back.
+        self.expect_keyword(Keyword::AS)?;
+        self.expect_token(&Token::LParen)?;
+        let args = if self.consume_token(&Token::RParen) {
+            vec![]
+        } else {
+            let args = self.parse_comma_separated(|p| {
+                let name = p.parse_identifier_no_span()?;
+                let data_type = p.parse_data_type()?;
+                Ok(PolicyArg { name, data_type })
+            })?;
+            self.expect_token(&Token::RParen)?;
+            args
+        };
+
+        self.expect_keyword(Keyword::RETURNS)?;
+        let returns = self.parse_data_type()?;
+        self.expect_token(&Token::Arrow)?;
+        let body = Box::new(self.parse_expr()?);
+
+        // Trailing `key = value` options (COMMENT, EXEMPT_OTHER_POLICIES).
+        let mut options = vec![];
+        while matches!(self.peek_token_kind(), Token::Word(_))
+            && self.peek_nth_token(1).token == Token::Eq
+        {
+            options.push(self.parse_sql_option()?);
+        }
+
+        Ok(Statement::CreatePolicy {
+            or_replace,
+            if_not_exists,
+            kind,
+            name,
+            args,
+            returns,
+            body,
+            options,
+        })
     }
 
     /// Parse a CACHE TABLE statement
