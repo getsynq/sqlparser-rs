@@ -175,6 +175,21 @@ fn test_create_table_column_mask() {
 }
 
 #[test]
+fn test_alter_table_mask_filter_tags() {
+    // Databricks ALTER row filter / column mask / tags.
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-alter-table
+    databricks().verified_stmt("ALTER TABLE t SET ROW FILTER f ON (region)");
+    databricks().verified_stmt("ALTER TABLE t DROP ROW FILTER");
+    databricks().verified_stmt("ALTER TABLE t ALTER COLUMN c SET MASK f");
+    databricks().verified_stmt("ALTER TABLE t ALTER COLUMN c SET MASK f USING COLUMNS (a, b)");
+    databricks().verified_stmt("ALTER TABLE t ALTER COLUMN c DROP MASK");
+    databricks().verified_stmt("ALTER TABLE t SET TAGS ('k' = 'v', 'k2' = 'v2')");
+    databricks().verified_stmt("ALTER TABLE t UNSET TAGS ('k', 'k2')");
+    databricks().verified_stmt("ALTER TABLE t ALTER COLUMN c SET TAGS ('pii' = 'true')");
+    databricks().verified_stmt("ALTER TABLE t ALTER COLUMN c UNSET TAGS ('pii')");
+}
+
+#[test]
 fn test_materialized_view_mask_and_row_filter() {
     // Databricks (materialized) views may carry column masks and a table-level
     // row filter. View-level policies aren't represented, so they're consumed

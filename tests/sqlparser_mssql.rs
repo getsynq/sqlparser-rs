@@ -661,6 +661,10 @@ fn parse_security_policy_and_masked() {
     ms().verified_stmt("DROP SECURITY POLICY secPolicy");
     ms().verified_stmt("DROP SECURITY POLICY IF EXISTS secPolicy");
 
+    // ALTER COLUMN ADD/DROP MASKED (dynamic data masking).
+    ms().verified_stmt("ALTER TABLE t ALTER COLUMN c ADD MASKED WITH (FUNCTION = 'email()')");
+    ms().verified_stmt("ALTER TABLE t ALTER COLUMN c DROP MASKED");
+
     // Predicate exposes the function + target table for lineage.
     match ms().verified_stmt("CREATE SECURITY POLICY p ADD FILTER PREDICATE s.f(t_id) ON dbo.Sales")
     {
