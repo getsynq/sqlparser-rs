@@ -612,6 +612,10 @@ fn parse_parentheses_options(parser: &mut Parser) -> Result<Vec<DataLoadingOptio
     loop {
         match parser.next_token().token {
             Token::RParen => break,
+            // Option lists are usually space-separated (`FILE_FORMAT=(A=1 B=2)`),
+            // but some are comma-separated (`INCLUDE_METADATA=(c1=METADATA$X,
+            // c2=METADATA$Y)`). Tolerate a separating comma between options.
+            Token::Comma => continue,
             Token::Word(key) => {
                 parser.expect_token(&Token::Eq)?;
                 if parser.parse_keyword(Keyword::TRUE) {
