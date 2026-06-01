@@ -5789,6 +5789,19 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+        // Snowflake allows an optional `WITH` before the external-table option
+        // list: `CREATE EXTERNAL TABLE t WITH LOCATION = @stage ...`. Consume it
+        // so the option block below sees the `LOCATION = ...` shape.
+        // https://docs.snowflake.com/en/sql-reference/sql/create-external-table
+        if dialect_of!(self is SnowflakeDialect | GenericDialect)
+            && matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::WITH)
+            && matches!(self.peek_nth_token(1).token, Token::Word(w)
+                if w.keyword == Keyword::LOCATION
+                    || w.value.eq_ignore_ascii_case("FILE_FORMAT"))
+        {
+            self.next_token();
+        }
+
         // Snowflake-style external table options: `LOCATION = @stage`, `PATTERN = '...'`,
         // `FILE_FORMAT = (...)`, `AUTO_REFRESH = ...`, etc. These are syntactically very
         // different from Hive's `LOCATION 'path'`, so when we see the Snowflake shape

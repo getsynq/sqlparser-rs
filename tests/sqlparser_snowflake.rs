@@ -3833,6 +3833,16 @@ fn parse_snowflake_create_external_table_with_options() {
     assert!(rendered.contains("db1.sch1.tbl1"));
     assert!(rendered.contains("\"ID\""));
     assert!(rendered.contains("\"NAME\""));
+
+    // Snowflake also allows an optional `WITH` before the option list:
+    // `CREATE EXTERNAL TABLE t WITH LOCATION = @stage`.
+    let stmts = snowflake()
+        .parse_sql_statements(
+            "CREATE OR REPLACE EXTERNAL TABLE daily_tweets WITH LOCATION = @twitter_feed/daily/",
+        )
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    assert!(format!("{}", stmts[0]).contains("daily_tweets"));
 }
 
 #[test]
