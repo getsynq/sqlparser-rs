@@ -4891,6 +4891,8 @@ impl<'a> Parser<'a> {
             self.next_token(); // SEMANTIC
             self.next_token(); // VIEW
             self.parse_create_semantic_view(or_replace)
+        } else if self.parse_keyword(Keyword::TAG) {
+            self.parse_create_tag(or_replace)
         } else if let Some(stmt) = self.maybe_parse(|p| p.parse_create_snowflake_policy(or_replace))
         {
             // Snowflake security/governance policy definitions
@@ -5010,6 +5012,39 @@ impl<'a> Parser<'a> {
             args,
             returns,
             body,
+            options,
+        })
+    }
+
+    /// Parse a Snowflake `CREATE TAG` definition. `TAG` has already been consumed.
+    /// `CREATE [OR REPLACE] TAG [IF NOT EXISTS] <name> [ALLOWED_VALUES '<v>' [, ...]]
+    /// [<key> = <value> ...]`.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-tag>
+    fn parse_create_tag(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+
+        // `ALLOWED_VALUES` is a bare comma-separated list of string literals
+        // (no parens, no `=`); it isn't a reserved keyword, so match by value.
+        let allowed_values = if self.parse_word_ci("ALLOWED_VALUES") {
+            self.parse_comma_separated(|p| p.parse_literal_string())?
+        } else {
+            vec![]
+        };
+
+        // Trailing `key = value` options (COMMENT, PROPAGATE, ON_CONFLICT).
+        let mut options = vec![];
+        while matches!(self.peek_token_kind(), Token::Word(_))
+            && self.peek_nth_token(1).token == Token::Eq
+        {
+            options.push(self.parse_sql_option()?);
+        }
+
+        Ok(Statement::CreateTag {
+            or_replace,
+            if_not_exists,
+            name,
+            allowed_values,
             options,
         })
     }
