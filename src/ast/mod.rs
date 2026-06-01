@@ -2050,6 +2050,23 @@ pub enum Statement {
         /// Trailing `COMMENT = '...'`, `EXEMPT_OTHER_POLICIES = { TRUE | FALSE }`.
         options: Vec<SqlOption>,
     },
+    /// ```sql
+    /// CREATE [OR REPLACE] TAG [IF NOT EXISTS] <name>
+    ///   [ ALLOWED_VALUES '<v1>' [, '<v2>' ...] ]
+    ///   [ <key> = <value> ... ]   -- e.g. COMMENT, PROPAGATE, ON_CONFLICT
+    /// ```
+    /// Snowflake tag *definition*.
+    /// [Snowflake]: https://docs.snowflake.com/en/sql-reference/sql/create-tag
+    CreateTag {
+        or_replace: bool,
+        if_not_exists: bool,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        name: ObjectName,
+        /// `ALLOWED_VALUES '<v>' [, ...]` (empty when omitted).
+        allowed_values: Vec<String>,
+        /// Trailing `key = value` options (COMMENT, PROPAGATE, ON_CONFLICT).
+        options: Vec<SqlOption>,
+    },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -3892,6 +3909,33 @@ impl fmt::Display for Statement {
                     if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
                     args = display_comma_separated(args),
                 )?;
+                for option in options {
+                    write!(f, " {option}")?;
+                }
+                Ok(())
+            }
+            Statement::CreateTag {
+                or_replace,
+                if_not_exists,
+                name,
+                allowed_values,
+                options,
+            } => {
+                write!(
+                    f,
+                    "CREATE {or_replace}TAG {if_not_exists}{name}",
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                )?;
+                if !allowed_values.is_empty() {
+                    write!(f, " ALLOWED_VALUES ")?;
+                    for (i, v) in allowed_values.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "'{}'", value::escape_single_quote_string(v))?;
+                    }
+                }
                 for option in options {
                     write!(f, " {option}")?;
                 }

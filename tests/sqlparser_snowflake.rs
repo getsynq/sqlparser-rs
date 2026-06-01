@@ -2257,6 +2257,32 @@ fn test_snowflake_create_policy_definitions() {
 }
 
 #[test]
+fn test_snowflake_create_tag() {
+    // Snowflake tag definition.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-tag
+    snowflake().verified_stmt("CREATE OR REPLACE TAG accounting");
+    snowflake().verified_stmt("CREATE TAG cost_center COMMENT = 'cost_center tag'");
+    snowflake()
+        .verified_stmt("CREATE TAG my_tag ALLOWED_VALUES 'blue', 'red' PROPAGATE = ON_DEPENDENCY");
+    snowflake().verified_stmt("CREATE TAG IF NOT EXISTS db.sch.t ALLOWED_VALUES 'a'");
+
+    match snowflake().verified_stmt("CREATE TAG cost_center ALLOWED_VALUES 'finance', 'eng'") {
+        Statement::CreateTag {
+            name,
+            allowed_values,
+            ..
+        } => {
+            assert_eq!(name.to_string(), "cost_center");
+            assert_eq!(
+                allowed_values,
+                vec!["finance".to_string(), "eng".to_string()]
+            );
+        }
+        other => panic!("expected CreateTag, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_describe_table() {
     snowflake().verified_stmt(r#"DESCRIBE TABLE "DW_PROD"."SCH"."TBL""#);
 }
