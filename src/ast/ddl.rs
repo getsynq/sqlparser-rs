@@ -177,6 +177,16 @@ pub enum AlterTableOperation {
     /// `UNSET TAG <name> [, ...]` (Snowflake).
     UnsetTag { keys: Vec<ObjectName> },
 
+    /// Databricks `DROP ROW FILTER`.
+    /// <https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-row-filter>
+    DropRowFilter,
+
+    /// Databricks `SET TAGS ('k' = 'v', ...)`.
+    SetTags { tags: Vec<Tag> },
+
+    /// Databricks `UNSET TAGS ('k', ...)`.
+    UnsetTags { keys: Vec<String> },
+
     /// PostgreSQL row-level security toggle:
     /// `{ ENABLE | DISABLE | FORCE | NO FORCE } ROW LEVEL SECURITY`.
     /// <https://www.postgresql.org/docs/current/sql-altertable.html>
@@ -445,6 +455,20 @@ impl fmt::Display for AlterTableOperation {
             AlterTableOperation::RowLevelSecurity { mode } => {
                 write!(f, "{mode} ROW LEVEL SECURITY")
             }
+            AlterTableOperation::DropRowFilter => write!(f, "DROP ROW FILTER"),
+            AlterTableOperation::SetTags { tags } => {
+                write!(f, "SET TAGS ({})", display_comma_separated(tags))
+            }
+            AlterTableOperation::UnsetTags { keys } => {
+                write!(f, "UNSET TAGS (")?;
+                for (i, k) in keys.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "'{}'", escape_single_quote_string(k))?;
+                }
+                write!(f, ")")
+            }
             AlterTableOperation::AddProjection {
                 if_not_exists,
                 projection,
@@ -543,6 +567,26 @@ pub enum AlterColumnOperation {
     SetOptions {
         options: Vec<SqlOption>,
     },
+    /// Databricks `SET MASK <func> [USING COLUMNS (...)]`.
+    SetMask {
+        mask: ColumnMask,
+    },
+    /// Databricks `DROP MASK`.
+    DropMask,
+    /// SQL Server `ADD MASKED WITH (FUNCTION = '<mask>')`.
+    AddMasked {
+        function: String,
+    },
+    /// SQL Server `DROP MASKED`.
+    DropMasked,
+    /// Databricks `SET TAGS ('k' = 'v', ...)`.
+    SetTags {
+        tags: Vec<Tag>,
+    },
+    /// Databricks `UNSET TAGS ('k', ...)`.
+    UnsetTags {
+        keys: Vec<String>,
+    },
 }
 
 impl fmt::Display for AlterColumnOperation {
@@ -565,6 +609,27 @@ impl fmt::Display for AlterColumnOperation {
             }
             AlterColumnOperation::SetOptions { options } => {
                 write!(f, "SET OPTIONS({})", display_comma_separated(options))
+            }
+            AlterColumnOperation::SetMask { mask } => write!(f, "SET {mask}"),
+            AlterColumnOperation::DropMask => write!(f, "DROP MASK"),
+            AlterColumnOperation::AddMasked { function } => write!(
+                f,
+                "ADD MASKED WITH (FUNCTION = '{}')",
+                escape_single_quote_string(function)
+            ),
+            AlterColumnOperation::DropMasked => write!(f, "DROP MASKED"),
+            AlterColumnOperation::SetTags { tags } => {
+                write!(f, "SET TAGS ({})", display_comma_separated(tags))
+            }
+            AlterColumnOperation::UnsetTags { keys } => {
+                write!(f, "UNSET TAGS (")?;
+                for (i, k) in keys.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "'{}'", escape_single_quote_string(k))?;
+                }
+                write!(f, ")")
             }
         }
     }

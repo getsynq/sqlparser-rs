@@ -5335,6 +5335,30 @@ impl<'a> Parser<'a> {
         Ok(Statement::AlterRedshiftMaskingPolicy { name, using })
     }
 
+    /// Databricks `( 'k' = 'v', ... )` tag list (string keys and values).
+    fn parse_databricks_tags(&mut self) -> Result<Vec<Tag>, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let tags = self.parse_comma_separated(|p| {
+            let key = p.parse_literal_string()?;
+            p.expect_token(&Token::Eq)?;
+            let value = p.parse_literal_string()?;
+            Ok(Tag {
+                name: ObjectName(vec![Ident::with_quote('\'', key)]),
+                value,
+            })
+        })?;
+        self.expect_token(&Token::RParen)?;
+        Ok(tags)
+    }
+
+    /// Databricks `( 'k', ... )` tag-key list (for `UNSET TAGS`).
+    fn parse_databricks_tag_keys(&mut self) -> Result<Vec<String>, ParserError> {
+        self.expect_token(&Token::LParen)?;
+        let keys = self.parse_comma_separated(|p| p.parse_literal_string())?;
+        self.expect_token(&Token::RParen)?;
+        Ok(keys)
+    }
+
     /// `{ <user> | ROLE <role> | PUBLIC }` grantee in a Redshift attach/detach.
     fn parse_redshift_grantee(&mut self) -> Result<RedshiftGrantee, ParserError> {
         if self.parse_word_ci("PUBLIC") {
@@ -10237,6 +10261,9 @@ impl<'a> Parser<'a> {
             if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
                 let policy = self.parse_object_name(false)?;
                 AlterTableOperation::DropRowAccessPolicy { policy }
+            } else if self.parse_keywords(&[Keyword::ROW, Keyword::FILTER]) {
+                // Databricks: DROP ROW FILTER
+                AlterTableOperation::DropRowFilter
             } else if self.parse_keywords(&[Keyword::IF, Keyword::EXISTS, Keyword::PARTITION]) {
                 self.expect_token(&Token::LParen)?;
                 let partitions = self.parse_comma_separated(Parser::parse_expr)?;
@@ -10391,9 +10418,64 @@ impl<'a> Parser<'a> {
                 self.prev_token();
                 let options = self.parse_options(Keyword::OPTIONS)?;
                 AlterColumnOperation::SetOptions { options }
+            } else if self.parse_keywords(&[Keyword::SET, Keyword::MASK]) {
+                // Databricks: SET MASK <func> [USING COLUMNS (...)]
+                let function = self.parse_object_name(false)?;
+                let using_columns = if self.parse_keywords(&[Keyword::USING, Keyword::COLUMNS]) {
+                    self.expect_token(&Token::LParen)?;
+                    let cols = self.parse_comma_separated(|p| p.parse_expr())?;
+                    self.expect_token(&Token::RParen)?;
+                    cols
+                } else {
+                    vec![]
+                };
+                AlterColumnOperation::SetMask {
+                    mask: ColumnMask {
+                        function,
+                        using_columns,
+                    },
+                }
+            } else if self.parse_keywords(&[Keyword::DROP, Keyword::MASK]) {
+                AlterColumnOperation::DropMask
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ADD)
+                && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.value.eq_ignore_ascii_case("MASKED"))
+            {
+                // SQL Server: ADD MASKED WITH (FUNCTION = '<mask>')
+                self.next_token(); // ADD
+                self.next_token(); // MASKED
+                self.expect_keyword(Keyword::WITH)?;
+                self.expect_token(&Token::LParen)?;
+                self.expect_keyword(Keyword::FUNCTION)?;
+                self.expect_token(&Token::Eq)?;
+                let function = self.parse_literal_string()?;
+                self.expect_token(&Token::RParen)?;
+                AlterColumnOperation::AddMasked { function }
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::DROP)
+                && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.value.eq_ignore_ascii_case("MASKED"))
+            {
+                self.next_token(); // DROP
+                self.next_token(); // MASKED
+                AlterColumnOperation::DropMasked
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::SET)
+                && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.value.eq_ignore_ascii_case("TAGS"))
+            {
+                // Databricks: SET TAGS ('k' = 'v', ...)
+                self.next_token(); // SET
+                self.next_token(); // TAGS
+                AlterColumnOperation::SetTags {
+                    tags: self.parse_databricks_tags()?,
+                }
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::UNSET)
+                && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.value.eq_ignore_ascii_case("TAGS"))
+            {
+                self.next_token(); // UNSET
+                self.next_token(); // TAGS
+                AlterColumnOperation::UnsetTags {
+                    keys: self.parse_databricks_tag_keys()?,
+                }
             } else {
                 return self.expected(
-                    "SET/DROP NOT NULL, SET DEFAULT, SET DATA TYPE, SET OPTIONS after ALTER COLUMN",
+                    "SET/DROP NOT NULL, SET DEFAULT, SET DATA TYPE, SET OPTIONS, SET/DROP MASK, ADD/DROP MASKED, or SET/UNSET TAGS after ALTER COLUMN",
                     self.peek_token(),
                 );
             };
@@ -10435,6 +10517,11 @@ impl<'a> Parser<'a> {
                     options,
                     has_options_keyword: false,
                 }
+            } else if self.parse_word_ci("TAGS") {
+                // Databricks: SET TAGS ('k' = 'v', ...)
+                AlterTableOperation::SetTags {
+                    tags: self.parse_databricks_tags()?,
+                }
             } else if let Some(policy) = self.maybe_parse_table_policy(false)? {
                 // Snowflake: SET { AGGREGATION | JOIN } POLICY <name> [...] [FORCE]
                 let force = self.parse_keyword(Keyword::FORCE);
@@ -10464,12 +10551,17 @@ impl<'a> Parser<'a> {
                 AlterTableOperation::UnsetTablePolicy {
                     kind: TablePolicyKind::RowAccess,
                 }
+            } else if self.parse_word_ci("TAGS") {
+                // Databricks: UNSET TAGS ('k', ...)
+                AlterTableOperation::UnsetTags {
+                    keys: self.parse_databricks_tag_keys()?,
+                }
             } else if self.parse_keyword(Keyword::TAG) {
                 let keys = self.parse_comma_separated(|p| p.parse_object_name(false))?;
                 AlterTableOperation::UnsetTag { keys }
             } else {
                 return self.expected(
-                    "AGGREGATION POLICY, JOIN POLICY, ROW ACCESS POLICY, or TAG after UNSET",
+                    "AGGREGATION POLICY, JOIN POLICY, ROW ACCESS POLICY, TAG or TAGS after UNSET",
                     self.peek_token(),
                 );
             }
