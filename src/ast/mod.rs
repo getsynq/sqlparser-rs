@@ -5689,22 +5689,28 @@ pub enum ObjectType {
     Sequence,
     Stage,
     Type,
+    /// A security/governance policy object (Snowflake `DROP <kind> POLICY`).
+    Policy(PolicyKind),
+    /// A tag object (Snowflake `DROP TAG`).
+    Tag,
 }
 
 impl fmt::Display for ObjectType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            ObjectType::Table => "TABLE",
-            ObjectType::View => "VIEW",
-            ObjectType::MaterializedView => "MATERIALIZED VIEW",
-            ObjectType::Index => "INDEX",
-            ObjectType::Schema => "SCHEMA",
-            ObjectType::Database => "DATABASE",
-            ObjectType::Role => "ROLE",
-            ObjectType::Sequence => "SEQUENCE",
-            ObjectType::Stage => "STAGE",
-            ObjectType::Type => "TYPE",
-        })
+        match self {
+            ObjectType::Table => f.write_str("TABLE"),
+            ObjectType::View => f.write_str("VIEW"),
+            ObjectType::MaterializedView => f.write_str("MATERIALIZED VIEW"),
+            ObjectType::Index => f.write_str("INDEX"),
+            ObjectType::Schema => f.write_str("SCHEMA"),
+            ObjectType::Database => f.write_str("DATABASE"),
+            ObjectType::Role => f.write_str("ROLE"),
+            ObjectType::Sequence => f.write_str("SEQUENCE"),
+            ObjectType::Stage => f.write_str("STAGE"),
+            ObjectType::Type => f.write_str("TYPE"),
+            ObjectType::Policy(kind) => write!(f, "{kind}"),
+            ObjectType::Tag => f.write_str("TAG"),
+        }
     }
 }
 
