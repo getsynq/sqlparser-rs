@@ -1371,6 +1371,39 @@ fn bigquery() -> TestedDialects {
     }
 }
 
+#[test]
+fn parse_create_row_access_policy() {
+    // BigQuery row-level security.
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
+    bigquery().verified_stmt(
+        "CREATE ROW ACCESS POLICY us_filter ON project.dataset.my_table GRANT TO ('user:abc@example.com') FILTER USING (region = 'US')",
+    );
+    bigquery().verified_stmt(
+        "CREATE OR REPLACE ROW ACCESS POLICY f ON ds.t GRANT TO ('domain:example.com', 'group:g@e.com') FILTER USING (region IN ('us-west1', 'us-west2'))",
+    );
+    // GRANT TO is optional.
+    bigquery().verified_stmt("CREATE ROW ACCESS POLICY f ON ds.t FILTER USING (a > 1)");
+
+    // FILTER USING may contain a subquery — its table ref must survive for lineage.
+    match bigquery().verified_stmt(
+        "CREATE OR REPLACE ROW ACCESS POLICY apac ON project.dataset.my_table GRANT TO ('domain:example.com') FILTER USING (region IN (SELECT region FROM lookup_table WHERE email = SESSION_USER()))",
+    ) {
+        Statement::CreateRowAccessPolicy {
+            name,
+            table_name,
+            grant_to,
+            filter_using,
+            ..
+        } => {
+            assert_eq!(name.to_string(), "apac");
+            assert_eq!(table_name.to_string(), "project.dataset.my_table");
+            assert_eq!(grant_to.len(), 1);
+            assert!(filter_using.to_string().contains("lookup_table"));
+        }
+        other => panic!("expected CreateRowAccessPolicy, got {other:?}"),
+    }
+}
+
 fn bigquery_unescaped() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(BigQueryDialect {})],

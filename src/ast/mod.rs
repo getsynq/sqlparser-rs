@@ -2067,6 +2067,26 @@ pub enum Statement {
         /// Trailing `key = value` options (COMMENT, PROPAGATE, ON_CONFLICT).
         options: Vec<SqlOption>,
     },
+    /// ```sql
+    /// CREATE [OR REPLACE] ROW ACCESS POLICY [IF NOT EXISTS] <name> ON <table>
+    ///   [ GRANT TO ( <grantee> [, ...] ) ]
+    ///   FILTER USING ( <predicate> )
+    /// ```
+    /// BigQuery row-level security policy. The target `table_name` and the
+    /// `filter_using` predicate (which may itself contain a subquery) are
+    /// preserved for lineage.
+    /// [BigQuery]: https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
+    CreateRowAccessPolicy {
+        or_replace: bool,
+        if_not_exists: bool,
+        name: ObjectName,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+        /// `GRANT TO (...)` IAM principals (string literals); empty when omitted.
+        grant_to: Vec<Expr>,
+        /// `FILTER USING (<predicate>)`.
+        filter_using: Box<Expr>,
+    },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -3939,6 +3959,26 @@ impl fmt::Display for Statement {
                 for option in options {
                     write!(f, " {option}")?;
                 }
+                Ok(())
+            }
+            Statement::CreateRowAccessPolicy {
+                or_replace,
+                if_not_exists,
+                name,
+                table_name,
+                grant_to,
+                filter_using,
+            } => {
+                write!(
+                    f,
+                    "CREATE {or_replace}ROW ACCESS POLICY {if_not_exists}{name} ON {table_name}",
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                )?;
+                if !grant_to.is_empty() {
+                    write!(f, " GRANT TO ({})", display_comma_separated(grant_to))?;
+                }
+                write!(f, " FILTER USING ({filter_using})")?;
                 Ok(())
             }
             Statement::CreateRole {

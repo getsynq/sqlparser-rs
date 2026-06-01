@@ -4899,8 +4899,12 @@ impl<'a> Parser<'a> {
             // (CREATE { MASKING | ROW ACCESS | AGGREGATION | PROJECTION | JOIN }
             // POLICY ... AS (sig) RETURNS type -> body). maybe_parse reverts and
             // falls through for non-Snowflake shapes (e.g. BigQuery's
-            // `ROW ACCESS POLICY ... ON table`), which the generic fallback handles.
+            // `ROW ACCESS POLICY ... ON table`), handled next.
             Ok(stmt)
+        } else if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+            // BigQuery row-level security:
+            // ROW ACCESS POLICY <name> ON <table> [GRANT TO (...)] FILTER USING (expr)
+            self.parse_create_row_access_policy(or_replace)
         } else {
             // Generic fallback: skip tokens until end of statement
             // This handles dialect-specific CREATE statements like:
@@ -5013,6 +5017,44 @@ impl<'a> Parser<'a> {
             returns,
             body,
             options,
+        })
+    }
+
+    /// Parse a BigQuery `CREATE ROW ACCESS POLICY`. The `ROW ACCESS POLICY`
+    /// keywords have already been consumed.
+    /// `<name> ON <table> [GRANT TO (<grantee>, ...)] FILTER USING (<predicate>)`.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language>
+    fn parse_create_row_access_policy(
+        &mut self,
+        or_replace: bool,
+    ) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name = self.parse_object_name(false)?;
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+
+        let grant_to = if self.parse_keywords(&[Keyword::GRANT, Keyword::TO]) {
+            self.expect_token(&Token::LParen)?;
+            let grantees = self.parse_comma_separated(|p| p.parse_expr())?;
+            self.expect_token(&Token::RParen)?;
+            grantees
+        } else {
+            vec![]
+        };
+
+        self.expect_keyword(Keyword::FILTER)?;
+        self.expect_keyword(Keyword::USING)?;
+        self.expect_token(&Token::LParen)?;
+        let filter_using = Box::new(self.parse_expr()?);
+        self.expect_token(&Token::RParen)?;
+
+        Ok(Statement::CreateRowAccessPolicy {
+            or_replace,
+            if_not_exists,
+            name,
+            table_name,
+            grant_to,
+            filter_using,
         })
     }
 
