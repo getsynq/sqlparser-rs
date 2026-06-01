@@ -8303,8 +8303,22 @@ impl<'a> Parser<'a> {
 
         let column_options = self.parse_options(Keyword::OPTIONS)?;
 
+        // Databricks column mask: `MASK <func> [USING COLUMNS (<col>|<literal>, ...)]`.
+        // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-column-mask
         let mask = if self.parse_keyword(Keyword::MASK) {
-            Some(self.parse_object_name(false)?)
+            let function = self.parse_object_name(false)?;
+            let using_columns = if self.parse_keywords(&[Keyword::USING, Keyword::COLUMNS]) {
+                self.expect_token(&Token::LParen)?;
+                let cols = self.parse_comma_separated(|p| p.parse_expr())?;
+                self.expect_token(&Token::RParen)?;
+                cols
+            } else {
+                vec![]
+            };
+            Some(ColumnMask {
+                function,
+                using_columns,
+            })
         } else {
             None
         };
@@ -9089,8 +9103,16 @@ impl<'a> Parser<'a> {
     /// introduce a table policy.
     /// <https://docs.snowflake.com/en/sql-reference/sql/create-table>
     fn maybe_parse_table_policy(&mut self, with: bool) -> Result<Option<TablePolicy>, ParserError> {
-        let kind = if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
-            TablePolicyKind::RowAccess
+        let kind = if self.parse_keyword(Keyword::ROW) {
+            // Snowflake `ROW ACCESS POLICY` vs Databricks `ROW FILTER`.
+            if self.parse_keywords(&[Keyword::ACCESS, Keyword::POLICY]) {
+                TablePolicyKind::RowAccess
+            } else if self.parse_keyword(Keyword::FILTER) {
+                TablePolicyKind::RowFilter
+            } else {
+                self.prev_token(); // put back ROW
+                return Ok(None);
+            }
         } else if self.parse_keywords(&[Keyword::AGGREGATION, Keyword::POLICY]) {
             TablePolicyKind::Aggregation
         } else if self.parse_keywords(&[Keyword::JOIN, Keyword::POLICY]) {
@@ -9114,7 +9136,9 @@ impl<'a> Parser<'a> {
         // The keyword introducing the (optional) scoped-column list depends on
         // the policy kind: ON / ENTITY KEY / ALLOWED JOIN KEYS.
         let columns = match kind {
-            TablePolicyKind::RowAccess | TablePolicyKind::StorageLifecycle => {
+            TablePolicyKind::RowAccess
+            | TablePolicyKind::StorageLifecycle
+            | TablePolicyKind::RowFilter => {
                 if self.parse_keyword(Keyword::ON) {
                     self.parse_parenthesized_column_list(Mandatory, false)?
                 } else {
