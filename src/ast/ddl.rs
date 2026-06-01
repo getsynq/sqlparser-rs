@@ -1419,6 +1419,52 @@ pub struct TablePolicy {
     pub columns: Vec<WithSpan<Ident>>,
 }
 
+/// The kind of a Snowflake policy *definition* (`CREATE ... POLICY`). Each
+/// selects the keyword sequence and the shape of the policy body.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum PolicyKind {
+    /// `CREATE MASKING POLICY`
+    Masking,
+    /// `CREATE ROW ACCESS POLICY`
+    RowAccess,
+    /// `CREATE AGGREGATION POLICY`
+    Aggregation,
+    /// `CREATE PROJECTION POLICY`
+    Projection,
+    /// `CREATE JOIN POLICY`
+    Join,
+}
+
+impl fmt::Display for PolicyKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            PolicyKind::Masking => "MASKING POLICY",
+            PolicyKind::RowAccess => "ROW ACCESS POLICY",
+            PolicyKind::Aggregation => "AGGREGATION POLICY",
+            PolicyKind::Projection => "PROJECTION POLICY",
+            PolicyKind::Join => "JOIN POLICY",
+        })
+    }
+}
+
+/// A single argument in a Snowflake policy signature (`<name> <type>`), e.g. the
+/// `email varchar` in `CREATE MASKING POLICY p AS (email varchar) ...`.
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct PolicyArg {
+    pub name: Ident,
+    pub data_type: DataType,
+}
+
+impl fmt::Display for PolicyArg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {}", self.name, self.data_type)
+    }
+}
+
 /// A Databricks column mask applied in a column definition or `ALTER COLUMN`:
 /// `MASK <function> [ USING COLUMNS ( <col> | <literal> [ , ... ] ) ]`.
 ///

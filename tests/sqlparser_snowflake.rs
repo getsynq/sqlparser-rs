@@ -2204,6 +2204,59 @@ fn test_column_with_tag() {
 }
 
 #[test]
+fn test_snowflake_create_policy_definitions() {
+    // Snowflake policy definitions: signature + RETURNS + `-> body`.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-masking-policy
+    // https://docs.snowflake.com/en/sql-reference/sql/create-row-access-policy
+    // https://docs.snowflake.com/en/sql-reference/sql/create-aggregation-policy
+    // https://docs.snowflake.com/en/sql-reference/sql/create-projection-policy
+    // https://docs.snowflake.com/en/sql-reference/sql/create-join-policy
+    snowflake().verified_stmt(
+        "CREATE MASKING POLICY email_mask AS (val VARCHAR) RETURNS VARCHAR -> CASE WHEN current_role() = 'ADMIN' THEN val ELSE '***' END",
+    );
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE MASKING POLICY p AS (val STRING) RETURNS STRING -> val COMMENT = 'c' EXEMPT_OTHER_POLICIES = true",
+    );
+    snowflake().verified_stmt(
+        "CREATE AGGREGATION POLICY ap AS () RETURNS AGGREGATION_CONSTRAINT -> NO_AGGREGATION_CONSTRAINT()",
+    );
+    snowflake().verified_stmt(
+        "CREATE PROJECTION POLICY pp AS () RETURNS PROJECTION_CONSTRAINT -> PROJECTION_CONSTRAINT(ALLOW => true)",
+    );
+    snowflake().verified_stmt(
+        "CREATE JOIN POLICY jp AS () RETURNS JOIN_CONSTRAINT -> JOIN_CONSTRAINT(JOIN_REQUIRED => true)",
+    );
+    // Lowercase input normalizes types/keywords to canonical form.
+    snowflake().one_statement_parses_to(
+        "create masking policy m as (email varchar) returns varchar -> email",
+        "CREATE MASKING POLICY m AS (email VARCHAR) RETURNS VARCHAR -> email",
+    );
+
+    // The body Expr preserves table references for lineage (EXISTS subquery).
+    match snowflake().verified_stmt(
+        "CREATE ROW ACCESS POLICY rap AS (region VARCHAR) RETURNS BOOLEAN -> EXISTS (SELECT 1 FROM mgr_regions WHERE mgr = current_role())",
+    ) {
+        Statement::CreatePolicy {
+            kind,
+            name,
+            args,
+            returns,
+            body,
+            ..
+        } => {
+            assert_eq!(kind, PolicyKind::RowAccess);
+            assert_eq!(name.to_string(), "rap");
+            assert_eq!(args.len(), 1);
+            assert_eq!(args[0].name.to_string(), "region");
+            assert_eq!(returns.to_string(), "BOOLEAN");
+            // The referenced table is reachable in the body expression.
+            assert!(body.to_string().contains("mgr_regions"));
+        }
+        other => panic!("expected CreatePolicy, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_describe_table() {
     snowflake().verified_stmt(r#"DESCRIBE TABLE "DW_PROD"."SCH"."TBL""#);
 }

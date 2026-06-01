@@ -39,9 +39,9 @@ pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
     ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
-    KeyOrIndexDisplay, Partition, ProcedureParam, ReferentialAction, TableConstraint, TablePolicy,
-    TablePolicyKind, TableProjection, Tag, UserDefinedTypeCompositeAttributeDef,
-    UserDefinedTypeRepresentation, ViewSecurity,
+    KeyOrIndexDisplay, Partition, PolicyArg, PolicyKind, ProcedureParam, ReferentialAction,
+    TableConstraint, TablePolicy, TablePolicyKind, TableProjection, Tag,
+    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -2025,6 +2025,31 @@ pub enum Statement {
     /// ```sql
     /// CREATE ROLE
     /// ```
+    /// ```sql
+    /// CREATE [OR REPLACE] { MASKING | ROW ACCESS | AGGREGATION | PROJECTION | JOIN } POLICY
+    ///   [IF NOT EXISTS] <name> AS ( [<arg> <type> [, ...]] ) RETURNS <type> -> <body>
+    ///   [COMMENT = '...'] [EXEMPT_OTHER_POLICIES = { TRUE | FALSE }]
+    /// ```
+    /// Snowflake security/governance policy *definition*. The masking/row-access
+    /// condition lives in `body` (a real `Expr`, so any subqueries/table refs are
+    /// visible to lineage).
+    ///
+    /// [Snowflake]: https://docs.snowflake.com/en/sql-reference/sql/create-masking-policy
+    CreatePolicy {
+        or_replace: bool,
+        if_not_exists: bool,
+        kind: PolicyKind,
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        name: ObjectName,
+        /// Signature args `(name type, ...)`; empty for `AS ()`.
+        args: Vec<PolicyArg>,
+        /// `RETURNS <type>`.
+        returns: DataType,
+        /// `-> <body>` condition/return expression.
+        body: Box<Expr>,
+        /// Trailing `COMMENT = '...'`, `EXEMPT_OTHER_POLICIES = { TRUE | FALSE }`.
+        options: Vec<SqlOption>,
+    },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -3847,6 +3872,28 @@ impl fmt::Display for Statement {
                 }
                 if let Some(predicate) = predicate {
                     write!(f, " WHERE {predicate}")?;
+                }
+                Ok(())
+            }
+            Statement::CreatePolicy {
+                or_replace,
+                if_not_exists,
+                kind,
+                name,
+                args,
+                returns,
+                body,
+                options,
+            } => {
+                write!(
+                    f,
+                    "CREATE {or_replace}{kind} {if_not_exists}{name} AS ({args}) RETURNS {returns} -> {body}",
+                    or_replace = if *or_replace { "OR REPLACE " } else { "" },
+                    if_not_exists = if *if_not_exists { "IF NOT EXISTS " } else { "" },
+                    args = display_comma_separated(args),
+                )?;
+                for option in options {
+                    write!(f, " {option}")?;
                 }
                 Ok(())
             }
