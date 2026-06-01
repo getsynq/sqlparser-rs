@@ -619,6 +619,30 @@ fn test_select_wildcard_with_exclude() {
 }
 
 #[test]
+fn test_select_wildcard_with_ilike() {
+    // Snowflake `SELECT * ILIKE '<pattern>'` keeps only the columns whose names
+    // match the (case-insensitive) pattern.
+    let select =
+        snowflake_and_generic().verified_only_select("SELECT * ILIKE '%id%' FROM employee_table");
+    let expected = SelectItem::Wildcard(WildcardAdditionalOptions {
+        opt_ilike: Some(IlikeSelectItem {
+            pattern: "%id%".to_owned(),
+        }),
+        ..Default::default()
+    })
+    .empty_span();
+    assert_eq!(expected, select.projection[0]);
+
+    // ILIKE precedes RENAME / REPLACE and round-trips alongside them.
+    snowflake_and_generic().verified_only_select(
+        "SELECT * ILIKE '%id%' RENAME department_id AS department FROM employee_table",
+    );
+    snowflake_and_generic().verified_only_select(
+        "SELECT * ILIKE '%id%' REPLACE ('DEPT-' || department_id AS department_id) FROM employee_table",
+    );
+}
+
+#[test]
 fn test_select_wildcard_with_rename() {
     let select =
         snowflake_and_generic().verified_only_select("SELECT * RENAME col_a AS col_b FROM data");
@@ -1913,6 +1937,7 @@ fn parse_tablesample() {
         distinct: None,
         top: None,
         projection: vec![SelectItem::Wildcard(WildcardAdditionalOptions {
+            opt_ilike: None,
             opt_exclude: None,
             opt_except: None,
             opt_rename: None,
