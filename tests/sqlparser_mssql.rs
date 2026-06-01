@@ -639,6 +639,44 @@ fn ms() -> TestedDialects {
         options: None,
     }
 }
+
+#[test]
+fn parse_security_policy_and_masked() {
+    // Column dynamic data masking.
+    // https://learn.microsoft.com/en-us/sql/relational-databases/security/dynamic-data-masking
+    ms().verified_stmt(
+        "CREATE TABLE t (Email VARCHAR(100) MASKED WITH (FUNCTION = 'email()') NOT NULL)",
+    );
+    ms().verified_stmt(
+        "CREATE TABLE t (DiscountCode SMALLINT MASKED WITH (FUNCTION = 'random(1, 100)') NULL)",
+    );
+
+    // CREATE / ALTER / DROP SECURITY POLICY (row-level security).
+    // https://learn.microsoft.com/en-us/sql/t-sql/statements/create-security-policy-transact-sql
+    ms().verified_stmt(
+        "CREATE SECURITY POLICY rls.SecPol ADD FILTER PREDICATE rls.fn(TenantId) ON dbo.Sales, ADD BLOCK PREDICATE rls.fn(TenantId) ON dbo.Sales AFTER INSERT WITH (STATE = ON, SCHEMABINDING = ON) NOT FOR REPLICATION",
+    );
+    ms().verified_stmt("ALTER SECURITY POLICY pol WITH (STATE = ON)");
+    ms().verified_stmt("ALTER SECURITY POLICY pol DROP FILTER PREDICATE ON dbo.Sales");
+    ms().verified_stmt("DROP SECURITY POLICY secPolicy");
+    ms().verified_stmt("DROP SECURITY POLICY IF EXISTS secPolicy");
+
+    // Predicate exposes the function + target table for lineage.
+    match ms().verified_stmt("CREATE SECURITY POLICY p ADD FILTER PREDICATE s.f(t_id) ON dbo.Sales")
+    {
+        Statement::CreateSecurityPolicy {
+            name, predicates, ..
+        } => {
+            assert_eq!(name.to_string(), "p");
+            assert_eq!(predicates.len(), 1);
+            assert_eq!(predicates[0].op, SecurityPolicyPredicateOp::Add);
+            assert_eq!(predicates[0].kind, SecurityPolicyPredicateKind::Filter);
+            assert_eq!(predicates[0].function.as_ref().unwrap().to_string(), "s.f");
+            assert_eq!(predicates[0].table_name.to_string(), "dbo.Sales");
+        }
+        other => panic!("expected CreateSecurityPolicy, got {other:?}"),
+    }
+}
 fn ms_and_generic() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(MsSqlDialect {}), Box::new(GenericDialect {})],

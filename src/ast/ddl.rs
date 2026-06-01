@@ -1059,6 +1059,13 @@ pub enum ColumnOption {
         seed: Option<Expr>,
         increment: Option<Expr>,
     },
+    /// SQL Server dynamic data masking: `MASKED WITH (FUNCTION = '<mask>')`.
+    /// The mask function descriptor is an opaque string literal (e.g.
+    /// `partial(1,"xxx",1)`, `email()`, `default()`).
+    /// <https://learn.microsoft.com/en-us/sql/relational-databases/security/dynamic-data-masking>
+    MaskedWith {
+        function: String,
+    },
 }
 
 impl fmt::Display for ColumnOption {
@@ -1173,6 +1180,13 @@ impl fmt::Display for ColumnOption {
                     write!(f, ")")?;
                 }
                 Ok(())
+            }
+            MaskedWith { function } => {
+                write!(
+                    f,
+                    "MASKED WITH (FUNCTION = '{}')",
+                    escape_single_quote_string(function)
+                )
             }
         }
     }
@@ -1485,6 +1499,97 @@ impl fmt::Display for PolicyKind {
             PolicyKind::Aggregation => "AGGREGATION POLICY",
             PolicyKind::Projection => "PROJECTION POLICY",
             PolicyKind::Join => "JOIN POLICY",
+        })
+    }
+}
+
+/// One predicate action inside a SQL Server `CREATE/ALTER SECURITY POLICY`.
+/// `{ ADD | ALTER | DROP } { FILTER | BLOCK } PREDICATE [<tvf>(<args>)] ON <table>
+/// [<block_dml_operation>]`.
+/// <https://learn.microsoft.com/en-us/sql/t-sql/statements/create-security-policy-transact-sql>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct SecurityPolicyPredicate {
+    pub op: SecurityPolicyPredicateOp,
+    pub kind: SecurityPolicyPredicateKind,
+    /// The table-valued predicate function (None for `DROP`).
+    pub function: Option<ObjectName>,
+    /// The function's column/expression arguments (empty for `DROP`).
+    pub args: Vec<Expr>,
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub table_name: ObjectName,
+    pub block_dml: Option<SecurityPolicyBlockDml>,
+}
+
+impl fmt::Display for SecurityPolicyPredicate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} PREDICATE", self.op, self.kind)?;
+        if let Some(function) = &self.function {
+            write!(f, " {function}({})", display_comma_separated(&self.args))?;
+        }
+        write!(f, " ON {}", self.table_name)?;
+        if let Some(block_dml) = &self.block_dml {
+            write!(f, " {block_dml}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SecurityPolicyPredicateOp {
+    Add,
+    Alter,
+    Drop,
+}
+
+impl fmt::Display for SecurityPolicyPredicateOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            SecurityPolicyPredicateOp::Add => "ADD",
+            SecurityPolicyPredicateOp::Alter => "ALTER",
+            SecurityPolicyPredicateOp::Drop => "DROP",
+        })
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SecurityPolicyPredicateKind {
+    Filter,
+    Block,
+}
+
+impl fmt::Display for SecurityPolicyPredicateKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            SecurityPolicyPredicateKind::Filter => "FILTER",
+            SecurityPolicyPredicateKind::Block => "BLOCK",
+        })
+    }
+}
+
+/// The block-DML qualifier on a SQL Server security-policy BLOCK predicate.
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub enum SecurityPolicyBlockDml {
+    AfterInsert,
+    AfterUpdate,
+    BeforeUpdate,
+    BeforeDelete,
+}
+
+impl fmt::Display for SecurityPolicyBlockDml {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            SecurityPolicyBlockDml::AfterInsert => "AFTER INSERT",
+            SecurityPolicyBlockDml::AfterUpdate => "AFTER UPDATE",
+            SecurityPolicyBlockDml::BeforeUpdate => "BEFORE UPDATE",
+            SecurityPolicyBlockDml::BeforeDelete => "BEFORE DELETE",
         })
     }
 }

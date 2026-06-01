@@ -4900,6 +4900,9 @@ impl<'a> Parser<'a> {
             self.parse_create_semantic_view(or_replace)
         } else if self.parse_keyword(Keyword::TAG) {
             self.parse_create_tag(or_replace)
+        } else if self.parse_keywords(&[Keyword::SECURITY, Keyword::POLICY]) {
+            // SQL Server row-level security: `CREATE SECURITY POLICY <name> ADD ...`
+            self.parse_create_security_policy()
         } else if self.parse_keyword(Keyword::POLICY) {
             // PostgreSQL row-security policy: `CREATE POLICY <name> ON <table> ...`
             self.parse_create_postgres_policy()
@@ -5199,6 +5202,157 @@ impl<'a> Parser<'a> {
         } else {
             self.index = start; // not a row-level-security toggle; revert
             Ok(None)
+        }
+    }
+
+    /// Parse a SQL Server `CREATE SECURITY POLICY`. `SECURITY POLICY` consumed.
+    /// <https://learn.microsoft.com/en-us/sql/t-sql/statements/create-security-policy-transact-sql>
+    fn parse_create_security_policy(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_object_name(false)?;
+        let predicates = self.parse_comma_separated(Parser::parse_security_policy_predicate)?;
+        let (state, schemabinding) = self.parse_security_policy_with_options()?;
+        let not_for_replication =
+            self.parse_keywords(&[Keyword::NOT, Keyword::FOR, Keyword::REPLICATION]);
+        Ok(Statement::CreateSecurityPolicy {
+            name,
+            predicates,
+            state,
+            schemabinding,
+            not_for_replication,
+        })
+    }
+
+    /// Parse a SQL Server `ALTER SECURITY POLICY`. `SECURITY POLICY` consumed.
+    /// <https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-security-policy-transact-sql>
+    fn parse_alter_security_policy(&mut self) -> Result<Statement, ParserError> {
+        let name = self.parse_object_name(false)?;
+        // Predicates are optional in ALTER (e.g. `ALTER SECURITY POLICY p WITH (STATE = ON)`).
+        let predicates = if matches!(
+            self.peek_token_kind(),
+            Token::Word(w) if matches!(w.keyword, Keyword::ADD | Keyword::ALTER | Keyword::DROP)
+        ) {
+            self.parse_comma_separated(Parser::parse_security_policy_predicate)?
+        } else {
+            vec![]
+        };
+        let (state, _schemabinding) = self.parse_security_policy_with_options()?;
+        let not_for_replication =
+            self.parse_keywords(&[Keyword::NOT, Keyword::FOR, Keyword::REPLICATION]);
+        Ok(Statement::AlterSecurityPolicy {
+            name,
+            predicates,
+            state,
+            not_for_replication,
+        })
+    }
+
+    /// Parse one `{ ADD | ALTER | DROP } { FILTER | BLOCK } PREDICATE [<tvf>(args)]
+    /// ON <table> [<block_dml>]` clause.
+    fn parse_security_policy_predicate(&mut self) -> Result<SecurityPolicyPredicate, ParserError> {
+        let op = if self.parse_keyword(Keyword::ADD) {
+            SecurityPolicyPredicateOp::Add
+        } else if self.parse_keyword(Keyword::ALTER) {
+            SecurityPolicyPredicateOp::Alter
+        } else if self.parse_keyword(Keyword::DROP) {
+            SecurityPolicyPredicateOp::Drop
+        } else {
+            return self.expected("ADD, ALTER or DROP", self.peek_token());
+        };
+        let kind = if self.parse_keyword(Keyword::FILTER) {
+            SecurityPolicyPredicateKind::Filter
+        } else if self.parse_keyword(Keyword::BLOCK) {
+            SecurityPolicyPredicateKind::Block
+        } else {
+            return self.expected("FILTER or BLOCK", self.peek_token());
+        };
+        if !self.parse_word_ci("PREDICATE") {
+            return self.expected("PREDICATE", self.peek_token());
+        }
+        // DROP has no function/args; ADD/ALTER carry `<tvf>(<args>)`.
+        let (function, args) = if op == SecurityPolicyPredicateOp::Drop {
+            (None, vec![])
+        } else {
+            let function = self.parse_object_name(false)?;
+            self.expect_token(&Token::LParen)?;
+            let args = self.parse_comma_separated(|p| p.parse_expr())?;
+            self.expect_token(&Token::RParen)?;
+            (Some(function), args)
+        };
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+        let block_dml = self.parse_optional_security_policy_block_dml();
+        Ok(SecurityPolicyPredicate {
+            op,
+            kind,
+            function,
+            args,
+            table_name,
+            block_dml,
+        })
+    }
+
+    /// `AFTER { INSERT | UPDATE } | BEFORE { UPDATE | DELETE }` on a BLOCK predicate.
+    fn parse_optional_security_policy_block_dml(&mut self) -> Option<SecurityPolicyBlockDml> {
+        if self.parse_keyword(Keyword::AFTER) {
+            if self.parse_keyword(Keyword::INSERT) {
+                Some(SecurityPolicyBlockDml::AfterInsert)
+            } else if self.parse_keyword(Keyword::UPDATE) {
+                Some(SecurityPolicyBlockDml::AfterUpdate)
+            } else {
+                self.prev_token();
+                None
+            }
+        } else if self.parse_keyword(Keyword::BEFORE) {
+            if self.parse_keyword(Keyword::UPDATE) {
+                Some(SecurityPolicyBlockDml::BeforeUpdate)
+            } else if self.parse_keyword(Keyword::DELETE) {
+                Some(SecurityPolicyBlockDml::BeforeDelete)
+            } else {
+                self.prev_token();
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// `WITH ( STATE = {ON|OFF} [, SCHEMABINDING = {ON|OFF}] )`. Returns
+    /// `(state, schemabinding)`.
+    fn parse_security_policy_with_options(
+        &mut self,
+    ) -> Result<(Option<bool>, Option<bool>), ParserError> {
+        if !self.parse_keyword(Keyword::WITH) {
+            return Ok((None, None));
+        }
+        self.expect_token(&Token::LParen)?;
+        let mut state = None;
+        let mut schemabinding = None;
+        loop {
+            if self.parse_word_ci("STATE") {
+                self.expect_token(&Token::Eq)?;
+                state = Some(self.parse_on_off()?);
+            } else if self.parse_word_ci("SCHEMABINDING") {
+                self.expect_token(&Token::Eq)?;
+                schemabinding = Some(self.parse_on_off()?);
+            } else {
+                return self.expected("STATE or SCHEMABINDING", self.peek_token());
+            }
+            if !self.consume_token(&Token::Comma) {
+                break;
+            }
+        }
+        self.expect_token(&Token::RParen)?;
+        Ok((state, schemabinding))
+    }
+
+    /// Parse `ON` (true) or `OFF` (false); OFF isn't a reserved keyword.
+    fn parse_on_off(&mut self) -> Result<bool, ParserError> {
+        if self.parse_keyword(Keyword::ON) {
+            Ok(true)
+        } else if self.parse_word_ci("OFF") {
+            Ok(false)
+        } else {
+            self.expected("ON or OFF", self.peek_token())
         }
     }
 
@@ -6951,6 +7105,13 @@ impl<'a> Parser<'a> {
             if let Some(stmt) = self.maybe_parse(|p| p.parse_drop_row_access_policy()) {
                 return Ok(stmt);
             }
+        }
+
+        // SQL Server `DROP SECURITY POLICY [IF EXISTS] <name>`.
+        if !temporary && self.parse_keywords(&[Keyword::SECURITY, Keyword::POLICY]) {
+            let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+            let name = self.parse_object_name(false)?;
+            return Ok(Statement::DropSecurityPolicy { if_exists, name });
         }
 
         // PostgreSQL `DROP POLICY [IF EXISTS] <name> ON <table> [CASCADE|RESTRICT]`.
@@ -8851,6 +9012,16 @@ impl<'a> Parser<'a> {
                 Token::DollarQuotedString(s) => Ok(Some(ColumnOption::Comment(s.value))),
                 _ => self.expected("string", next_token),
             }
+        } else if self.parse_word_ci("MASKED") {
+            // SQL Server dynamic data masking: `MASKED WITH (FUNCTION = '<mask>')`.
+            // https://learn.microsoft.com/en-us/sql/relational-databases/security/dynamic-data-masking
+            self.expect_keyword(Keyword::WITH)?;
+            self.expect_token(&Token::LParen)?;
+            self.expect_keyword(Keyword::FUNCTION)?;
+            self.expect_token(&Token::Eq)?;
+            let function = self.parse_literal_string()?;
+            self.expect_token(&Token::RParen)?;
+            Ok(Some(ColumnOption::MaskedWith { function }))
         } else if self.parse_keyword(Keyword::NULL) {
             Ok(Some(ColumnOption::Null))
         } else if self.parse_keyword(Keyword::DEFAULT) {
@@ -10230,6 +10401,10 @@ impl<'a> Parser<'a> {
                 only: false,
                 operations,
             });
+        }
+        // SQL Server `ALTER SECURITY POLICY <name> ...`.
+        if self.parse_keywords(&[Keyword::SECURITY, Keyword::POLICY]) {
+            return self.parse_alter_security_policy();
         }
         // PostgreSQL `ALTER POLICY <name> ON <table> ...`.
         if self.parse_keyword(Keyword::POLICY) {
