@@ -3139,6 +3139,27 @@ fn test_snowflake_create_dynamic_table() {
 }
 
 #[test]
+fn test_snowflake_create_dynamic_table_storage_lifecycle_policy() {
+    // CREATE DYNAMIC TABLE ... WITH STORAGE LIFECYCLE POLICY <name> ON (cols) AS
+    // <query>. The storage clause is consumed opaquely; the AS query lineage
+    // (source table + columns) must survive.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+    let sql = "CREATE DYNAMIC TABLE dt_orders \
+        TARGET_LAG = '1 minute' WAREHOUSE = transform_wh \
+        WITH STORAGE LIFECYCLE POLICY expire_after_1w ON (order_date) \
+        AS SELECT order_id, order_date FROM raw_orders";
+    match snowflake().parse_sql_statements(sql).unwrap().remove(0) {
+        Statement::CreateTable { dynamic, query, .. } => {
+            assert!(dynamic);
+            let q = query.expect("AS query should be preserved");
+            assert!(q.to_string().contains("raw_orders"));
+            assert!(q.to_string().contains("order_id"));
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_snowflake_create_dynamic_table_full_options() {
     let sql = "CREATE DYNAMIC TABLE d TARGET_LAG = DOWNSTREAM WAREHOUSE = wh REFRESH_MODE = INCREMENTAL INITIALIZE = ON_CREATE AS SELECT * FROM t";
     let stmt = snowflake().parse_sql_statements(sql).unwrap().remove(0);

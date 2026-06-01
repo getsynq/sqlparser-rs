@@ -7579,6 +7579,28 @@ impl<'a> Parser<'a> {
                         self.expect_token(&Token::RParen)?;
                     }
                     continue;
+                } else if with
+                    && matches!(self.peek_token_kind(), Token::Word(w) if w.value.eq_ignore_ascii_case("STORAGE"))
+                {
+                    // Snowflake Dynamic Table: `WITH STORAGE LIFECYCLE POLICY
+                    // <name> ON (cols)`. Mirrors ROW ACCESS POLICY above —
+                    // consume the clause; the ON columns are the table's own
+                    // outputs, so no extra lineage edge. STORAGE / LIFECYCLE /
+                    // POLICY aren't reserved keywords, so skip by value up to ON.
+                    // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+                    self.next_token(); // STORAGE
+                    while !matches!(self.peek_token_kind(), Token::EOF)
+                        && !matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ON)
+                        && !matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::AS)
+                    {
+                        self.next_token();
+                    }
+                    if self.parse_keyword(Keyword::ON) {
+                        self.expect_token(&Token::LParen)?;
+                        let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
+                        self.expect_token(&Token::RParen)?;
+                    }
+                    continue;
                 } else if with && self.parse_optional_tag_clause() {
                     continue;
                 } else if with {
