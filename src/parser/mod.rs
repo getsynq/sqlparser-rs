@@ -7552,59 +7552,34 @@ impl<'a> Parser<'a> {
         let mut on_commit: Option<OnCommit> = None;
         let mut strict = false;
         let mut inherits: Option<Vec<ObjectName>> = None;
+        let mut table_policies: Vec<TablePolicy> = vec![];
 
         loop {
-            // [WITH] ROW ACCESS POLICY <policy_name> ON (<col>, ...) (Snowflake)
-            // and [WITH] TAG (...). Handled before WITH (...) options so the
-            // WITH prefix doesn't force parse_options to consume LParen.
+            // Table-level security/governance policy applications (Snowflake),
+            // each with an optional `WITH` prefix. Handled before the WITH (...)
+            // options so the prefix doesn't force parse_options to consume LParen.
+            //   [WITH] ROW ACCESS POLICY <name> ON (cols)
+            //   [WITH] AGGREGATION POLICY <name> [ENTITY KEY (cols)]
+            //   [WITH] JOIN POLICY <name> [ALLOWED JOIN KEYS (cols)]
+            //   [WITH] STORAGE LIFECYCLE POLICY <name> ON (cols)  (dynamic tables)
+            //   [WITH] TAG (...)
             // https://docs.snowflake.com/en/sql-reference/sql/create-table
-            if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
-                let _policy = self.parse_object_name(false)?;
-                // ON (cols) is optional — Snowflake's GET_DDL omits it when the caller
-                // lacks privilege to see the policy ("WITH ROW ACCESS POLICY unknown_policy").
-                if self.parse_keyword(Keyword::ON) {
-                    self.expect_token(&Token::LParen)?;
-                    let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                    self.expect_token(&Token::RParen)?;
-                }
+            // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+            if let Some(policy) = self.maybe_parse_table_policy(false)? {
+                table_policies.push(policy);
                 continue;
             }
             {
                 let with = self.parse_keyword(Keyword::WITH);
-                if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
-                    let _policy = self.parse_object_name(false)?;
-                    if self.parse_keyword(Keyword::ON) {
-                        self.expect_token(&Token::LParen)?;
-                        let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                        self.expect_token(&Token::RParen)?;
+                if with {
+                    if let Some(policy) = self.maybe_parse_table_policy(true)? {
+                        table_policies.push(policy);
+                        continue;
+                    } else if self.parse_optional_tag_clause() {
+                        continue;
+                    } else {
+                        self.prev_token();
                     }
-                    continue;
-                } else if with
-                    && matches!(self.peek_token_kind(), Token::Word(w) if w.value.eq_ignore_ascii_case("STORAGE"))
-                {
-                    // Snowflake Dynamic Table: `WITH STORAGE LIFECYCLE POLICY
-                    // <name> ON (cols)`. Mirrors ROW ACCESS POLICY above —
-                    // consume the clause; the ON columns are the table's own
-                    // outputs, so no extra lineage edge. STORAGE / LIFECYCLE /
-                    // POLICY aren't reserved keywords, so skip by value up to ON.
-                    // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
-                    self.next_token(); // STORAGE
-                    while !matches!(self.peek_token_kind(), Token::EOF)
-                        && !matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::ON)
-                        && !matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::AS)
-                    {
-                        self.next_token();
-                    }
-                    if self.parse_keyword(Keyword::ON) {
-                        self.expect_token(&Token::LParen)?;
-                        let _cols = self.parse_comma_separated(|p| p.parse_identifier(false))?;
-                        self.expect_token(&Token::RParen)?;
-                    }
-                    continue;
-                } else if with && self.parse_optional_tag_clause() {
-                    continue;
-                } else if with {
-                    self.prev_token();
                 }
             }
 
@@ -8120,6 +8095,7 @@ impl<'a> Parser<'a> {
             .copy_grants(copy_grants)
             .location(location)
             .inherits(inherits)
+            .table_policies(table_policies)
             .build())
     }
 
@@ -9110,6 +9086,73 @@ impl<'a> Parser<'a> {
     /// Skip an optional `TAG (qualified_name = 'value', ...)` clause (Snowflake).
     /// Consumes the TAG keyword and the parenthesized list if present.
     /// Returns true if a TAG clause was consumed.
+    /// Try to parse a table-level Snowflake security/governance policy
+    /// application (`ROW ACCESS` / `AGGREGATION` / `JOIN` / `STORAGE LIFECYCLE
+    /// POLICY`). `with` records whether the optional `WITH` keyword was already
+    /// consumed by the caller, so the application round-trips. Returns `None`
+    /// (without consuming tokens beyond a probe) when the next tokens don't
+    /// introduce a table policy.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-table>
+    fn maybe_parse_table_policy(&mut self, with: bool) -> Result<Option<TablePolicy>, ParserError> {
+        let kind = if self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS, Keyword::POLICY]) {
+            TablePolicyKind::RowAccess
+        } else if self.parse_keywords(&[Keyword::AGGREGATION, Keyword::POLICY]) {
+            TablePolicyKind::Aggregation
+        } else if self.parse_keywords(&[Keyword::JOIN, Keyword::POLICY]) {
+            TablePolicyKind::Join
+        } else if self.peek_word_ci("STORAGE") {
+            // STORAGE / LIFECYCLE aren't reserved keywords, so match by value.
+            let idx = self.index;
+            self.next_token(); // STORAGE
+            if self.parse_word_ci("LIFECYCLE") && self.parse_keyword(Keyword::POLICY) {
+                TablePolicyKind::StorageLifecycle
+            } else {
+                self.index = idx;
+                return Ok(None);
+            }
+        } else {
+            return Ok(None);
+        };
+
+        let policy_name = self.parse_object_name(false)?;
+
+        // The keyword introducing the (optional) scoped-column list depends on
+        // the policy kind: ON / ENTITY KEY / ALLOWED JOIN KEYS.
+        let columns = match kind {
+            TablePolicyKind::RowAccess | TablePolicyKind::StorageLifecycle => {
+                if self.parse_keyword(Keyword::ON) {
+                    self.parse_parenthesized_column_list(Mandatory, false)?
+                } else {
+                    vec![]
+                }
+            }
+            TablePolicyKind::Aggregation => {
+                if self.parse_word_ci("ENTITY") {
+                    self.expect_keyword(Keyword::KEY)?;
+                    self.parse_parenthesized_column_list(Mandatory, false)?
+                } else {
+                    vec![]
+                }
+            }
+            TablePolicyKind::Join => {
+                if self.parse_word_ci("ALLOWED") {
+                    self.expect_keyword(Keyword::JOIN)?;
+                    self.expect_keyword(Keyword::KEYS)?;
+                    self.parse_parenthesized_column_list(Mandatory, false)?
+                } else {
+                    vec![]
+                }
+            }
+        };
+
+        Ok(Some(TablePolicy {
+            kind,
+            with,
+            policy_name,
+            columns,
+        }))
+    }
+
     fn parse_optional_tag_clause(&mut self) -> bool {
         if self.parse_keyword(Keyword::TAG) {
             if self.consume_token(&Token::LParen) {

@@ -39,8 +39,9 @@ pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty, ConstraintCharacteristics,
     CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType, KeyOrIndexDisplay, Partition,
-    ProcedureParam, ReferentialAction, TableConstraint, TableProjection,
-    UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation, ViewSecurity,
+    ProcedureParam, ReferentialAction, TableConstraint, TablePolicy, TablePolicyKind,
+    TableProjection, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
+    ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -1986,6 +1987,10 @@ pub enum Statement {
         partition_of: Option<ObjectName>,
         /// PostgreSQL partition bound specification (`FOR VALUES ...` or `DEFAULT`).
         partition_bound: Option<PartitionBoundSpec>,
+        /// Table-level security/governance policy applications (Snowflake
+        /// `ROW ACCESS` / `AGGREGATION` / `JOIN` / `STORAGE LIFECYCLE POLICY`).
+        /// Preserved so column-level lineage can surface which policies guard a table.
+        table_policies: Vec<TablePolicy>,
     },
     /// ```sql
     /// CREATE VIRTUAL TABLE .. USING <module_name> (<module_args>)`
@@ -3499,6 +3504,7 @@ impl fmt::Display for Statement {
                 dynamic,
                 iceberg,
                 hybrid,
+                table_policies,
             } => {
                 // We want to allow the following options
                 // Empty column list, allowed by PostgreSQL:
@@ -3736,6 +3742,9 @@ impl fmt::Display for Statement {
                 }
                 if *copy_grants {
                     write!(f, " COPY GRANTS")?;
+                }
+                for policy in table_policies {
+                    write!(f, " {policy}")?;
                 }
                 if let Some(query) = query {
                     write!(f, " AS {query}")?;
