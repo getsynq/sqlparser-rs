@@ -1786,6 +1786,10 @@ pub enum Statement {
     /// in different enums. This can be refactored later once custom dialects
     /// are allowed to have custom Statements.
     CopyIntoSnowflake {
+        /// `true` for `COPY FILES INTO <stage> FROM <stage|(query)>`
+        /// (stage-to-stage file copy); `false` for ordinary `COPY INTO`.
+        /// <https://docs.snowflake.com/en/sql-reference/sql/copy-files>
+        copy_files: bool,
         into: ObjectName,
         columns: Vec<WithSpan<Ident>>,
         from_stage: ObjectName,
@@ -4577,6 +4581,7 @@ impl fmt::Display for Statement {
                 Ok(())
             }
             Statement::CopyIntoSnowflake {
+                copy_files,
                 into,
                 columns,
                 from_stage,
@@ -4591,7 +4596,11 @@ impl fmt::Display for Statement {
                 validation_mode,
                 on_error,
             } => {
-                write!(f, "COPY INTO {}", into)?;
+                if *copy_files {
+                    write!(f, "COPY FILES INTO {}", into)?;
+                } else {
+                    write!(f, "COPY INTO {}", into)?;
+                }
                 if !columns.is_empty() {
                     write!(f, " ({})", display_comma_separated(columns))?;
                 }
