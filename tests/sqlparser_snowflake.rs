@@ -2124,35 +2124,52 @@ fn test_column_with_masking() {
 
 #[test]
 fn test_table_with_tag() {
+    // Table-level TAG associations are now preserved in the AST (canonical
+    // form uses spaces around `=`). https://docs.snowflake.com/en/sql-reference/sql/create-table
+
     // Simple tag name
     snowflake().one_statement_parses_to(
         "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG='#UNKNOWN_VALUE')",
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (UNKNOWN_TAG = '#UNKNOWN_VALUE')"
     );
 
-    // Schema-qualified tag name
-    snowflake().one_statement_parses_to(
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (TAG_SCHEMA.DOMAIN_MAPPING='marketing')",
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    // Schema-qualified and fully-qualified tag names round-trip.
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (TAG_SCHEMA.DOMAIN_MAPPING = 'marketing')",
+    );
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (PROD.TAG_SCHEMA.DOMAIN_MAPPING = 'marketing')",
     );
 
-    // Fully-qualified tag name (database.schema.tag)
-    snowflake().one_statement_parses_to(
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (PROD.TAG_SCHEMA.DOMAIN_MAPPING='marketing')",
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    // Multiple tags with different qualification levels.
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (SIMPLE_TAG = 'value1', SCHEMA.TAG_NAME = 'value2', DB.SCHEMA.TAG_NAME = 'value3')",
     );
 
-    // Multiple tags with different qualification levels
-    snowflake().one_statement_parses_to(
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (SIMPLE_TAG='value1', SCHEMA.TAG_NAME='value2', DB.SCHEMA.TAG_NAME='value3')",
-        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216))"
+    // Real-world example from the issue (anonymized).
+    snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE SCHEMA.DERIVED_TABLE (USER_ID VARCHAR(36), REPORTING_DATE TIMESTAMP_NTZ(9)) WITH TAG (STAGE.TAG_SCHEMA.DOMAIN_MAPPING = 'analytics')",
     );
 
-    // Real-world example from the issue (anonymized)
+    // Bare TAG (no WITH prefix) is accepted and normalized to `WITH TAG`.
     snowflake().one_statement_parses_to(
-        "CREATE OR REPLACE TABLE SCHEMA.DERIVED_TABLE (USER_ID VARCHAR(36), REPORTING_DATE TIMESTAMP_NTZ(9)) WITH TAG (STAGE.TAG_SCHEMA.DOMAIN_MAPPING='analytics')",
-        "CREATE OR REPLACE TABLE SCHEMA.DERIVED_TABLE (USER_ID VARCHAR(36), REPORTING_DATE TIMESTAMP_NTZ(9))"
+        "CREATE TABLE t (id VARCHAR) TAG (k = 'v')",
+        "CREATE TABLE t (id VARCHAR) WITH TAG (k = 'v')",
     );
+
+    // The associations are exposed in the AST (tag name + value).
+    match snowflake().verified_stmt(
+        "CREATE OR REPLACE TABLE TBL (ID VARCHAR(16777216)) WITH TAG (SCHEMA.DOMAIN = 'marketing', COST_CENTER = 'eng')",
+    ) {
+        Statement::CreateTable { table_tags, .. } => {
+            assert_eq!(table_tags.len(), 2);
+            assert_eq!(table_tags[0].name.to_string(), "SCHEMA.DOMAIN");
+            assert_eq!(table_tags[0].value, "marketing");
+            assert_eq!(table_tags[1].name.to_string(), "COST_CENTER");
+            assert_eq!(table_tags[1].value, "eng");
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
 }
 
 #[test]
@@ -2383,14 +2400,14 @@ fn parse_create_table_with_row_access_policy() {
         "CREATE TABLE t1 (id VARCHAR, dept VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
     );
     snowflake().verified_stmt("CREATE TABLE t1 (id VARCHAR) ROW ACCESS POLICY p1 ON (id)");
-    // TAG (...) is still consumed without an AST node — drop it on round-trip.
-    snowflake().one_statement_parses_to(
+    // ROW ACCESS POLICY and TAG together both round-trip (policies render
+    // before tags, so a tag-first input is reordered to the canonical form).
+    snowflake().verified_stmt(
         "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id) WITH TAG (k = 'v')",
-        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
     );
     snowflake().one_statement_parses_to(
         "CREATE TABLE t1 (id VARCHAR) WITH TAG (k = 'v') WITH ROW ACCESS POLICY p1 ON (id)",
-        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id)",
+        "CREATE TABLE t1 (id VARCHAR) WITH ROW ACCESS POLICY p1 ON (id) WITH TAG (k = 'v')",
     );
     // Snowflake's GET_DDL omits `ON (cols)` when the caller lacks privilege to
     // see the policy — it returns `WITH ROW ACCESS POLICY unknown_policy` only.

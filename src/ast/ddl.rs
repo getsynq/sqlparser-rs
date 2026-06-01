@@ -1413,6 +1413,30 @@ pub struct TablePolicy {
     pub columns: Vec<WithSpan<Ident>>,
 }
 
+/// A tag association `<tag_name> = '<value>'` applied to a table, view, or
+/// column (Snowflake `[ WITH ] TAG ( <tag_name> = '<value>' [ , ... ] )`).
+///
+/// [Snowflake]: https://docs.snowflake.com/en/sql-reference/sql/create-table
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct Tag {
+    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+    pub name: ObjectName,
+    pub value: String,
+}
+
+impl fmt::Display for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} = '{}'",
+            self.name,
+            escape_single_quote_string(&self.value)
+        )
+    }
+}
+
 /// The kind of a table-level [`TablePolicy`] application. Each kind selects the
 /// keyword used to introduce its column list (`ON`, `ENTITY KEY`, `ALLOWED JOIN
 /// KEYS`).

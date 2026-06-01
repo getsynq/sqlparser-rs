@@ -7517,19 +7517,6 @@ impl<'a> Parser<'a> {
         let hive_formats = self.parse_hive_formats()?;
         // PostgreSQL supports `WITH ( options )`, before `AS`
 
-        let _with_tag = if self.parse_keywords(&[Keyword::WITH, Keyword::TAG]) {
-            self.expect_token(&Token::LParen)?;
-            if !self.consume_token(&Token::RParen) {
-                let tags = self.parse_comma_separated(Parser::parse_sql_option)?;
-                self.expect_token(&Token::RParen)?;
-                Some(tags)
-            } else {
-                Some(vec![])
-            }
-        } else {
-            None
-        };
-
         // Parse CREATE TABLE clauses that can appear in any order after column definitions.
         // Different dialects (Snowflake, ClickHouse, BigQuery, Databricks, Redshift) allow
         // these clauses in varying orders, so we use a loop to flexibly accept them.
@@ -7553,6 +7540,7 @@ impl<'a> Parser<'a> {
         let mut strict = false;
         let mut inherits: Option<Vec<ObjectName>> = None;
         let mut table_policies: Vec<TablePolicy> = vec![];
+        let mut table_tags: Vec<Tag> = vec![];
 
         loop {
             // Table-level security/governance policy applications (Snowflake),
@@ -7575,7 +7563,8 @@ impl<'a> Parser<'a> {
                     if let Some(policy) = self.maybe_parse_table_policy(true)? {
                         table_policies.push(policy);
                         continue;
-                    } else if self.parse_optional_tag_clause() {
+                    } else if let Some(tags) = self.maybe_parse_tags()? {
+                        table_tags.extend(tags);
                         continue;
                     } else {
                         self.prev_token();
@@ -7737,8 +7726,9 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // TAG (...) (Snowflake)
-            if self.parse_optional_tag_clause() {
+            // TAG (...) (Snowflake), bare (no WITH prefix)
+            if let Some(tags) = self.maybe_parse_tags()? {
+                table_tags.extend(tags);
                 continue;
             }
 
@@ -8096,6 +8086,7 @@ impl<'a> Parser<'a> {
             .location(location)
             .inherits(inherits)
             .table_policies(table_policies)
+            .table_tags(table_tags)
             .build())
     }
 
@@ -9153,6 +9144,29 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    /// Parse a Snowflake `TAG ( <tag_name> = '<value>' [ , ... ] )` clause into
+    /// real AST nodes (tag name + string value). The optional `WITH` prefix is
+    /// consumed by the caller. Returns `None` (without consuming tokens) when
+    /// the next token isn't `TAG`.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-table>
+    fn maybe_parse_tags(&mut self) -> Result<Option<Vec<Tag>>, ParserError> {
+        if !self.parse_keyword(Keyword::TAG) {
+            return Ok(None);
+        }
+        self.expect_token(&Token::LParen)?;
+        let tags = self.parse_comma_separated(|p| {
+            let name = p.parse_object_name(false)?;
+            p.expect_token(&Token::Eq)?;
+            let value = p.parse_literal_string()?;
+            Ok(Tag { name, value })
+        })?;
+        self.expect_token(&Token::RParen)?;
+        Ok(Some(tags))
+    }
+
+    /// Consume and discard a `TAG (...)` clause via balanced-paren skipping.
+    /// Used at the view / view-column sites that don't yet capture tags in the
+    /// AST; the CREATE TABLE sites use [`Self::maybe_parse_tags`] instead.
     fn parse_optional_tag_clause(&mut self) -> bool {
         if self.parse_keyword(Keyword::TAG) {
             if self.consume_token(&Token::LParen) {
