@@ -226,48 +226,46 @@ pub fn parse_copy_into(parser: &mut Parser) -> Result<Statement, ParserError> {
         // check if data load transformations are present
         match parser.next_token().token {
             Token::LParen => {
-                // Distinguish between:
-                //   (a) COPY INTO <table> FROM (SELECT $1, ... FROM @stage)   -- load transformation
-                //   (b) COPY INTO @stage FROM (<query>)                       -- unload from query
-                // The transformation form begins `SELECT <placeholder>` or
-                // `SELECT <alias>.<placeholder>`. Anything else is a full query.
-                let starts_with_select = matches!(
-                    &parser.peek_token().token,
-                    Token::Word(w) if w.keyword == Keyword::SELECT
-                );
-                let is_transformation = if starts_with_select {
-                    match parser.peek_nth_token(1).token {
-                        Token::Placeholder(_) => true,
-                        Token::Word(_) => {
-                            matches!(parser.peek_nth_token(2).token, Token::Period)
-                                && matches!(parser.peek_nth_token(3).token, Token::Placeholder(_))
-                        }
-                        _ => false,
-                    }
-                } else {
-                    false
-                };
-
-                if is_transformation {
-                    parser.expect_keyword(Keyword::SELECT)?;
-                    from_transformations = parse_select_items_for_data_load(parser)?;
-
-                    parser.expect_keyword(Keyword::FROM)?;
-                    from_stage = parser.parse_object_name(true)?;
-                    stage_params = parse_stage_params(parser)?;
-
-                    // as
-                    from_stage_alias = if parser.parse_keyword(Keyword::AS) {
-                        Some(match parser.next_token().token {
+                // A parenthesized source is one of:
+                //   (a) a load transformation: `COPY INTO <table> FROM
+                //       (SELECT $1, $1:el, ... FROM <stage> [stage_params])`
+                //   (b) an unload / full query: `COPY INTO @stage FROM (<query>)`
+                //
+                // Prefer the structured transformation grammar — it also
+                // captures inline stage params (STORAGE_INTEGRATION,
+                // FILE_FORMAT, ...) that a normal FROM clause can't express.
+                // But it only understands simple staged-column items (`$1`,
+                // `alias.$1`, `$1:el`); projections using array/JSON subscripts
+                // (`$1[0]`) or wrapping expressions (`NULLIF($1, ...)`) are not
+                // representable. When the structured parse fails we backtrack
+                // and parse the body as an ordinary query so those forms
+                // resolve (and feed column lineage downstream).
+                let transformation = parser.maybe_parse(|p| {
+                    p.expect_keyword(Keyword::SELECT)?;
+                    let transformations = parse_select_items_for_data_load(p)?;
+                    p.expect_keyword(Keyword::FROM)?;
+                    let stage = p.parse_object_name(true)?;
+                    let params = parse_stage_params(p)?;
+                    let alias = if p.parse_keyword(Keyword::AS) {
+                        Some(match p.next_token().token {
                             Token::Word(w) => Ok(Ident::new(w.value)),
-                            _ => parser.expected("stage alias", parser.peek_token()),
+                            _ => p.expected("stage alias", p.peek_token()),
                         }?)
                     } else {
                         None
                     };
-                    parser.expect_token(&Token::RParen)?;
+                    p.expect_token(&Token::RParen)?;
+                    Ok((transformations, stage, params, alias))
+                });
+
+                if let Some((transformations, stage, params, alias)) = transformation {
+                    from_transformations = transformations;
+                    from_stage = stage;
+                    stage_params = params;
+                    from_stage_alias = alias;
                 } else {
-                    // Full query as source (unload).
+                    // Full query source (unload, or a load transformation whose
+                    // projection the structured grammar can't represent).
                     from_query = Some(Box::new(parser.parse_query()?));
                     parser.expect_token(&Token::RParen)?;
                 }
