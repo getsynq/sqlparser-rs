@@ -6765,6 +6765,15 @@ impl<'a> Parser<'a> {
         let temporary = dialect_of!(self is MySqlDialect | GenericDialect)
             && self.parse_keyword(Keyword::TEMPORARY);
 
+        // BigQuery row-level security drop: `DROP [ALL] ROW ACCESS POLICY[IES]
+        // ... ON <table>`. The required `ON <table>` makes this revert for the
+        // Snowflake `DROP ROW ACCESS POLICY <name>` form (handled below).
+        if !temporary {
+            if let Some(stmt) = self.maybe_parse(|p| p.parse_drop_row_access_policy()) {
+                return Ok(stmt);
+            }
+        }
+
         let object_type = if self.parse_keyword(Keyword::TABLE) {
             ObjectType::Table
         } else if self.parse_keywords(&[Keyword::MATERIALIZED, Keyword::VIEW]) {
@@ -6838,6 +6847,40 @@ impl<'a> Parser<'a> {
             purge,
             temporary,
             concurrently,
+        })
+    }
+
+    /// Parse a BigQuery `DROP [ALL] ROW ACCESS POLICY[IES] ... ON <table>`.
+    /// Errors (so the caller's `maybe_parse` reverts) when it isn't this shape,
+    /// e.g. the Snowflake `DROP ROW ACCESS POLICY <name>` form that lacks `ON`.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language>
+    fn parse_drop_row_access_policy(&mut self) -> Result<Statement, ParserError> {
+        let all = self.parse_keyword(Keyword::ALL);
+        if !self.parse_keywords(&[Keyword::ROW, Keyword::ACCESS]) {
+            return self.expected("ROW ACCESS after DROP [ALL]", self.peek_token());
+        }
+        // POLICY / POLICIES (plural isn't a reserved keyword).
+        if all {
+            if !self.parse_word_ci("POLICIES") {
+                return self.expected("POLICIES after DROP ALL ROW ACCESS", self.peek_token());
+            }
+        } else if !self.parse_keyword(Keyword::POLICY) {
+            return self.expected("POLICY after DROP ROW ACCESS", self.peek_token());
+        }
+        let if_exists = !all && self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+        let name = if all {
+            None
+        } else {
+            Some(self.parse_object_name(false)?)
+        };
+        // `ON <table>` is required; its absence reverts to the Snowflake form.
+        self.expect_keyword(Keyword::ON)?;
+        let table_name = self.parse_object_name(false)?;
+        Ok(Statement::DropRowAccessPolicy {
+            if_exists,
+            all,
+            name,
+            table_name,
         })
     }
 

@@ -1404,6 +1404,28 @@ fn parse_create_row_access_policy() {
     }
 }
 
+#[test]
+fn parse_drop_row_access_policy() {
+    // https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language
+    bigquery().verified_stmt("DROP ROW ACCESS POLICY my_policy ON project.dataset.t");
+    bigquery().verified_stmt("DROP ROW ACCESS POLICY IF EXISTS p ON ds.t");
+    bigquery().verified_stmt("DROP ALL ROW ACCESS POLICIES ON ds.t");
+
+    match bigquery().verified_stmt("DROP ALL ROW ACCESS POLICIES ON ds.t") {
+        Statement::DropRowAccessPolicy {
+            all,
+            name,
+            table_name,
+            ..
+        } => {
+            assert!(all);
+            assert!(name.is_none());
+            assert_eq!(table_name.to_string(), "ds.t");
+        }
+        other => panic!("expected DropRowAccessPolicy, got {other:?}"),
+    }
+}
+
 fn bigquery_unescaped() -> TestedDialects {
     TestedDialects {
         dialects: vec![Box::new(BigQueryDialect {})],
