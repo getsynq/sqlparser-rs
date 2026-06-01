@@ -6192,7 +6192,25 @@ impl<'a> Parser<'a> {
 
         let view_options = self.parse_options(Keyword::OPTIONS)?;
 
-        let copy_grants = self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]);
+        // Snowflake `CREATE OR REPLACE VIEW`: `COPY GRANTS` retains grants,
+        // `COPY TAGS` retains tags. Either (or both, any order) may appear.
+        // Only GRANTS is modeled on the AST; TAGS is consumed and discarded
+        // (no lineage impact). https://docs.snowflake.com/en/sql-reference/sql/create-view
+        let mut copy_grants = false;
+        loop {
+            if self.parse_keywords(&[Keyword::COPY, Keyword::GRANTS]) {
+                copy_grants = true;
+            } else if matches!(self.peek_token_kind(), Token::Word(w) if w.keyword == Keyword::COPY)
+                && matches!(self.peek_nth_token(1).token, Token::Word(ref w) if w.value.eq_ignore_ascii_case("TAGS"))
+            {
+                // `COPY TAGS` retained-tags marker (TAGS isn't a reserved
+                // keyword, so match it by value). No AST field — discard.
+                self.next_token();
+                self.next_token();
+            } else {
+                break;
+            }
+        }
 
         // Snowflake: COPY GRANTS can be followed by a column list (e.g., MATERIALIZED VIEW name COPY GRANTS (col1, col2, ...) AS ...)
         // If we have not yet parsed a column list, check for one here.

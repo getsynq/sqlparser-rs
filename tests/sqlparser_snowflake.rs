@@ -3846,6 +3846,27 @@ fn parse_snowflake_create_external_table_with_options() {
 }
 
 #[test]
+fn parse_snowflake_create_view_copy_tags() {
+    // Snowflake `CREATE OR REPLACE VIEW ... COPY TAGS AS ...` retains tags on
+    // replace (alongside / instead of COPY GRANTS). The clause is metadata-only;
+    // lineage comes from the AS query.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-view
+    for sql in [
+        "CREATE OR REPLACE VIEW dst1 COPY TAGS AS SELECT b AS a, a AS b FROM src1",
+        "CREATE OR REPLACE VIEW dst1 COPY GRANTS COPY TAGS AS SELECT a FROM src1",
+    ] {
+        let stmts = snowflake().parse_sql_statements(sql).unwrap();
+        assert_eq!(stmts.len(), 1, "sql: {sql}");
+        match &stmts[0] {
+            Statement::CreateView { query, .. } => {
+                assert!(query.to_string().contains("src1"), "sql: {sql}");
+            }
+            other => panic!("expected CreateView for {sql:?}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn parse_snowflake_create_schema_clone() {
     // Snowflake zero-copy clone of a schema:
     //   CREATE SCHEMA new CLONE source [AT|BEFORE (TIMESTAMP|OFFSET|STATEMENT => …)]
