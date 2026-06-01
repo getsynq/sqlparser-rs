@@ -881,6 +881,8 @@ pub struct ColumnDef {
     pub mask: Option<ObjectName>,
     pub column_location: Option<ColumnLocation>,
     pub column_policy: Option<ColumnPolicy>,
+    /// Column-level tag associations (Snowflake `[WITH] TAG (k = 'v', ...)`).
+    pub tags: Vec<Tag>,
 }
 
 impl fmt::Display for ColumnDef {
@@ -912,6 +914,10 @@ impl fmt::Display for ColumnDef {
 
         if let Some(column_policy) = &self.column_policy {
             write!(f, "{column_policy}")?;
+        }
+
+        if !self.tags.is_empty() {
+            write!(f, " WITH TAG ({})", display_comma_separated(&self.tags))?;
         }
 
         if let Some(column_location) = &self.column_location {
