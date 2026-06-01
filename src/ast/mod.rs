@@ -40,9 +40,10 @@ pub use self::ddl::{
     ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
     ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
     KeyOrIndexDisplay, Partition, PolicyArg, PolicyCommand, PolicyKind, ProcedureParam,
-    ReferentialAction, RowLevelSecurityMode, TableConstraint, TablePolicy, TablePolicyKind,
-    TableProjection, Tag, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
-    ViewSecurity,
+    ReferentialAction, RowLevelSecurityMode, SecurityPolicyBlockDml, SecurityPolicyPredicate,
+    SecurityPolicyPredicateKind, SecurityPolicyPredicateOp, TableConstraint, TablePolicy,
+    TablePolicyKind, TableProjection, Tag, UserDefinedTypeCompositeAttributeDef,
+    UserDefinedTypeRepresentation, ViewSecurity,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
 pub use self::query::{
@@ -2149,6 +2150,34 @@ pub enum Statement {
         table_name: ObjectName,
         option: Option<ReferentialAction>,
     },
+    /// ```sql
+    /// CREATE SECURITY POLICY <name>
+    ///   { ADD [FILTER|BLOCK] PREDICATE <tvf>(<args>) ON <table> [<block_dml>] } [, ...]
+    ///   [ WITH ( STATE = {ON|OFF} [, SCHEMABINDING = {ON|OFF}] ) ]
+    ///   [ NOT FOR REPLICATION ]
+    /// ```
+    /// SQL Server row-level security policy.
+    /// [T-SQL]: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-security-policy-transact-sql
+    CreateSecurityPolicy {
+        name: ObjectName,
+        predicates: Vec<SecurityPolicyPredicate>,
+        /// `WITH (STATE = {ON|OFF})`.
+        state: Option<bool>,
+        /// `SCHEMABINDING = {ON|OFF}`.
+        schemabinding: Option<bool>,
+        not_for_replication: bool,
+    },
+    /// `ALTER SECURITY POLICY <name> { ADD|ALTER|DROP ... PREDICATE ... } [, ...] [WITH (STATE=...)]`
+    /// [T-SQL]: https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-security-policy-transact-sql
+    AlterSecurityPolicy {
+        name: ObjectName,
+        predicates: Vec<SecurityPolicyPredicate>,
+        state: Option<bool>,
+        not_for_replication: bool,
+    },
+    /// `DROP SECURITY POLICY [IF EXISTS] <name>`
+    /// [T-SQL]: https://learn.microsoft.com/en-us/sql/t-sql/statements/drop-security-policy-transact-sql
+    DropSecurityPolicy { if_exists: bool, name: ObjectName },
     /// See [postgres](https://www.postgresql.org/docs/current/sql-createrole.html)
     CreateRole {
         names: Vec<ObjectName>,
@@ -4042,6 +4071,60 @@ impl fmt::Display for Statement {
                 }
                 write!(f, " FILTER USING ({filter_using})")?;
                 Ok(())
+            }
+            Statement::CreateSecurityPolicy {
+                name,
+                predicates,
+                state,
+                schemabinding,
+                not_for_replication,
+            } => {
+                write!(f, "CREATE SECURITY POLICY {name}")?;
+                if !predicates.is_empty() {
+                    write!(f, " {}", display_comma_separated(predicates))?;
+                }
+                let mut with_opts: Vec<String> = vec![];
+                if let Some(state) = state {
+                    with_opts.push(format!("STATE = {}", if *state { "ON" } else { "OFF" }));
+                }
+                if let Some(sb) = schemabinding {
+                    with_opts.push(format!(
+                        "SCHEMABINDING = {}",
+                        if *sb { "ON" } else { "OFF" }
+                    ));
+                }
+                if !with_opts.is_empty() {
+                    write!(f, " WITH ({})", with_opts.join(", "))?;
+                }
+                if *not_for_replication {
+                    write!(f, " NOT FOR REPLICATION")?;
+                }
+                Ok(())
+            }
+            Statement::AlterSecurityPolicy {
+                name,
+                predicates,
+                state,
+                not_for_replication,
+            } => {
+                write!(f, "ALTER SECURITY POLICY {name}")?;
+                if !predicates.is_empty() {
+                    write!(f, " {}", display_comma_separated(predicates))?;
+                }
+                if let Some(state) = state {
+                    write!(f, " WITH (STATE = {})", if *state { "ON" } else { "OFF" })?;
+                }
+                if *not_for_replication {
+                    write!(f, " NOT FOR REPLICATION")?;
+                }
+                Ok(())
+            }
+            Statement::DropSecurityPolicy { if_exists, name } => {
+                write!(
+                    f,
+                    "DROP SECURITY POLICY {}{name}",
+                    if *if_exists { "IF EXISTS " } else { "" }
+                )
             }
             Statement::CreatePostgresPolicy {
                 name,
