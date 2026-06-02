@@ -2953,7 +2953,16 @@ pub enum Statement {
     /// matters for lineage; everything after `FROM FILES` is captured as
     /// opaque text since FROM FILES options carry no table refs.
     /// See: <https://cloud.google.com/bigquery/docs/reference/standard-sql/load-statements>
+    ///
+    /// Also covers the Hive/Spark/Databricks form
+    /// `LOAD DATA [LOCAL] INPATH '<path>' [OVERWRITE] INTO TABLE <target> [PARTITION ...]`,
+    /// where `inpath` is the file source and `target` is the loaded table.
+    /// See: <https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-Loadingfilesintotables>
     LoadData {
+        /// Hive `LOCAL` modifier (load from the client filesystem).
+        local: bool,
+        /// Hive `INPATH '<path>'` file source, if present.
+        inpath: Option<String>,
         overwrite: bool,
         target: ObjectName,
         rest: String,
@@ -5212,17 +5221,33 @@ impl fmt::Display for Statement {
                 write!(f, "EXPORT DATA OPTIONS ({options}) AS {query}")
             }
             Statement::LoadData {
+                local,
+                inpath,
                 overwrite,
                 target,
                 rest,
             } => {
                 write!(f, "LOAD DATA ")?;
-                if *overwrite {
-                    write!(f, "OVERWRITE ")?;
+                if let Some(inpath) = inpath {
+                    // Hive/Spark form: LOAD DATA [LOCAL] INPATH '<path>'
+                    // [OVERWRITE] INTO TABLE <target>.
+                    if *local {
+                        write!(f, "LOCAL ")?;
+                    }
+                    write!(f, "INPATH '{inpath}' ")?;
+                    if *overwrite {
+                        write!(f, "OVERWRITE ")?;
+                    }
+                    write!(f, "INTO TABLE {target}")?;
                 } else {
-                    write!(f, "INTO ")?;
+                    // BigQuery form: LOAD DATA { OVERWRITE | INTO } <target>.
+                    if *overwrite {
+                        write!(f, "OVERWRITE ")?;
+                    } else {
+                        write!(f, "INTO ")?;
+                    }
+                    write!(f, "{target}")?;
                 }
-                write!(f, "{target}")?;
                 if !rest.is_empty() {
                     write!(f, " {rest}")?;
                 }

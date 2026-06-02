@@ -930,28 +930,42 @@ impl<'a> Parser<'a> {
                 Keyword::INSTALL if dialect_of!(self is DuckDbDialect | GenericDialect) => {
                     Ok(self.parse_install()?)
                 }
-                // BigQuery `LOAD DATA [OVERWRITE | INTO] <target> ... FROM FILES (...)`.
-                // Recognize before the DuckDB `LOAD <extension>` branch so the
+                // `LOAD DATA ...` in two shapes, both ending at a target table:
+                //   BigQuery: LOAD DATA [OVERWRITE | INTO] <target> ... FROM FILES (...)
+                //   Hive/Spark/Databricks:
+                //     LOAD DATA [LOCAL] INPATH '<path>' [OVERWRITE] INTO TABLE <target> [PARTITION ...]
+                // Recognized before the DuckDB `LOAD <extension>` branch so the
                 // `DATA` keyword distinguishes the two forms.
                 Keyword::LOAD
-                    if dialect_of!(self is BigQueryDialect | GenericDialect)
+                    if dialect_of!(self is BigQueryDialect | GenericDialect | HiveDialect | DatabricksDialect)
                         && matches!(
                             self.peek_token_kind(),
                             Token::Word(w) if w.keyword == Keyword::DATA
                         ) =>
                 {
                     self.expect_keyword(Keyword::DATA)?;
-                    let overwrite = if self.parse_keyword(Keyword::OVERWRITE) {
-                        true
+                    // Hive `LOCAL INPATH '<path>'` source (INPATH is not a
+                    // reserved keyword, so match it by value).
+                    let local = self.parse_keyword(Keyword::LOCAL);
+                    let inpath = if matches!(
+                        self.peek_token_kind(),
+                        Token::Word(w) if w.value.eq_ignore_ascii_case("INPATH")
+                    ) {
+                        self.next_token(); // INPATH
+                        Some(self.parse_literal_string()?)
                     } else {
-                        self.expect_keyword(Keyword::INTO)?;
-                        false
+                        None
                     };
+                    let overwrite = self.parse_keyword(Keyword::OVERWRITE);
+                    // `INTO` is present in both Hive (`INTO TABLE`) and BigQuery
+                    // (`INTO <target>`); BigQuery's `OVERWRITE` form omits it.
+                    let _ = self.parse_keyword(Keyword::INTO);
+                    let _ = self.parse_keyword(Keyword::TABLE); // Hive: INTO TABLE
                     let target = self.parse_object_name(true)?;
                     // Everything from here to end-of-statement is opaque
                     // (column list, OPTIONS, FROM FILES, WITH PARTITION
-                    // COLUMNS …). No further lineage payload — `target` is
-                    // the only output reference.
+                    // COLUMNS, PARTITION (...) …). No further lineage payload —
+                    // `target` is the output and `inpath` the source.
                     let start = self.index;
                     while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
                     {
@@ -959,10 +973,13 @@ impl<'a> Parser<'a> {
                     }
                     let rest: String = self.tokens[start..self.index]
                         .iter()
+                        .filter(|t| !matches!(t.token, Token::Whitespace(_)))
                         .map(|t| t.token.to_string())
                         .collect::<Vec<_>>()
                         .join(" ");
                     Ok(Statement::LoadData {
+                        local,
+                        inpath,
                         overwrite,
                         target,
                         rest,
