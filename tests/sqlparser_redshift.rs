@@ -932,3 +932,131 @@ fn parse_redshift_identity_seed_step() {
         )
         .unwrap();
 }
+
+#[test]
+fn parse_create_external_table_spectrum_nested_types() {
+    // Redshift Spectrum (Hive-style) nested column types: struct<>/array<>/map<>.
+    // Column names and element types must be preserved for lineage.
+    let stmt = redshift().verified_stmt(
+        "CREATE EXTERNAL TABLE spectrum.customers (id INT, \
+         name STRUCT<given: VARCHAR(20), family: VARCHAR(20)>, \
+         phones ARRAY<VARCHAR(20)>, \
+         orders ARRAY<STRUCT<shipdate: TIMESTAMP, price: DOUBLE PRECISION>>) \
+         STORED AS PARQUET LOCATION 's3://bucket/customers/'",
+    );
+    match stmt {
+        Statement::CreateTable {
+            name,
+            columns,
+            external,
+            ..
+        } => {
+            assert!(external);
+            assert_eq!(name.to_string(), "spectrum.customers");
+            assert_eq!(columns.len(), 4);
+            // The struct column keeps its named, typed fields.
+            match &columns[1].data_type {
+                DataType::Struct(fields) => {
+                    assert_eq!(fields.len(), 2);
+                    assert_eq!(fields[0].field_name.as_ref().unwrap().to_string(), "given");
+                }
+                other => panic!("expected STRUCT, got {other:?}"),
+            }
+            assert!(matches!(columns[2].data_type, DataType::Array(_)));
+        }
+        other => panic!("expected external CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_external_table_spectrum_map_type() {
+    let stmt = redshift().verified_stmt(
+        "CREATE EXTERNAL TABLE spectrum.t (phones MAP<VARCHAR(20), VARCHAR(20)>) \
+         STORED AS PARQUET LOCATION 's3://bucket/t/'",
+    );
+    match stmt {
+        Statement::CreateTable { columns, .. } => {
+            assert!(matches!(columns[0].data_type, DataType::DatabricksMap(_)));
+        }
+        other => panic!("expected external CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_external_schema_data_catalog() {
+    let stmt = redshift().one_statement_parses_to(
+        "create external schema spectrum_schema from data catalog \
+         database 'sampledb' region 'us-west-2' \
+         iam_role 'arn:aws:iam::123456789012:role/MySpectrumRole'",
+        "CREATE EXTERNAL SCHEMA spectrum_schema FROM DATA CATALOG DATABASE 'sampledb'",
+    );
+    match stmt {
+        Statement::CreateExternalSchema {
+            if_not_exists,
+            name,
+            from,
+            database,
+            schema,
+        } => {
+            assert!(!if_not_exists);
+            assert_eq!(name.to_string(), "spectrum_schema");
+            assert_eq!(from, "DATA CATALOG");
+            assert_eq!(database.as_deref(), Some("sampledb"));
+            assert_eq!(schema, None);
+        }
+        other => panic!("expected CreateExternalSchema, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_external_schema_hive_and_redshift() {
+    match redshift().one_statement_parses_to(
+        "create external schema hive_schema from hive metastore \
+         database 'hive_db' uri '172.10.10.10' port 99 iam_role 'arn:...'",
+        "CREATE EXTERNAL SCHEMA hive_schema FROM HIVE METASTORE DATABASE 'hive_db'",
+    ) {
+        Statement::CreateExternalSchema { from, database, .. } => {
+            assert_eq!(from, "HIVE METASTORE");
+            assert_eq!(database.as_deref(), Some("hive_db"));
+        }
+        other => panic!("expected CreateExternalSchema, got {other:?}"),
+    }
+    // Federated Redshift source carries both DATABASE and SCHEMA.
+    match redshift().verified_stmt(
+        "CREATE EXTERNAL SCHEMA sales_schema FROM REDSHIFT DATABASE 'sales_db' SCHEMA 'public'",
+    ) {
+        Statement::CreateExternalSchema {
+            from,
+            database,
+            schema,
+            ..
+        } => {
+            assert_eq!(from, "REDSHIFT");
+            assert_eq!(database.as_deref(), Some("sales_db"));
+            assert_eq!(schema.as_deref(), Some("public"));
+        }
+        other => panic!("expected CreateExternalSchema, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_model_from_subquery() {
+    // Redshift ML: FROM (<query>) is the training input — the subquery's
+    // FROM/WHERE/columns must survive for lineage.
+    let stmt = redshift().one_statement_parses_to(
+        "CREATE MODEL customer_churn_auto_model \
+         FROM (SELECT state, churn FROM customer_activity WHERE record_date < '2020-01-01') \
+         TARGET churn FUNCTION ml_fn_customer_churn_auto \
+         IAM_ROLE default SETTINGS (S3_BUCKET 'amzn-s3-demo-bucket')",
+        "CREATE MODEL customer_churn_auto_model AS SELECT state, churn \
+         FROM customer_activity WHERE record_date < '2020-01-01'",
+    );
+    match stmt {
+        Statement::CreateModel { name, query, .. } => {
+            assert_eq!(name.to_string(), "customer_churn_auto_model");
+            let query = query.expect("FROM (subquery) captured as training input");
+            assert!(query.to_string().contains("FROM customer_activity"));
+        }
+        other => panic!("expected CreateModel, got {other:?}"),
+    }
+}

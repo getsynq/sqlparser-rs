@@ -2718,3 +2718,42 @@ fn parse_bigquery_at_time_zone_double_quoted_string() {
         .parse_sql_statements("SELECT ts AT TIME ZONE 'UTC'")
         .unwrap();
 }
+
+#[test]
+fn parse_create_model_as_select() {
+    // BigQuery ML: TRANSFORM/OPTIONS are dropped; the AS query (training input)
+    // is retained as real lineage.
+    let stmt = bigquery().one_statement_parses_to(
+        "CREATE MODEL `mydataset.mymodel` \
+         TRANSFORM(f1 + f2 as c, * EXCEPT(f1, f2)) \
+         OPTIONS(model_type='linear_reg', input_label_cols=['label_col']) \
+         AS SELECT f1, f2, f3, label_col FROM t",
+        "CREATE MODEL `mydataset`.`mymodel` AS SELECT f1, f2, f3, label_col FROM t",
+    );
+    match stmt {
+        Statement::CreateModel {
+            or_replace,
+            if_not_exists,
+            name,
+            query,
+        } => {
+            assert!(!or_replace);
+            assert!(!if_not_exists);
+            assert_eq!(name.to_string(), "`mydataset`.`mymodel`");
+            let query = query.expect("AS query captured");
+            assert_eq!(query.to_string(), "SELECT f1, f2, f3, label_col FROM t");
+        }
+        other => panic!("expected CreateModel, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_model_or_replace() {
+    match bigquery().one_statement_parses_to(
+        "CREATE OR REPLACE MODEL foo OPTIONS (model_type='linear_reg') AS SELECT bla FROM foo WHERE cond",
+        "CREATE OR REPLACE MODEL foo AS SELECT bla FROM foo WHERE cond",
+    ) {
+        Statement::CreateModel { or_replace, .. } => assert!(or_replace),
+        other => panic!("expected CreateModel, got {other:?}"),
+    }
+}

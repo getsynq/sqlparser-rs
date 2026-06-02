@@ -2657,6 +2657,123 @@ pub enum Statement {
         body_definition: Option<FunctionDefinition>,
     },
     /// ```sql
+    /// CREATE [ OR REPLACE | OR ALTER ] TASK [ IF NOT EXISTS ] <name>
+    ///   [ <properties> ... ]
+    ///   [ AFTER <task> [ , <task> ... ] ]
+    ///   [ WHEN <condition> ]
+    ///   AS <sql>
+    /// ```
+    ///
+    /// Snowflake task. The scheduling / warehouse / session properties carry no
+    /// lineage and are consumed without being represented. The `AS <sql>` body
+    /// is the statement the task runs and is the primary lineage input; `after`
+    /// lists predecessor tasks (task-graph edges) and `when` is the gating
+    /// predicate (often references a stream via `SYSTEM$STREAM_HAS_DATA`).
+    /// `body` is `None` only when the body could not be parsed (e.g. an opaque
+    /// `EXECUTE DBT PROJECT`), in which case the remainder was skipped.
+    /// See: <https://docs.snowflake.com/en/sql-reference/sql/create-task>
+    CreateTask {
+        or_replace: bool,
+        or_alter: bool,
+        if_not_exists: bool,
+        name: WithSpan<ObjectName>,
+        after: Vec<WithSpan<ObjectName>>,
+        when: Option<WithSpan<Expr>>,
+        body: Option<Box<Statement>>,
+    },
+    /// ```sql
+    /// CREATE [ OR REPLACE ] STREAM [ IF NOT EXISTS ] <name>
+    ///   [ COPY GRANTS ] ON <source_type> <source> [ { AT | BEFORE } ( ... ) ]
+    ///   [ <options> ... ]
+    /// ```
+    ///
+    /// Snowflake change-data-capture stream. A stream tracks DML on a source
+    /// object, so the lineage edge is `source -> stream`. `source_type` is the
+    /// object kind the stream is defined on (`TABLE`, `VIEW`, `STAGE`,
+    /// `EXTERNAL TABLE`, ...) and `source` is its name. Time-travel
+    /// (`AT`/`BEFORE`) and options are not lineage-relevant and are skipped.
+    /// See: <https://docs.snowflake.com/en/sql-reference/sql/create-stream>
+    CreateStream {
+        or_replace: bool,
+        if_not_exists: bool,
+        name: WithSpan<ObjectName>,
+        source_type: String,
+        source: WithSpan<ObjectName>,
+    },
+    /// ```sql
+    /// CREATE [ OR REPLACE ] PIPE [ IF NOT EXISTS ] <name>
+    ///   [ <properties> ... ] AS <copy_statement>
+    /// ```
+    ///
+    /// Snowflake pipe (Snowpipe). The `AS <copy_statement>` body is a
+    /// `COPY INTO <table> FROM <stage>` statement, so it carries the ingest
+    /// lineage edge `stage -> table`. `body` is `None` only when the body
+    /// could not be parsed.
+    /// See: <https://docs.snowflake.com/en/sql-reference/sql/create-pipe>
+    CreatePipe {
+        or_replace: bool,
+        if_not_exists: bool,
+        name: WithSpan<ObjectName>,
+        body: Option<Box<Statement>>,
+    },
+    /// ```sql
+    /// CREATE [ OR REPLACE ] MODEL [ IF NOT EXISTS ] <name>
+    ///   [ TRANSFORM ( ... ) ] [ OPTIONS ( ... ) ] AS <query>
+    /// ```
+    ///
+    /// BigQuery ML model. The `AS <query>` is the training input, so it carries
+    /// the lineage edge `training_source -> model`. `TRANSFORM` and `OPTIONS`
+    /// are not lineage-relevant and are skipped.
+    /// See: <https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-create>
+    CreateModel {
+        or_replace: bool,
+        if_not_exists: bool,
+        name: WithSpan<ObjectName>,
+        /// The training-input query: BigQuery `AS <query>` or Redshift ML
+        /// `FROM (<query>)`. `None` for a Redshift `FROM <table>` source that
+        /// isn't a subquery (the table reference is then skipped).
+        query: Option<Box<Query>>,
+    },
+    /// ```sql
+    /// CREATE EXTERNAL SCHEMA [ IF NOT EXISTS ] <name>
+    ///   FROM { DATA CATALOG | HIVE METASTORE | REDSHIFT | POSTGRES | MYSQL | ... }
+    ///   [ DATABASE '<db>' [ SCHEMA '<schema>' ] ] [ <options> ... ]
+    /// ```
+    ///
+    /// Redshift external schema. Maps a local schema name onto an external
+    /// metastore / federated database, so it carries the lineage edge from the
+    /// local schema to the external `from` source identified by `database` /
+    /// `schema`. Region / URI / IAM role options are not lineage-relevant and
+    /// are skipped.
+    /// See: <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_EXTERNAL_SCHEMA.html>
+    CreateExternalSchema {
+        if_not_exists: bool,
+        name: WithSpan<ObjectName>,
+        /// The `FROM` source kind, uppercased (e.g. `DATA CATALOG`,
+        /// `HIVE METASTORE`, `REDSHIFT`, `POSTGRES`, `MYSQL`, `KINESIS`).
+        from: String,
+        /// `DATABASE '<name>'` — the external database this schema maps to.
+        database: Option<String>,
+        /// `SCHEMA '<name>'` — the external schema (Redshift federated source).
+        schema: Option<String>,
+    },
+    /// ```sql
+    /// CREATE <object_type> ...
+    /// ```
+    ///
+    /// A `CREATE` statement whose object type this parser does not model (e.g.
+    /// `CREATE WAREHOUSE`, `CREATE FILE FORMAT`, `CREATE DICTIONARY`). The
+    /// remainder of the statement is consumed without being represented.
+    /// This exists so consumers can distinguish a genuinely unsupported
+    /// `CREATE` from a real statement — previously these were misrepresented as
+    /// a no-op `COMMENT ON <type>`.
+    CreateUnsupported {
+        or_replace: bool,
+        /// The object-type keyword(s) that followed `CREATE`, uppercased
+        /// (e.g. `WAREHOUSE`, `FILE FORMAT`).
+        object_type: String,
+    },
+    /// ```sql
     /// CREATE MACRO
     /// ```
     ///
@@ -2757,7 +2874,7 @@ pub enum Statement {
     ///
     /// Snowflake-specific statement that triggers an ad-hoc run of a task.
     /// See: <https://docs.snowflake.com/en/sql-reference/sql/execute-task>
-    ExecuteTask { name: ObjectName },
+    ExecuteTask { name: WithSpan<ObjectName> },
     /// ```sql
     /// EXPORT DATA [WITH CONNECTION conn] OPTIONS ( <opts> ) AS <query>
     /// ```
@@ -3454,6 +3571,124 @@ impl fmt::Display for Statement {
                 }
                 write!(f, "{params}")?;
                 Ok(())
+            }
+            Statement::CreateTask {
+                or_replace,
+                or_alter,
+                if_not_exists,
+                name,
+                after,
+                when,
+                body,
+            } => {
+                write!(f, "CREATE ")?;
+                if *or_replace {
+                    write!(f, "OR REPLACE ")?;
+                } else if *or_alter {
+                    write!(f, "OR ALTER ")?;
+                }
+                write!(f, "TASK ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name}")?;
+                if !after.is_empty() {
+                    write!(f, " AFTER {}", display_comma_separated(after))?;
+                }
+                if let Some(when) = when {
+                    write!(f, " WHEN {when}")?;
+                }
+                if let Some(body) = body {
+                    write!(f, " AS {body}")?;
+                }
+                Ok(())
+            }
+            Statement::CreateStream {
+                or_replace,
+                if_not_exists,
+                name,
+                source_type,
+                source,
+            } => {
+                write!(f, "CREATE ")?;
+                if *or_replace {
+                    write!(f, "OR REPLACE ")?;
+                }
+                write!(f, "STREAM ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name} ON {source_type} {source}")
+            }
+            Statement::CreatePipe {
+                or_replace,
+                if_not_exists,
+                name,
+                body,
+            } => {
+                write!(f, "CREATE ")?;
+                if *or_replace {
+                    write!(f, "OR REPLACE ")?;
+                }
+                write!(f, "PIPE ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name}")?;
+                if let Some(body) = body {
+                    write!(f, " AS {body}")?;
+                }
+                Ok(())
+            }
+            Statement::CreateModel {
+                or_replace,
+                if_not_exists,
+                name,
+                query,
+            } => {
+                write!(f, "CREATE ")?;
+                if *or_replace {
+                    write!(f, "OR REPLACE ")?;
+                }
+                write!(f, "MODEL ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name}")?;
+                if let Some(query) = query {
+                    write!(f, " AS {query}")?;
+                }
+                Ok(())
+            }
+            Statement::CreateExternalSchema {
+                if_not_exists,
+                name,
+                from,
+                database,
+                schema,
+            } => {
+                write!(f, "CREATE EXTERNAL SCHEMA ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name} FROM {from}")?;
+                if let Some(database) = database {
+                    write!(f, " DATABASE '{database}'")?;
+                }
+                if let Some(schema) = schema {
+                    write!(f, " SCHEMA '{schema}'")?;
+                }
+                Ok(())
+            }
+            Statement::CreateUnsupported {
+                or_replace,
+                object_type,
+            } => {
+                write!(f, "CREATE ")?;
+                if *or_replace {
+                    write!(f, "OR REPLACE ")?;
+                }
+                write!(f, "{object_type}")
             }
             Statement::CreateProcedure {
                 name,
