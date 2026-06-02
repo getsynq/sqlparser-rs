@@ -9279,10 +9279,64 @@ fn parse_create_unsupported_distinct_from_comment() {
         Statement::CreateUnsupported {
             or_replace,
             object_type,
+            body,
         } => {
             assert!(!or_replace);
             assert_eq!(object_type, "WAREHOUSE");
+            assert_eq!(body, "wh");
         }
         other => panic!("expected CreateUnsupported, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_drop_unsupported_captures_body() {
+    // Unmodelled DROP object types are captured opaquely instead of erroring.
+    match generic()
+        .parse_sql_statements("DROP WAREHOUSE wh")
+        .unwrap()
+        .pop()
+        .unwrap()
+    {
+        Statement::DropUnsupported { object_type, body } => {
+            assert_eq!(object_type, "WAREHOUSE");
+            assert_eq!(body, "wh");
+        }
+        other => panic!("expected DropUnsupported, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_alter_unsupported_captures_body() {
+    match generic()
+        .parse_sql_statements("ALTER WAREHOUSE wh SET WAREHOUSE_SIZE = 'LARGE'")
+        .unwrap()
+        .pop()
+        .unwrap()
+    {
+        Statement::AlterUnsupported { object_type, body } => {
+            assert_eq!(object_type, "WAREHOUSE");
+            assert!(body.contains("WAREHOUSE_SIZE"));
+        }
+        other => panic!("expected AlterUnsupported, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_unsupported_statement_not_masquerading_as_set() {
+    // ClickHouse SYSTEM / Postgres LOCK / DO are captured honestly, not as a
+    // fake SET <keyword> statement. The body text is preserved.
+    match generic()
+        .parse_sql_statements("LOCK TABLE foo IN ACCESS EXCLUSIVE MODE")
+        .unwrap()
+        .pop()
+        .unwrap()
+    {
+        Statement::UnsupportedStatement { keyword, body } => {
+            assert_eq!(keyword, "LOCK");
+            // The locked table reference survives in the captured body.
+            assert!(body.contains("foo"));
+        }
+        other => panic!("expected UnsupportedStatement, got {other:?}"),
     }
 }
