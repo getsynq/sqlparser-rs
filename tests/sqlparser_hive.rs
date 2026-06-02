@@ -568,3 +568,43 @@ fn parse_hive_create_table_comment_and_clustered_by() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_load_data_inpath_into_table() {
+    // Hive/Spark: LOAD DATA [LOCAL] INPATH '<path>' [OVERWRITE] INTO TABLE <t>.
+    // The target table (output) and the inpath (file source) are captured.
+    match hive().verified_stmt("LOAD DATA INPATH '/tmp/x.csv' INTO TABLE mytable") {
+        Statement::LoadData {
+            local,
+            inpath,
+            overwrite,
+            target,
+            ..
+        } => {
+            assert!(!local);
+            assert_eq!(inpath.as_deref(), Some("/tmp/x.csv"));
+            assert!(!overwrite);
+            assert_eq!(target, ObjectName(vec!["mytable".into()]));
+        }
+        other => panic!("expected LoadData, got {other:?}"),
+    }
+    // LOCAL + OVERWRITE + PARTITION (the partition list is opaque `rest`).
+    match hive().verified_stmt(
+        "LOAD DATA LOCAL INPATH '/d/c2=2' OVERWRITE INTO TABLE t PARTITION ( c2 = 2 )",
+    ) {
+        Statement::LoadData {
+            local,
+            inpath,
+            overwrite,
+            target,
+            rest,
+        } => {
+            assert!(local);
+            assert_eq!(inpath.as_deref(), Some("/d/c2=2"));
+            assert!(overwrite);
+            assert_eq!(target.to_string(), "t");
+            assert!(rest.contains("PARTITION"));
+        }
+        other => panic!("expected LoadData, got {other:?}"),
+    }
+}
