@@ -977,51 +977,33 @@ impl<'a> Parser<'a> {
                     Ok(self.parse_optimize_table()?)
                 }
                 // ClickHouse SYSTEM statements (SYSTEM RELOAD, SYSTEM RESTORE, etc.)
+                // Not modelled structurally; capture the body verbatim rather
+                // than misrepresenting it as a `SET SYSTEM` statement.
                 Keyword::SYSTEM if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
-                    // Skip remaining tokens until end of statement
-                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
-                    {
-                        self.next_token();
-                    }
-                    Ok(Statement::SetVariable {
-                        local: false,
-                        hivevar: false,
-                        tuple: false,
-                        variable: ObjectName(vec!["SYSTEM".into()]),
-                        value: vec![],
-                        additional_assignments: vec![],
+                    let body = self.consume_statement_body_text();
+                    Ok(Statement::UnsupportedStatement {
+                        keyword: "SYSTEM".to_string(),
+                        body,
                     })
                 }
                 // PostgreSQL LOCK TABLE: LOCK TABLE <name> IN <mode> MODE;
+                // Captured verbatim (the table reference is preserved in the body
+                // text) instead of being misrepresented as a `SET LOCK` statement.
                 Keyword::LOCK if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
-                    // Skip remaining tokens until end of statement
-                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
-                    {
-                        self.next_token();
-                    }
-                    Ok(Statement::SetVariable {
-                        local: false,
-                        hivevar: false,
-                        tuple: false,
-                        variable: ObjectName(vec!["LOCK".into()]),
-                        value: vec![],
-                        additional_assignments: vec![],
+                    let body = self.consume_statement_body_text();
+                    Ok(Statement::UnsupportedStatement {
+                        keyword: "LOCK".to_string(),
+                        body,
                     })
                 }
-                // PostgreSQL DO block: DO $$ ... $$;
+                // PostgreSQL DO block: DO $$ ... $$; The procedural body is
+                // captured verbatim (it may carry embedded DML) instead of being
+                // misrepresented as a `SET DO` statement.
                 Keyword::DO if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
-                    // Skip remaining tokens until end of statement
-                    while !self.peek_token_is(&Token::EOF) && !self.peek_token_is(&Token::SemiColon)
-                    {
-                        self.next_token();
-                    }
-                    Ok(Statement::SetVariable {
-                        local: false,
-                        hivevar: false,
-                        tuple: false,
-                        variable: ObjectName(vec!["DO".into()]),
-                        value: vec![],
-                        additional_assignments: vec![],
+                    let body = self.consume_statement_body_text();
+                    Ok(Statement::UnsupportedStatement {
+                        keyword: "DO".to_string(),
+                        body,
                     })
                 }
                 // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
@@ -5000,48 +4982,29 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     self.index = start;
-                    self.skip_to_statement_end();
+                    let body = self.consume_statement_body_text();
                     Ok(Statement::CreateUnsupported {
                         or_replace,
                         object_type: "STREAMING TABLE".to_string(),
+                        body,
                     })
                 }
             }
         } else {
             // Generic fallback: this CREATE <object_type> is not modelled.
-            // Skip tokens until the end of the statement and return a
-            // CreateUnsupported node so consumers can tell it apart from a real
+            // Capture the object type and the remaining text verbatim and return
+            // a CreateUnsupported node so consumers can tell it apart from a real
             // statement. Examples: CREATE WAREHOUSE, CREATE FILE FORMAT,
             // CREATE DICTIONARY, CREATE USER, CREATE STORAGE INTEGRATION, etc.
             let token = self.next_token();
             match token.token {
                 Token::Word(w) => {
                     let object_type = w.value.to_uppercase();
-                    // Skip remaining tokens until semicolon or EOF
-                    let mut depth = 0i32;
-                    loop {
-                        match self.peek_token_kind().clone() {
-                            Token::EOF => break,
-                            Token::SemiColon if depth == 0 => break,
-                            Token::LParen => {
-                                depth += 1;
-                                self.next_token();
-                            }
-                            Token::RParen => {
-                                if depth == 0 {
-                                    break;
-                                }
-                                depth -= 1;
-                                self.next_token();
-                            }
-                            _ => {
-                                self.next_token();
-                            }
-                        }
-                    }
+                    let body = self.consume_statement_body_text();
                     Ok(Statement::CreateUnsupported {
                         or_replace,
                         object_type,
+                        body,
                     })
                 }
                 _ => self.expected("an object type after CREATE", token),
@@ -5405,6 +5368,21 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+    }
+
+    /// Consume tokens to the end of the statement (respecting parens) and return
+    /// the raw text consumed, joined with single spaces. Used by the opaque
+    /// `*Unsupported` statement nodes to preserve the unmodelled body verbatim
+    /// for inspection / re-parsing.
+    fn consume_statement_body_text(&mut self) -> String {
+        let start = self.index;
+        self.skip_to_statement_end();
+        self.tokens[start..self.index]
+            .iter()
+            .filter(|t| !matches!(t.token, Token::Whitespace(_)))
+            .map(|t| t.token.to_string())
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// Parse a Snowflake security/governance policy *definition*:
@@ -7830,6 +7808,14 @@ impl<'a> Parser<'a> {
             return self.parse_drop_function();
         } else if self.parse_keyword(Keyword::PROCEDURE) {
             return self.parse_drop_function();
+        } else if let Token::Word(w) = self.peek_token_kind().clone() {
+            // Unmodelled DROP object type (e.g. DROP WAREHOUSE, DROP STREAM,
+            // DROP PIPE, DROP TASK). Capture it opaquely so a multi-statement
+            // block isn't failed by a single unsupported drop.
+            self.next_token();
+            let object_type = w.value.to_uppercase();
+            let body = self.consume_statement_body_text();
+            return Ok(Statement::DropUnsupported { object_type, body });
         } else {
             return self.expected(
                 "TABLE, VIEW, INDEX, ROLE, SCHEMA, DATABASE, FUNCTION, PROCEDURE, STAGE or SEQUENCE after DROP",
@@ -11156,14 +11142,31 @@ impl<'a> Parser<'a> {
         if self.parse_keyword(Keyword::POLICY) {
             return self.parse_alter_postgres_policy();
         }
-        let object_type = self.expect_one_of_keywords(&[
+        let object_type = self.parse_one_of_keywords(&[
             Keyword::VIEW,
             Keyword::TABLE,
             Keyword::INDEX,
             Keyword::ROLE,
             Keyword::SCHEMA,
             Keyword::SESSION,
-        ])?;
+        ]);
+        let object_type = match object_type {
+            Some(kw) => kw,
+            // Unmodelled ALTER target (e.g. ALTER WAREHOUSE, ALTER TASK,
+            // ALTER STREAM). Capture it opaquely rather than failing.
+            None => {
+                if let Token::Word(w) = self.peek_token_kind().clone() {
+                    self.next_token();
+                    let object_type = w.value.to_uppercase();
+                    let body = self.consume_statement_body_text();
+                    return Ok(Statement::AlterUnsupported { object_type, body });
+                }
+                return self.expected(
+                    "VIEW, TABLE, INDEX, ROLE, SCHEMA or SESSION after ALTER",
+                    self.peek_token(),
+                );
+            }
+        };
         match object_type {
             Keyword::VIEW => self.parse_alter_view(),
             Keyword::TABLE => {

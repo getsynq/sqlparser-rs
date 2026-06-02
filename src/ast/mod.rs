@@ -2763,15 +2763,56 @@ pub enum Statement {
     ///
     /// A `CREATE` statement whose object type this parser does not model (e.g.
     /// `CREATE WAREHOUSE`, `CREATE FILE FORMAT`, `CREATE DICTIONARY`). The
-    /// remainder of the statement is consumed without being represented.
-    /// This exists so consumers can distinguish a genuinely unsupported
-    /// `CREATE` from a real statement — previously these were misrepresented as
-    /// a no-op `COMMENT ON <type>`.
+    /// remainder of the statement is captured verbatim in `body` rather than
+    /// being represented structurally. This exists so consumers can distinguish
+    /// a genuinely unsupported `CREATE` from a real statement — previously these
+    /// were misrepresented as a no-op `COMMENT ON <type>`.
     CreateUnsupported {
         or_replace: bool,
-        /// The object-type keyword(s) that followed `CREATE`, uppercased
-        /// (e.g. `WAREHOUSE`, `FILE FORMAT`).
+        /// The object-type keyword that followed `CREATE`, uppercased
+        /// (e.g. `WAREHOUSE`, `FILE`).
         object_type: String,
+        /// The raw text consumed after `object_type` up to the statement end,
+        /// preserved verbatim for inspection / re-parsing. Empty if nothing
+        /// followed the object type.
+        body: String,
+    },
+    /// ```sql
+    /// DROP <object_type> ...
+    /// ```
+    ///
+    /// A `DROP` statement whose object type this parser does not model (e.g.
+    /// `DROP WAREHOUSE`, `DROP XML SCHEMA COLLECTION`). The remainder is captured
+    /// verbatim in `body`. Lets consumers skip an unmodelled drop without failing
+    /// the surrounding multi-statement block.
+    DropUnsupported {
+        /// The object-type keyword that followed `DROP`, uppercased.
+        object_type: String,
+        /// The raw text consumed after `object_type` up to the statement end.
+        body: String,
+    },
+    /// ```sql
+    /// ALTER <object_type> ...
+    /// ```
+    ///
+    /// An `ALTER` statement whose object type this parser does not model (e.g.
+    /// `ALTER WAREHOUSE`, `ALTER TASK`). The remainder is captured verbatim in
+    /// `body`.
+    AlterUnsupported {
+        /// The object-type keyword that followed `ALTER`, uppercased.
+        object_type: String,
+        /// The raw text consumed after `object_type` up to the statement end.
+        body: String,
+    },
+    /// A statement whose leading keyword is recognised but whose body this parser
+    /// does not model structurally (e.g. ClickHouse `SYSTEM ...`, PostgreSQL
+    /// `LOCK TABLE ...` and `DO $$ ... $$`). The body is captured verbatim in
+    /// `body`. Previously these were misrepresented as a no-op `SET <keyword>`.
+    UnsupportedStatement {
+        /// The leading keyword, uppercased (e.g. `SYSTEM`, `LOCK`, `DO`).
+        keyword: String,
+        /// The raw text consumed after `keyword` up to the statement end.
+        body: String,
     },
     /// ```sql
     /// CREATE MACRO
@@ -3683,12 +3724,38 @@ impl fmt::Display for Statement {
             Statement::CreateUnsupported {
                 or_replace,
                 object_type,
+                body,
             } => {
                 write!(f, "CREATE ")?;
                 if *or_replace {
                     write!(f, "OR REPLACE ")?;
                 }
-                write!(f, "{object_type}")
+                write!(f, "{object_type}")?;
+                if !body.is_empty() {
+                    write!(f, " {body}")?;
+                }
+                Ok(())
+            }
+            Statement::DropUnsupported { object_type, body } => {
+                write!(f, "DROP {object_type}")?;
+                if !body.is_empty() {
+                    write!(f, " {body}")?;
+                }
+                Ok(())
+            }
+            Statement::AlterUnsupported { object_type, body } => {
+                write!(f, "ALTER {object_type}")?;
+                if !body.is_empty() {
+                    write!(f, " {body}")?;
+                }
+                Ok(())
+            }
+            Statement::UnsupportedStatement { keyword, body } => {
+                write!(f, "{keyword}")?;
+                if !body.is_empty() {
+                    write!(f, " {body}")?;
+                }
+                Ok(())
             }
             Statement::CreateProcedure {
                 name,

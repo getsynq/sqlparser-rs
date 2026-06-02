@@ -4582,9 +4582,13 @@ fn parse_create_unsupported_is_not_a_comment() {
             Statement::CreateUnsupported {
                 or_replace,
                 object_type,
+                body,
             } => {
                 assert!(!or_replace);
                 assert_eq!(object_type, "WAREHOUSE");
+                // The remaining text is captured verbatim.
+                assert!(body.contains("wh"));
+                assert!(body.contains("WAREHOUSE_SIZE"));
             }
             other => panic!("expected CreateUnsupported, got {other:?}"),
         },
