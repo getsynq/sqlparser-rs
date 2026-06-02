@@ -1745,9 +1745,12 @@ pub enum Statement {
         extension_name: WithSpan<Ident>,
     },
     /// ```sql
-    /// LOAD
+    /// LOAD <extension>
     /// ```
-    Load {
+    ///
+    /// DuckDB extension load. Named `DuckDbLoad` to disambiguate from the
+    /// Hive/Spark/BigQuery `LOAD DATA ...` statement ([`Statement::LoadData`]).
+    DuckDbLoad {
         /// Only for DuckDB
         extension_name: WithSpan<Ident>,
     },
@@ -2806,14 +2809,26 @@ pub enum Statement {
     },
     /// A statement whose leading keyword is recognised but whose body this parser
     /// does not model structurally (e.g. ClickHouse `SYSTEM ...`, PostgreSQL
-    /// `LOCK TABLE ...` and `DO $$ ... $$`). The body is captured verbatim in
-    /// `body`. Previously these were misrepresented as a no-op `SET <keyword>`.
+    /// `LOCK TABLE ...`). The body is captured verbatim in `body`. Previously
+    /// these were misrepresented as a no-op `SET <keyword>`.
     UnsupportedStatement {
-        /// The leading keyword, uppercased (e.g. `SYSTEM`, `LOCK`, `DO`).
+        /// The leading keyword, uppercased (e.g. `SYSTEM`, `LOCK`).
         keyword: String,
         /// The raw text consumed after `keyword` up to the statement end.
         body: String,
     },
+    /// ```sql
+    /// DO [ LANGUAGE <lang> ] <code>
+    /// ```
+    ///
+    /// PostgreSQL anonymous code block — runs a procedural body once without
+    /// creating a named routine. The `body` is the code string (typically
+    /// dollar-quoted `$$ ... $$`), captured as a re-parseable
+    /// [`FunctionDefinition`] with its source start location preserved, so
+    /// downstream consumers (lineage extraction) can re-parse it for embedded
+    /// DML/DDL. The optional `LANGUAGE` clause is consumed but not represented.
+    /// See: <https://www.postgresql.org/docs/current/sql-do.html>
+    Do { body: Option<FunctionDefinition> },
     /// ```sql
     /// CREATE MACRO
     /// ```
@@ -3451,7 +3466,7 @@ impl fmt::Display for Statement {
                 extension_name: name,
             } => write!(f, "INSTALL {name}"),
 
-            Statement::Load {
+            Statement::DuckDbLoad {
                 extension_name: name,
             } => write!(f, "LOAD {name}"),
 
@@ -3753,6 +3768,13 @@ impl fmt::Display for Statement {
             Statement::UnsupportedStatement { keyword, body } => {
                 write!(f, "{keyword}")?;
                 if !body.is_empty() {
+                    write!(f, " {body}")?;
+                }
+                Ok(())
+            }
+            Statement::Do { body } => {
+                write!(f, "DO")?;
+                if let Some(body) = body {
                     write!(f, " {body}")?;
                 }
                 Ok(())

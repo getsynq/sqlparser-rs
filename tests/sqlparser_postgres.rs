@@ -4691,3 +4691,55 @@ fn parse_create_foreign_table_captures_columns() {
         other => panic!("expected external CreateTable, got {other:?}"),
     }
 }
+
+#[test]
+fn parse_do_block_captures_reparseable_body() {
+    // PostgreSQL standalone anonymous code block: the $$...$$ body is captured
+    // as a re-parseable FunctionDefinition (not opaque text), so lineage
+    // extraction can recover embedded DML.
+    let sql = "DO $$ BEGIN INSERT INTO t SELECT a FROM src; END $$";
+    match pg().verified_stmt(sql) {
+        Statement::Do { body } => {
+            let body = body.expect("DO body captured");
+            match body {
+                FunctionDefinition::DoubleDollarDef { value, .. } => {
+                    // The embedded DML is recoverable from the captured body.
+                    assert!(value.contains("INSERT INTO t"));
+                }
+                other => panic!("expected dollar-quoted body, got {other:?}"),
+            }
+        }
+        other => panic!("expected Do, got {other:?}"),
+    }
+    // LANGUAGE clause (before or after the body) is consumed.
+    pg().one_statement_parses_to(
+        "DO LANGUAGE plpgsql $$ BEGIN PERFORM 1; END $$",
+        "DO $$ BEGIN PERFORM 1; END $$",
+    );
+}
+
+#[test]
+fn parse_do_records_body_start() {
+    // The DO body must record body_start identically to CREATE PROCEDURE so
+    // consumers can remap body-relative spans. "DO " is 3 chars, so the opening
+    // `$$` is at column 4 and the body's first char is at column 6.
+    use sqlparser::parser::Parser;
+    use sqlparser::tokenizer::{Location, Tokenizer};
+    let sql = "DO $$ BEGIN NULL; END $$";
+    let dialect = PostgreSqlDialect {};
+    let tokens = Tokenizer::new(&dialect, sql)
+        .tokenize_with_location()
+        .unwrap();
+    let mut stmts = Parser::new(&dialect)
+        .with_tokens_with_locations(tokens)
+        .parse_statements()
+        .unwrap();
+    match stmts.pop().unwrap() {
+        Statement::Do {
+            body: Some(FunctionDefinition::DoubleDollarDef { body_start, .. }),
+        } => {
+            assert_eq!(body_start, Location { line: 1, column: 6 });
+        }
+        other => panic!("expected Do with dollar body, got {other:?}"),
+    }
+}
