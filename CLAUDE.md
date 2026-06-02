@@ -121,6 +121,7 @@ node scripts/compare-corpus-reports.js target/corpus-report.json target/corpus-r
 - **Refresh baseline after each accepted commit**: `cp target/corpus-report.json target/corpus-report-baseline.json`. Otherwise `compare-corpus-reports.js` credits old deltas and can hide fresh regressions.
 - **If the symlinked corpus changes mid-session** (someone runs `make process` in kernel-cll-corpus — it can add tens of thousands of files), your saved baseline is stale and deltas are meaningless (you'll see bogus +50k/-16k swings). Re-isolate *your* change: `git stash` your edits → rebuild + run corpus → `cp` baseline → `git stash pop` → rebuild + run + compare.
 - `compare-corpus-reports.js` only lists *added* tests under "New Tests" — deleted/pruned files don't appear there. After a kernel-cll-corpus pipeline run, also check `git status -s` in that repo to see what was removed.
+- **When the corpus drifts mid-session, trust a file-by-file regression check, not `compare-corpus-reports.js` aggregate deltas.** Compare the two reports' `test_results` dicts in Python for keys that went `pass`→`fail`: `reg=[k for k in cur if cur[k].startswith('fail') and base.get(k,'').startswith('pass')]`. Zero `reg` = no regressions even when totals shifted by thousands.
 - **Pipeline reprocess (`make process` in kernel-cll-corpus) takes ~10 minutes** for the full corpus. Don't poll — arm a Monitor on `while pgrep -f pipeline.process; do sleep 15; done` and let it wake you.
 - **Anonymizer-corruption signature**: `'s'<word>` (the `'s'` placeholder string directly abutting an identifier/keyword, e.g. `'s'HOUR`, `'s'id_5`) is unique to anonymizer misalignment. Filter on exactly `'s'<word>` — a broader `'<anything>'<word>` regex misaligns on multi-string SQL (`'foo','bar'`) and silently deletes hand-written sqlglot fixtures.
 - **Query-log truncation heuristics** (`pipeline/process.py::_looks_truncated`) that worked without false positives: trailing punctuation (`,`/`(`/`=`/operator), trailing clause keyword (SELECT/FROM/BY/AS/…), and `CASE` count > `END` count. Removed ~4k Redshift query-log fragments.
@@ -271,6 +272,8 @@ while depth > 0 {
 ```
 Use this pattern for dialect-specific clauses that don't need AST representation.
 
+**Unsupported / opaque statement nodes (prefer over masquerades):** Unmodelled DDL returns honest nodes that preserve the raw body, NOT a fake `Comment`/`SetVariable`: `CreateUnsupported`/`DropUnsupported`/`AlterUnsupported { object_type, body }` and `UnsupportedStatement { keyword, body }` (SYSTEM/LOCK/…). Helpers in `src/parser/mod.rs`: `skip_to_statement_end()` (paren-aware skip to `;`/EOF), `consume_statement_body_text()` (raw text capture — **filters `Token::Whitespace`**, else joined strings get stray spaces), `parse_create_body_statement()` (parse a body as a `Statement`, but **revert + skip if it doesn't fully consume to `;`/EOF** — guards against partial parses like `EXECUTE DBT PROJECT`), and `parse_function_body_definition()` (shared `$$…$$`/`'…'` body capture with correct `body_start`, used by `CREATE PROCEDURE` and `DO`).
+
 **Reserved-keyword-as-alias carve-out** (recurring fix shape):
 - When a keyword (e.g. CLUSTER, SORT, FINAL, AT, BEFORE) is reserved only because of a specific clause (`CLUSTER BY`, `t AT(...)` time-travel), accept it as an identifier alias in `parse_optional_alias` when the lookahead doesn't match the clause shape (next-not-`BY`, next-not-`(`, etc.).
 - Existing instances in `parse_optional_alias` for CLUSTER / SORT / FINAL / VIEW / OPTION / USE/IGNORE/FORCE in `parse_table_factor` for AT / BEFORE serve as templates — copy the matching block rather than reinventing.
@@ -294,6 +297,8 @@ The tokenizer greedily folds a trailing `.` into the number token, so `proj-NNN.
 - `RedshiftSqlDialect` (NOT `RedshiftDialect`), `AnsiDialect`, `DuckDbDialect`
 - `ClickHouseDialect`, `SnowflakeDialect`, `BigQueryDialect`, `PostgreSqlDialect`
 - `MySqlDialect`, `MsSqlDialect`, `SQLiteDialect`
+
+**Dialect-specific AST node names** match the dialect-struct casing: `DuckDb` (not `Duckdb`), `ClickHouse`, `BigQuery`, `MsSql`, `MySql` — e.g. `DuckDbLoad`, `DatabricksMap`, `CopyIntoSnowflake`. Prefix vs suffix is inconsistent across existing nodes; match the casing, pick whichever reads better.
 
 ## Development Guidelines
 
@@ -354,6 +359,8 @@ Since this is a fork of apache/datafusion-sqlparser-rs:
 - `cargo nextest run` without `RUST_MIN_STACK=8388608` always SIGABRTs three tests (`parse_deeply_nested_expr_hits_recursion_limits`, `..._parens_...`, `..._subquery_...`). These are stack-size probes, not regressions — ignore if the rest of the run is green.
 - Avoid adding serde dependency to test code - use manual JSON building if needed
 - `verified_stmt(s)` requires `s` to be a full statement that round-trips (parse → display → equal). For fragment / coverage tests on a non-statement (a bare CAST, a SELECT-list snippet), wrap in `SELECT` or call `parse_sql_statements(input).unwrap()` directly — `verified_stmt` will otherwise fail with `Expected an SQL statement, found: ...`.
+- **Spans are dummy (`Location` line/col 0) under `Parser::parse_sql` / `verified_stmt` / the `cli` example** — they call `with_tokens` which installs `Span::default()`. To assert real `WithSpan` / `body_start` locations, build the parser explicitly: `Parser::new(&dialect).with_tokens_with_locations(Tokenizer::new(&dialect, sql).tokenize_with_location().unwrap())`. See `parse_sql_with_locations` in `tests/redshift_customer_procedure_samples.rs`.
+- `one_statement_parses_to(sql, canonical)` re-parses `canonical` and asserts **full AST equality**. If your node's `Display` reconstructs to text that re-parses through a *different* code path (e.g. `FOREIGN TABLE` → `CREATE EXTERNAL TABLE`, which sets `hive_formats` differently), it fails on a field mismatch — use `parse_sql_statements` + manual field asserts instead.
 
 **Running corpus tests (now fast!):**
 ```bash
