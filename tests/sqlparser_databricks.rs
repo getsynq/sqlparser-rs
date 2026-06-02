@@ -625,3 +625,40 @@ fn test_declare_variable() {
             .unwrap_or_else(|e| panic!("failed to parse {sql:?}: {e}"));
     }
 }
+
+#[test]
+fn parse_create_materialized_view_skips_schedule_and_trigger() {
+    // Databricks MV pre-AS clauses (SCHEDULE / TRIGGER) carry no lineage and are
+    // skipped; the AS query (the lineage) must be preserved.
+    for (sql, canonical) in [
+        (
+            "CREATE MATERIALIZED VIEW daily_sales SCHEDULE EVERY 1 DAY \
+             AS SELECT d, SUM(sales) AS s FROM table1 GROUP BY d",
+            "CREATE MATERIALIZED VIEW daily_sales \
+             AS SELECT d, SUM(sales) AS s FROM table1 GROUP BY d",
+        ),
+        (
+            "CREATE MATERIALIZED VIEW dr SCHEDULE CRON '0 0 0 * * ?' AT TIME ZONE 'UTC' \
+             AS SELECT d FROM orders",
+            "CREATE MATERIALIZED VIEW dr AS SELECT d FROM orders",
+        ),
+        (
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS sm TRIGGER ON UPDATE \
+             AS SELECT a FROM movies",
+            "CREATE MATERIALIZED VIEW IF NOT EXISTS sm AS SELECT a FROM movies",
+        ),
+    ] {
+        match databricks().one_statement_parses_to(sql, canonical) {
+            Statement::CreateView {
+                materialized,
+                query,
+                ..
+            } => {
+                assert!(materialized);
+                // The upstream table reference survives in the query body.
+                assert!(query.to_string().contains("FROM"));
+            }
+            other => panic!("expected materialized CreateView, got {other:?}"),
+        }
+    }
+}
