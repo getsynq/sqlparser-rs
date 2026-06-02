@@ -996,15 +996,11 @@ impl<'a> Parser<'a> {
                         body,
                     })
                 }
-                // PostgreSQL DO block: DO $$ ... $$; The procedural body is
-                // captured verbatim (it may carry embedded DML) instead of being
-                // misrepresented as a `SET DO` statement.
+                // PostgreSQL anonymous code block: DO [LANGUAGE <lang>] $$ ... $$;
+                // The procedural body is captured as a re-parseable
+                // FunctionDefinition so embedded DML/DDL stays recoverable.
                 Keyword::DO if dialect_of!(self is PostgreSqlDialect | GenericDialect) => {
-                    let body = self.consume_statement_body_text();
-                    Ok(Statement::UnsupportedStatement {
-                        keyword: "DO".to_string(),
-                        body,
-                    })
+                    self.parse_do()
                 }
                 // CASE as a standalone expression statement (e.g. Snowflake masking policy bodies)
                 Keyword::CASE if dialect_of!(self is SnowflakeDialect | BigQueryDialect) => {
@@ -19415,7 +19411,7 @@ impl<'a> Parser<'a> {
     /// `LOAD [extension_name]`
     pub fn parse_load(&mut self) -> Result<Statement, ParserError> {
         let extension_name = self.parse_identifier(false)?;
-        Ok(Statement::Load { extension_name })
+        Ok(Statement::DuckDbLoad { extension_name })
     }
 
     /// ```sql
@@ -19627,6 +19623,59 @@ impl<'a> Parser<'a> {
         Ok(NamedWindowDefinition(ident, named_window_expr))
     }
 
+    /// Capture a routine / code body that is a single string literal —
+    /// dollar-quoted (`$$ ... $$` / `$tag$ ... $tag$`) or single-quoted
+    /// (`'...'`) — as a re-parseable [`FunctionDefinition`], preserving the
+    /// body's source start location so consumers can remap body-relative spans
+    /// back to the outer SQL. Returns `None` and consumes nothing if the next
+    /// token isn't such a string. Shared by `CREATE PROCEDURE` and the
+    /// standalone PostgreSQL `DO` block.
+    fn parse_function_body_definition(&mut self) -> Option<FunctionDefinition> {
+        let peek = self.peek_token();
+        match peek.token.clone() {
+            Token::DollarQuotedString(s) => {
+                let body_start = dollar_quoted_body_start(peek.span.start, &s);
+                self.next_token();
+                Some(FunctionDefinition::DoubleDollarDef {
+                    value: s.value,
+                    body_start,
+                })
+            }
+            Token::SingleQuotedString(s) => {
+                // Opening `'` sits at peek.span.start; body follows it.
+                let body_start = Location {
+                    line: peek.span.start.line,
+                    column: peek.span.start.column.saturating_add(1),
+                };
+                self.next_token();
+                Some(FunctionDefinition::SingleQuotedDef {
+                    value: s,
+                    body_start,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Parse a PostgreSQL standalone anonymous code block:
+    /// `DO [ LANGUAGE <lang> ] <code> [ LANGUAGE <lang> ]`.
+    ///
+    /// The leading `DO` has already been consumed. The `<code>` string body is
+    /// captured as a re-parseable [`FunctionDefinition`] (typically dollar-quoted)
+    /// so lineage extraction can recover embedded DML/DDL; the `LANGUAGE` clause
+    /// (which may appear before or after the body) is consumed but not modelled.
+    /// <https://www.postgresql.org/docs/current/sql-do.html>
+    fn parse_do(&mut self) -> Result<Statement, ParserError> {
+        // Optional `LANGUAGE <name>` may precede the code block.
+        if self.parse_keyword(Keyword::LANGUAGE) {
+            let _ = self.parse_identifier(false)?;
+        }
+        let body = self.parse_function_body_definition();
+        // Consume any trailing clause (e.g. a trailing `LANGUAGE <name>`).
+        self.skip_to_statement_end();
+        Ok(Statement::Do { body })
+    }
+
     pub fn parse_create_procedure(&mut self, or_alter: bool) -> Result<Statement, ParserError> {
         let name = self.parse_object_name(false)?;
         let params = self.parse_optional_procedure_parameters()?;
@@ -19698,35 +19747,10 @@ impl<'a> Parser<'a> {
             // or another expression. Capture the raw definition string so
             // downstream consumers (lineage extractors) can re-parse it, then
             // skip the remainder of the statement.
-            let body_definition = {
-                let peek = self.peek_token();
-                match peek.token.clone() {
-                    Token::DollarQuotedString(s) => {
-                        let body_start = dollar_quoted_body_start(peek.span.start, &s);
-                        self.next_token();
-                        Some(FunctionDefinition::DoubleDollarDef {
-                            value: s.value,
-                            body_start,
-                        })
-                    }
-                    Token::SingleQuotedString(s) => {
-                        // Opening `'` sits at peek.span.start; body follows it.
-                        let body_start = Location {
-                            line: peek.span.start.line,
-                            column: peek.span.start.column.saturating_add(1),
-                        };
-                        self.next_token();
-                        Some(FunctionDefinition::SingleQuotedDef {
-                            value: s,
-                            body_start,
-                        })
-                    }
-                    _ => {
-                        let _ = self.parse_expr();
-                        None
-                    }
-                }
-            };
+            let body_definition = self.parse_function_body_definition();
+            if body_definition.is_none() {
+                let _ = self.parse_expr();
+            }
             // Consume trailing clauses like `LANGUAGE plpgsql`, `SECURITY INVOKER`,
             // `STABLE`, `VOLATILE`, etc. that follow the body in PostgreSQL/Redshift.
             loop {
