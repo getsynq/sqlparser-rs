@@ -7414,6 +7414,37 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Materialized views in Oracle / Databricks / Trino / BigQuery carry
+        // assorted pre-AS option clauses that aren't modelled above and don't
+        // carry lineage: Oracle `BUILD ... REFRESH ... ON {COMMIT|DEMAND}`,
+        // `PCTFREE n`, Databricks `TRIGGER ON UPDATE` / `SCHEDULE {EVERY ...|
+        // CRON '...' AT TIME ZONE '...'}`, Trino `GRACE PERIOD ...`, BigQuery
+        // `ANNOTATIONS ...`, etc. Skip any leftover tokens (respecting parens)
+        // up to the `AS` query body so the lineage-bearing query is preserved.
+        // ClickHouse is excluded: its `[APPEND] TO <table>` output target and
+        // ENGINE/REFRESH clauses are parsed precisely above, and a blind skip
+        // would drop the `TO <table>` output edge.
+        if materialized && !dialect_of!(self is ClickHouseDialect) {
+            let mut depth = 0i32;
+            loop {
+                match self.peek_token_kind() {
+                    Token::EOF | Token::SemiColon => break,
+                    Token::Word(w) if depth == 0 && w.keyword == Keyword::AS => break,
+                    Token::LParen => {
+                        depth += 1;
+                        self.next_token();
+                    }
+                    Token::RParen => {
+                        depth = depth.saturating_sub(1);
+                        self.next_token();
+                    }
+                    _ => {
+                        self.next_token();
+                    }
+                }
+            }
+        }
+
         self.expect_keyword(Keyword::AS)?;
         let query = self.parse_boxed_query()?;
         // Optional `WITH [ CASCADED | LOCAL ] CHECK OPTION` (Postgres/MySQL view updatability constraint).
