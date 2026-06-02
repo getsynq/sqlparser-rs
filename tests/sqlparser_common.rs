@@ -9250,3 +9250,39 @@ fn parse_teradata_column_attributes() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_create_streaming_table_captures_query() {
+    // Databricks: CREATE OR REFRESH STREAMING TABLE ... AS <query>.
+    // Routed through the table parser so the AS query is captured.
+    match generic().one_statement_parses_to(
+        "CREATE OR REFRESH STREAMING TABLE st AS SELECT * FROM stream_src",
+        "CREATE TABLE st AS SELECT * FROM stream_src",
+    ) {
+        Statement::CreateTable { name, query, .. } => {
+            assert_eq!(name.to_string(), "st");
+            assert!(query.is_some(), "AS query should be captured");
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_unsupported_distinct_from_comment() {
+    // Unmodelled CREATE statements yield CreateUnsupported, not a fake COMMENT.
+    match generic()
+        .parse_sql_statements("CREATE WAREHOUSE wh")
+        .unwrap()
+        .pop()
+        .unwrap()
+    {
+        Statement::CreateUnsupported {
+            or_replace,
+            object_type,
+        } => {
+            assert!(!or_replace);
+            assert_eq!(object_type, "WAREHOUSE");
+        }
+        other => panic!("expected CreateUnsupported, got {other:?}"),
+    }
+}

@@ -4788,6 +4788,9 @@ impl<'a> Parser<'a> {
     pub fn parse_create(&mut self) -> Result<Statement, ParserError> {
         let or_replace = self.parse_keywords(&[Keyword::OR, Keyword::REPLACE]);
         let or_alter = self.parse_keywords(&[Keyword::OR, Keyword::ALTER]);
+        // Databricks: `CREATE OR REFRESH STREAMING TABLE | MATERIALIZED VIEW ...`.
+        // REFRESH is not a replace/alter; consume it as a no-op modifier.
+        let _or_refresh = self.parse_keywords(&[Keyword::OR, Keyword::REFRESH]);
         let local = self.parse_one_of_keywords(&[Keyword::LOCAL]).is_some();
         let global = self.parse_one_of_keywords(&[Keyword::GLOBAL]).is_some();
         // Snowflake `SECURE` modifier: precedes VIEW / MATERIALIZED VIEW / FUNCTION.
@@ -4869,6 +4872,10 @@ impl<'a> Parser<'a> {
             if self.parse_keyword(Keyword::FUNCTION) {
                 // Snowflake: CREATE EXTERNAL FUNCTION
                 self.parse_create_function_inner(or_replace, temporary, false, secure)
+            } else if self.parse_keyword(Keyword::SCHEMA) {
+                // Redshift: CREATE EXTERNAL SCHEMA <name> FROM { DATA CATALOG |
+                // HIVE METASTORE | REDSHIFT | POSTGRES | ... } DATABASE '...'
+                self.parse_create_external_schema()
             } else {
                 self.parse_create_external_table(or_replace)
             }
@@ -4941,11 +4948,71 @@ impl<'a> Parser<'a> {
             // BigQuery row-level security:
             // ROW ACCESS POLICY <name> ON <table> [GRANT TO (...)] FILTER USING (expr)
             self.parse_create_row_access_policy(or_replace)
+        } else if self.parse_keyword(Keyword::TASK) {
+            // Snowflake: CREATE [OR REPLACE | OR ALTER] TASK ... AS <sql>
+            self.parse_create_task(or_replace, or_alter)
+        } else if self.parse_keyword(Keyword::STREAM) {
+            // Snowflake: CREATE [OR REPLACE] STREAM ... ON TABLE/VIEW/STAGE <src>
+            self.parse_create_stream(or_replace)
+        } else if self.peek_word_ci("PIPE") {
+            // Snowflake: CREATE [OR REPLACE] PIPE ... AS <copy_statement>.
+            // PIPE is not a reserved keyword, so match it by value.
+            self.next_token(); // PIPE
+            self.parse_create_pipe(or_replace)
+        } else if self.parse_keyword(Keyword::MODEL) {
+            // BigQuery ML: CREATE [OR REPLACE] MODEL ... AS <query>
+            self.parse_create_model(or_replace)
+        } else if self.parse_keywords(&[Keyword::FOREIGN, Keyword::TABLE]) {
+            // PostgreSQL foreign table — an external-table source. Capture the
+            // name and column list (the lineage-relevant schema) and skip the
+            // trailing `SERVER <name> OPTIONS (...)` clause, which the shared
+            // external-table parser's option grammar doesn't recognise.
+            let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+            let table_name = self.parse_object_name(false)?;
+            let (columns, constraints, _) = self.parse_columns()?;
+            self.skip_to_statement_end();
+            Ok(CreateTableBuilder::new(table_name)
+                .columns(columns)
+                .constraints(constraints)
+                .or_replace(or_replace)
+                .if_not_exists(if_not_exists)
+                .external(true)
+                .build())
+        } else if self.peek_word_ci("STREAMING")
+            && matches!(self.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::TABLE)
+        {
+            // Databricks: CREATE [OR REFRESH] STREAMING TABLE <name> [...] AS <query>.
+            // Route a plain `AS <query>` form through the regular table parser so
+            // the query is captured for lineage. Databricks Delta Live Tables add
+            // FLOW / WATERMARK / EXPECT-constraint / SCD clauses we don't model;
+            // if the table parse can't consume the whole statement, fall back to
+            // CreateUnsupported rather than erroring.
+            self.next_token(); // STREAMING
+            self.expect_keyword(Keyword::TABLE)?;
+            let start = self.index;
+            match self.maybe_parse(|p| {
+                p.parse_create_table_inner(
+                    or_replace, temporary, global, transient, dynamic, iceberg, hybrid,
+                )
+            }) {
+                Some(stmt) if matches!(self.peek_token_kind(), Token::EOF | Token::SemiColon) => {
+                    Ok(stmt)
+                }
+                _ => {
+                    self.index = start;
+                    self.skip_to_statement_end();
+                    Ok(Statement::CreateUnsupported {
+                        or_replace,
+                        object_type: "STREAMING TABLE".to_string(),
+                    })
+                }
+            }
         } else {
-            // Generic fallback: skip tokens until end of statement
-            // This handles dialect-specific CREATE statements like:
-            // CREATE DICTIONARY, CREATE WAREHOUSE, CREATE DYNAMIC TABLE,
-            // CREATE USER, CREATE STORAGE, CREATE FILE FORMAT, etc.
+            // Generic fallback: this CREATE <object_type> is not modelled.
+            // Skip tokens until the end of the statement and return a
+            // CreateUnsupported node so consumers can tell it apart from a real
+            // statement. Examples: CREATE WAREHOUSE, CREATE FILE FORMAT,
+            // CREATE DICTIONARY, CREATE USER, CREATE STORAGE INTEGRATION, etc.
             let token = self.next_token();
             match token.token {
                 Token::Word(w) => {
@@ -4972,14 +5039,370 @@ impl<'a> Parser<'a> {
                             }
                         }
                     }
-                    Ok(Statement::Comment {
-                        object_type: CommentObject::Other(object_type),
-                        object_name: ObjectName(vec![]),
-                        comment: None,
-                        if_exists: false,
+                    Ok(Statement::CreateUnsupported {
+                        or_replace,
+                        object_type,
                     })
                 }
                 _ => self.expected("an object type after CREATE", token),
+            }
+        }
+    }
+
+    /// Parse a Snowflake `CREATE [OR REPLACE | OR ALTER] TASK [IF NOT EXISTS]
+    /// <name> [<properties>] [AFTER <task> [, ...]] [WHEN <cond>] AS <sql>`.
+    ///
+    /// The `TASK` keyword has already been consumed by the caller. Scheduling,
+    /// warehouse and session properties are not lineage-relevant and are
+    /// consumed token-by-token; only the task name, `AFTER` predecessors, the
+    /// `WHEN` predicate and the `AS <sql>` body are retained.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-task>
+    fn parse_create_task(
+        &mut self,
+        or_replace: bool,
+        or_alter: bool,
+    ) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name_start = self.index;
+        let name = self.parse_object_name(false)?;
+        let name = name.spanning(self.span_from_index(name_start));
+
+        let mut after = vec![];
+        let mut when = None;
+        let mut found_as = false;
+        loop {
+            match self.peek_token_kind() {
+                Token::EOF | Token::SemiColon => break,
+                _ => {}
+            }
+            if self.parse_keyword(Keyword::AS) {
+                found_as = true;
+                break;
+            }
+            // `EXECUTE AS { CALLER | OWNER | SELF | USER <name> }` — consume the
+            // `EXECUTE AS` pair so its `AS` is not mistaken for the body marker.
+            if self.parse_keywords(&[Keyword::EXECUTE, Keyword::AS]) {
+                continue;
+            }
+            if self.parse_keyword(Keyword::AFTER) {
+                // AFTER <task> [, <task> ...]
+                loop {
+                    let dep_start = self.index;
+                    let dep = self.parse_object_name(false)?;
+                    after.push(dep.spanning(self.span_from_index(dep_start)));
+                    if !self.consume_token(&Token::Comma) {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if self.parse_keyword(Keyword::WHEN) {
+                let cond_start = self.index;
+                let cond = self.parse_expr()?;
+                when = Some(cond.spanning(self.span_from_index(cond_start)));
+                continue;
+            }
+            // Opaque property token (WAREHOUSE = ..., SCHEDULE = ..., FINALIZE =
+            // ..., session params, etc.).
+            self.next_token();
+        }
+
+        // Parse the body as a single statement (INSERT / MERGE / CALL /
+        // BEGIN..END block / EXECUTE IMMEDIATE / ...), falling back gracefully
+        // for shapes that can't be represented (e.g. `EXECUTE DBT PROJECT`).
+        let body = if found_as {
+            self.parse_create_body_statement()
+        } else {
+            None
+        };
+
+        Ok(Statement::CreateTask {
+            or_replace,
+            or_alter,
+            if_not_exists,
+            name,
+            after,
+            when,
+            body,
+        })
+    }
+
+    /// Parse a Snowflake `CREATE [OR REPLACE] STREAM [IF NOT EXISTS] <name>
+    /// [COPY GRANTS] ON <source_type> <source> [{AT|BEFORE}(...)] [<options>]`.
+    ///
+    /// The `STREAM` keyword has already been consumed by the caller. The lineage
+    /// edge is `source -> stream`; time-travel and options are skipped.
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-stream>
+    fn parse_create_stream(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name_start = self.index;
+        let name = self.parse_object_name(false)?;
+        let name = name.spanning(self.span_from_index(name_start));
+
+        // Skip pre-ON properties (COPY GRANTS, etc.) until the `ON` source clause.
+        let mut found_on = false;
+        loop {
+            match self.peek_token_kind() {
+                Token::EOF | Token::SemiColon => break,
+                Token::Word(w) if w.keyword == Keyword::ON => {
+                    self.next_token();
+                    found_on = true;
+                    break;
+                }
+                _ => {
+                    self.next_token();
+                }
+            }
+        }
+
+        let (source_type, source) = if found_on {
+            // Collect the object-kind keyword(s): optional modifiers
+            // (EXTERNAL/DIRECTORY/DYNAMIC/ICEBERG) then a noun (TABLE/VIEW/STAGE).
+            let mut source_type = String::new();
+            while let Token::Word(w) = self.peek_token_kind() {
+                let word = w.value.to_uppercase();
+                match word.as_str() {
+                    "EXTERNAL" | "DIRECTORY" | "DYNAMIC" | "ICEBERG" => {
+                        if !source_type.is_empty() {
+                            source_type.push(' ');
+                        }
+                        source_type.push_str(&word);
+                        self.next_token();
+                    }
+                    "TABLE" | "VIEW" | "STAGE" => {
+                        if !source_type.is_empty() {
+                            source_type.push(' ');
+                        }
+                        source_type.push_str(&word);
+                        self.next_token();
+                        break;
+                    }
+                    _ => break,
+                }
+            }
+            let src_start = self.index;
+            let source = self.parse_object_name(false)?;
+            let source = source.spanning(self.span_from_index(src_start));
+            (source_type, source)
+        } else {
+            (String::new(), ObjectName(vec![]).empty_span())
+        };
+
+        // Skip the remainder (AT/BEFORE time-travel, APPEND_ONLY, COMMENT, ...).
+        self.skip_to_statement_end();
+
+        Ok(Statement::CreateStream {
+            or_replace,
+            if_not_exists,
+            name,
+            source_type,
+            source,
+        })
+    }
+
+    /// Parse a Snowflake `CREATE [OR REPLACE] PIPE [IF NOT EXISTS] <name>
+    /// [<properties>] AS <copy_statement>`.
+    ///
+    /// The `PIPE` keyword has already been consumed by the caller. The `AS`
+    /// body is a `COPY INTO` statement carrying ingest lineage (stage -> table).
+    /// <https://docs.snowflake.com/en/sql-reference/sql/create-pipe>
+    fn parse_create_pipe(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name_start = self.index;
+        let name = self.parse_object_name(false)?;
+        let name = name.spanning(self.span_from_index(name_start));
+
+        // Skip pre-AS properties (AUTO_INGEST, AWS_SNS_TOPIC, INTEGRATION,
+        // ERROR_INTEGRATION, COMMENT, ...) until the AS body marker.
+        let mut found_as = false;
+        loop {
+            match self.peek_token_kind() {
+                Token::EOF | Token::SemiColon => break,
+                _ => {}
+            }
+            if self.parse_keyword(Keyword::AS) {
+                found_as = true;
+                break;
+            }
+            self.next_token();
+        }
+
+        let body = if found_as {
+            self.parse_create_body_statement()
+        } else {
+            None
+        };
+
+        Ok(Statement::CreatePipe {
+            or_replace,
+            if_not_exists,
+            name,
+            body,
+        })
+    }
+
+    /// Parse a BigQuery ML `CREATE [OR REPLACE] MODEL [IF NOT EXISTS] <name>
+    /// [TRANSFORM(...)] [OPTIONS(...)] AS <query>`.
+    ///
+    /// The `MODEL` keyword has already been consumed by the caller. The `AS`
+    /// query is the training input; `TRANSFORM` and `OPTIONS` are skipped.
+    /// <https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-create>
+    fn parse_create_model(&mut self, or_replace: bool) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name_start = self.index;
+        let name = self.parse_object_name(false)?;
+        let name = name.spanning(self.span_from_index(name_start));
+
+        // Find the training-input body. BigQuery uses `AS <query>` (preceded by
+        // optional TRANSFORM(...)/OPTIONS(...)); Redshift ML uses `FROM (<query>)`
+        // or `FROM <table>` (followed by TARGET/FUNCTION/IAM_ROLE/SETTINGS).
+        // Skip balanced-paren option clauses until we hit AS or FROM.
+        let mut marker = None;
+        loop {
+            match self.peek_token_kind() {
+                Token::EOF | Token::SemiColon => break,
+                _ => {}
+            }
+            if self.parse_keyword(Keyword::AS) {
+                marker = Some(Keyword::AS);
+                break;
+            }
+            if self.parse_keyword(Keyword::FROM) {
+                marker = Some(Keyword::FROM);
+                break;
+            }
+            if self.consume_token(&Token::LParen) {
+                let mut depth = 1i32;
+                while depth > 0 {
+                    match self.next_token().token {
+                        Token::LParen => depth += 1,
+                        Token::RParen => depth -= 1,
+                        Token::EOF => break,
+                        _ => {}
+                    }
+                }
+                continue;
+            }
+            self.next_token();
+        }
+
+        let query = match marker {
+            // BigQuery: AS <query>.
+            Some(Keyword::AS) => Some(Box::new(self.parse_query()?)),
+            // Redshift ML: FROM (<query>) is the training input. A bare
+            // `FROM <table>` isn't a query, so it's skipped (query stays None).
+            Some(Keyword::FROM) if self.consume_token(&Token::LParen) => {
+                let q = self.parse_query()?;
+                self.expect_token(&Token::RParen)?;
+                Some(Box::new(q))
+            }
+            _ => None,
+        };
+        // Discard trailing clauses (TARGET/FUNCTION/IAM_ROLE/SETTINGS/...).
+        self.skip_to_statement_end();
+        Ok(Statement::CreateModel {
+            or_replace,
+            if_not_exists,
+            name,
+            query,
+        })
+    }
+
+    /// Parse a Redshift `CREATE EXTERNAL SCHEMA [IF NOT EXISTS] <name> FROM
+    /// { DATA CATALOG | HIVE METASTORE | REDSHIFT | POSTGRES | MYSQL | ... }
+    /// [DATABASE '<db>' [SCHEMA '<schema>']] [<options>]`.
+    ///
+    /// `EXTERNAL SCHEMA` has already been consumed by the caller. The local
+    /// schema name plus the federated `FROM` source (database/schema) are
+    /// retained for lineage; region / URI / IAM-role options are skipped.
+    /// <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_EXTERNAL_SCHEMA.html>
+    fn parse_create_external_schema(&mut self) -> Result<Statement, ParserError> {
+        let if_not_exists = self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
+        let name_start = self.index;
+        let name = self.parse_object_name(false)?;
+        let name = name.spanning(self.span_from_index(name_start));
+        self.expect_keyword(Keyword::FROM)?;
+
+        // FROM source kind: a single word, or the two-word forms
+        // `DATA CATALOG` / `HIVE METASTORE`.
+        let first = self.next_token();
+        let mut from = match first.token {
+            Token::Word(w) => w.value.to_uppercase(),
+            _ => return self.expected("an external schema source after FROM", first),
+        };
+        if from == "DATA" && self.peek_word_ci("CATALOG") {
+            self.next_token();
+            from = "DATA CATALOG".to_string();
+        } else if from == "HIVE" && self.peek_word_ci("METASTORE") {
+            self.next_token();
+            from = "HIVE METASTORE".to_string();
+        }
+
+        // The external database / schema this maps to (lineage target).
+        let database = if self.parse_keyword(Keyword::DATABASE) {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+        let schema = if self.parse_keyword(Keyword::SCHEMA) {
+            Some(self.parse_literal_string()?)
+        } else {
+            None
+        };
+
+        // Skip the remainder (REGION/URI/PORT/IAM_ROLE/...).
+        self.skip_to_statement_end();
+
+        Ok(Statement::CreateExternalSchema {
+            if_not_exists,
+            name,
+            from,
+            database,
+            schema,
+        })
+    }
+
+    /// Parse the `AS <sql>` body of a CREATE TASK / CREATE PIPE as a single
+    /// statement. Returns `None` (skipping to the statement end) when the body
+    /// can't be parsed, or when it only *partially* parses — e.g. Snowflake's
+    /// `EXECUTE DBT PROJECT ...` parses as `EXECUTE DBT` and leaves trailing
+    /// tokens, which would otherwise corrupt the surrounding statement.
+    fn parse_create_body_statement(&mut self) -> Option<Box<Statement>> {
+        let start = self.index;
+        if let Some(stmt) = self.maybe_parse(|p| p.parse_statement()) {
+            if matches!(self.peek_token_kind(), Token::EOF | Token::SemiColon) {
+                return Some(Box::new(stmt));
+            }
+        }
+        // Unparseable or partial body: revert and discard the remainder.
+        self.index = start;
+        self.skip_to_statement_end();
+        None
+    }
+
+    /// Consume tokens up to (but not including) the statement-terminating
+    /// semicolon or EOF, respecting balanced parentheses. Used by the
+    /// lineage-focused CREATE parsers to discard trailing option clauses.
+    fn skip_to_statement_end(&mut self) {
+        let mut depth = 0i32;
+        loop {
+            match self.peek_token_kind() {
+                Token::EOF => break,
+                Token::SemiColon if depth == 0 => break,
+                Token::LParen => {
+                    depth += 1;
+                    self.next_token();
+                }
+                Token::RParen => {
+                    if depth == 0 {
+                        break;
+                    }
+                    depth -= 1;
+                    self.next_token();
+                }
+                _ => {
+                    self.next_token();
+                }
             }
         }
     }
@@ -11821,7 +12244,9 @@ impl<'a> Parser<'a> {
                         ))))
                     }
                 }
-                Keyword::MAP if dialect_of!(self is DatabricksDialect) => {
+                Keyword::MAP if dialect_of!(self is DatabricksDialect | RedshiftSqlDialect) => {
+                    // Databricks `MAP<k, v>` and Redshift Spectrum (Hive-style)
+                    // `map<k, v>` both use angle-bracket, comma-separated types.
                     self.prev_token();
                     let (field_defs, _trailing_bracket) =
                         self.parse_struct_type_def(Self::parse_struct_field_def, Keyword::MAP)?;
@@ -11835,7 +12260,10 @@ impl<'a> Parser<'a> {
                     trailing_bracket = _trailing_bracket;
                     Ok(DataType::Struct(field_defs))
                 }
-                Keyword::STRUCT if dialect_of!(self is DatabricksDialect) => {
+                Keyword::STRUCT if dialect_of!(self is DatabricksDialect | RedshiftSqlDialect) => {
+                    // Databricks and Redshift Spectrum (Hive-style) structs both
+                    // use colon-separated `name:type` fields:
+                    // `struct<given:varchar(20), family:varchar(20)>`.
                     self.prev_token();
                     let (field_defs, _trailing_bracket) = self.parse_struct_type_def(
                         Self::parse_databricks_query_struct_field_def,
@@ -18197,7 +18625,9 @@ impl<'a> Parser<'a> {
         // Snowflake: EXECUTE TASK <name> [ USING CONFIG = <expr> ]
         // https://docs.snowflake.com/en/sql-reference/sql/execute-task
         if self.parse_keyword(Keyword::TASK) {
+            let name_start = self.index;
             let name = self.parse_object_name(false)?;
+            let name = name.spanning(self.span_from_index(name_start));
             if self.parse_keyword(Keyword::USING) {
                 let _ = self.parse_identifier(false)?;
                 let _ = self.consume_token(&Token::Eq);

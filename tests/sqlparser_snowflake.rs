@@ -4293,3 +4293,308 @@ fn parse_snowflake_table_function_tablesample() {
         .parse_sql_statements("SELECT * FROM TABLE('t1') TABLESAMPLE BERNOULLI (20.3)")
         .unwrap();
 }
+
+/// Helper: parse a single statement with location tracking enabled so the
+/// captured `WithSpan` location is meaningful (the convenience `parse_sql`
+/// path used by `verified_stmt` installs dummy spans).
+fn snowflake_parse_with_locations(sql: &str) -> Statement {
+    use sqlparser::parser::Parser;
+    use sqlparser::tokenizer::Tokenizer;
+    let dialect = SnowflakeDialect {};
+    let tokens = Tokenizer::new(&dialect, sql)
+        .tokenize_with_location()
+        .unwrap();
+    let mut stmts = Parser::new(&dialect)
+        .with_tokens_with_locations(tokens)
+        .parse_statements()
+        .unwrap();
+    assert_eq!(stmts.len(), 1);
+    stmts.pop().unwrap()
+}
+
+#[test]
+fn parse_create_task_with_insert_body() {
+    // Scheduling/warehouse properties are dropped; the AS body is retained.
+    let stmt = snowflake().one_statement_parses_to(
+        "CREATE TASK mytask_minute \
+         WAREHOUSE = mywh \
+         SCHEDULE = '5 MINUTES' \
+         AS INSERT INTO mytable(ts) VALUES(CURRENT_TIMESTAMP)",
+        "CREATE TASK mytask_minute AS INSERT INTO mytable (ts) VALUES (CURRENT_TIMESTAMP)",
+    );
+    match stmt {
+        Statement::CreateTask {
+            or_replace,
+            or_alter,
+            if_not_exists,
+            name,
+            after,
+            when,
+            body,
+        } => {
+            assert!(!or_replace);
+            assert!(!or_alter);
+            assert!(!if_not_exists);
+            assert_eq!(name.to_string(), "mytask_minute");
+            assert!(after.is_empty());
+            assert!(when.is_none());
+            // The body is the real INSERT statement (lineage preserved).
+            assert!(matches!(body.as_deref(), Some(Statement::Insert { .. })));
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_task_with_after_dependencies() {
+    let stmt = snowflake().verified_stmt(
+        "CREATE TASK task5 AFTER task2, task3, task4 AS INSERT INTO t1 (ts) VALUES (CURRENT_TIMESTAMP)",
+    );
+    match stmt {
+        Statement::CreateTask { name, after, .. } => {
+            assert_eq!(name.to_string(), "task5");
+            let deps: Vec<String> = after.iter().map(|d| d.to_string()).collect();
+            assert_eq!(deps, vec!["task2", "task3", "task4"]);
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_task_with_when_predicate() {
+    let stmt = snowflake().one_statement_parses_to(
+        "CREATE TASK triggered_task_stream \
+         WHEN SYSTEM$STREAM_HAS_DATA('orders_stream') \
+         AS INSERT INTO completed_promotions SELECT order_id FROM orders_stream",
+        "CREATE TASK triggered_task_stream WHEN SYSTEM$STREAM_HAS_DATA('orders_stream') \
+         AS INSERT INTO completed_promotions SELECT order_id FROM orders_stream",
+    );
+    match stmt {
+        Statement::CreateTask { when, body, .. } => {
+            let when = when.expect("WHEN predicate captured");
+            assert_eq!(when.to_string(), "SYSTEM$STREAM_HAS_DATA('orders_stream')");
+            assert!(matches!(body.as_deref(), Some(Statement::Insert { .. })));
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_task_or_replace_and_or_alter() {
+    match snowflake().verified_stmt("CREATE OR REPLACE TASK t AS SELECT 1") {
+        Statement::CreateTask {
+            or_replace,
+            or_alter,
+            ..
+        } => {
+            assert!(or_replace);
+            assert!(!or_alter);
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+    // OR ALTER + dotted/qualified name + EXECUTE AS USER (the EXECUTE AS pair
+    // must not be mistaken for the AS body marker).
+    match snowflake().one_statement_parses_to(
+        "CREATE OR ALTER TASK team_task SCHEDULE='12 HOURS' EXECUTE AS USER task_user AS SELECT 1",
+        "CREATE OR ALTER TASK team_task AS SELECT 1",
+    ) {
+        Statement::CreateTask {
+            or_replace,
+            or_alter,
+            name,
+            ..
+        } => {
+            assert!(!or_replace);
+            assert!(or_alter);
+            assert_eq!(name.to_string(), "team_task");
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_task_begin_block_body() {
+    // Snowflake scripting BEGIN..END block as the task body.
+    match snowflake().parse_sql_statements(
+        "CREATE OR REPLACE TASK test_logging \
+         SCHEDULE = 'USING CRON 0 * * * * America/Los_Angeles' \
+         AS BEGIN SELECT CURRENT_TIMESTAMP; END",
+    ) {
+        Ok(stmts) => match &stmts[0] {
+            Statement::CreateTask { body, .. } => {
+                assert!(body.is_some(), "BEGIN..END block body should be captured");
+            }
+            other => panic!("expected CreateTask, got {other:?}"),
+        },
+        Err(e) => panic!("parse failed: {e}"),
+    }
+}
+
+#[test]
+fn parse_create_task_unparseable_body_falls_back() {
+    // `EXECUTE DBT PROJECT` is not modelled; the body must degrade to None
+    // rather than corrupting the surrounding statement.
+    match snowflake().parse_sql_statements(
+        "CREATE OR ALTER TASK run_dbt WAREHOUSE = wh \
+         AS EXECUTE DBT PROJECT my_db.my_schema.my_proj args='run --target prod'",
+    ) {
+        Ok(stmts) => match &stmts[0] {
+            Statement::CreateTask { name, body, .. } => {
+                assert_eq!(name.to_string(), "run_dbt");
+                assert!(body.is_none(), "unparseable body should be None");
+            }
+            other => panic!("expected CreateTask, got {other:?}"),
+        },
+        Err(e) => panic!("parse should not error: {e}"),
+    }
+}
+
+#[test]
+fn parse_create_task_captures_name_location() {
+    // Verify the name span is populated when location tracking is on.
+    let stmt = snowflake_parse_with_locations("CREATE TASK mytask AS SELECT 1");
+    match stmt {
+        Statement::CreateTask { name, .. } => {
+            let span = name.span_location();
+            assert_ne!(
+                span,
+                Span::default(),
+                "task name location should be captured"
+            );
+            // "CREATE TASK " is 12 chars, so the name starts at column 13.
+            assert_eq!(span.start.column, 13);
+        }
+        other => panic!("expected CreateTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_stream_on_table_view_stage() {
+    for (sql, src_type, src) in [
+        (
+            "CREATE STREAM mystream ON TABLE mytable",
+            "TABLE",
+            "mytable",
+        ),
+        ("CREATE STREAM mystream ON VIEW myview", "VIEW", "myview"),
+        ("CREATE STREAM s ON STAGE mystage", "STAGE", "mystage"),
+    ] {
+        match snowflake().verified_stmt(sql) {
+            Statement::CreateStream {
+                source_type,
+                source,
+                ..
+            } => {
+                assert_eq!(source_type, src_type);
+                assert_eq!(source.to_string(), src);
+            }
+            other => panic!("expected CreateStream, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn parse_create_stream_skips_time_travel() {
+    // AT/BEFORE time-travel and APPEND_ONLY etc. are not lineage and are dropped.
+    match snowflake().one_statement_parses_to(
+        "CREATE OR REPLACE STREAM mystream ON TABLE mytable AT(STREAM => 'mystream')",
+        "CREATE OR REPLACE STREAM mystream ON TABLE mytable",
+    ) {
+        Statement::CreateStream {
+            or_replace,
+            name,
+            source_type,
+            source,
+            ..
+        } => {
+            assert!(or_replace);
+            assert_eq!(name.to_string(), "mystream");
+            assert_eq!(source_type, "TABLE");
+            assert_eq!(source.to_string(), "mytable");
+        }
+        other => panic!("expected CreateStream, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_stream_external_table_source() {
+    match snowflake().verified_stmt("CREATE STREAM s ON EXTERNAL TABLE ext.src") {
+        Statement::CreateStream {
+            source_type,
+            source,
+            ..
+        } => {
+            assert_eq!(source_type, "EXTERNAL TABLE");
+            assert_eq!(source.to_string(), "ext.src");
+        }
+        other => panic!("expected CreateStream, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_pipe_copy_into_body() {
+    let stmt = snowflake().one_statement_parses_to(
+        "CREATE PIPE mypipe_aws AUTO_INGEST = TRUE \
+         AS COPY INTO snowpipe_db.public.mytable FROM @snowpipe_db.public.mystage \
+         FILE_FORMAT = (TYPE = 'JSON')",
+        "CREATE PIPE mypipe_aws AS COPY INTO snowpipe_db.public.mytable \
+         FROM @snowpipe_db.public.mystage FILE_FORMAT=(TYPE='JSON')",
+    );
+    match stmt {
+        Statement::CreatePipe { name, body, .. } => {
+            assert_eq!(name.to_string(), "mypipe_aws");
+            // The body is the real COPY INTO statement carrying ingest lineage.
+            assert!(matches!(
+                body.as_deref(),
+                Some(Statement::CopyIntoSnowflake { .. })
+            ));
+        }
+        other => panic!("expected CreatePipe, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_execute_task_captures_name_location() {
+    match snowflake().verified_stmt("EXECUTE TASK mytask") {
+        Statement::ExecuteTask { name } => assert_eq!(name.to_string(), "mytask"),
+        other => panic!("expected ExecuteTask, got {other:?}"),
+    }
+    // USING CONFIG is consumed but not represented.
+    snowflake().one_statement_parses_to(
+        "EXECUTE TASK my_root_task USING CONFIG=$${\"a\": 1}$$",
+        "EXECUTE TASK my_root_task",
+    );
+    // Location is captured under location tracking.
+    match snowflake_parse_with_locations("EXECUTE TASK mytask") {
+        Statement::ExecuteTask { name } => {
+            assert_ne!(name.span_location(), Span::default());
+        }
+        other => panic!("expected ExecuteTask, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_create_unsupported_is_not_a_comment() {
+    // CREATE WAREHOUSE is not modelled — it must produce CreateUnsupported,
+    // NOT a fake COMMENT statement.
+    match snowflake().parse_sql_statements("CREATE WAREHOUSE wh WITH WAREHOUSE_SIZE='XSMALL'") {
+        Ok(stmts) => match &stmts[0] {
+            Statement::CreateUnsupported {
+                or_replace,
+                object_type,
+            } => {
+                assert!(!or_replace);
+                assert_eq!(object_type, "WAREHOUSE");
+            }
+            other => panic!("expected CreateUnsupported, got {other:?}"),
+        },
+        Err(e) => panic!("parse failed: {e}"),
+    }
+    match snowflake().parse_sql_statements("CREATE OR REPLACE FILE FORMAT ff TYPE='CSV'") {
+        Ok(stmts) => match &stmts[0] {
+            Statement::CreateUnsupported { or_replace, .. } => assert!(or_replace),
+            other => panic!("expected CreateUnsupported, got {other:?}"),
+        },
+        Err(e) => panic!("parse failed: {e}"),
+    }
+}

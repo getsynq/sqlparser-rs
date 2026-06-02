@@ -4660,3 +4660,34 @@ fn parse_create_table_as_with_data_clause() {
             .unwrap_or_else(|e| panic!("failed to parse `{sql}`: {e}"));
     }
 }
+
+#[test]
+fn parse_create_foreign_table_captures_columns() {
+    // PostgreSQL foreign table: routed through external-table handling so the
+    // name/columns (lineage schema) are captured; SERVER/OPTIONS are skipped.
+    let stmt = pg()
+        .parse_sql_statements(
+            "CREATE FOREIGN TABLE words (word text NOT NULL) SERVER local_file OPTIONS (filename '/usr/share/dict/words')",
+        )
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        stmt.to_string(),
+        "CREATE EXTERNAL TABLE words (word TEXT NOT NULL)"
+    );
+    match stmt {
+        Statement::CreateTable {
+            name,
+            columns,
+            external,
+            ..
+        } => {
+            assert!(external);
+            assert_eq!(name.to_string(), "words");
+            assert_eq!(columns.len(), 1);
+            assert_eq!(columns[0].name.to_string(), "word");
+        }
+        other => panic!("expected external CreateTable, got {other:?}"),
+    }
+}
