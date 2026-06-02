@@ -2736,6 +2736,7 @@ fn parse_create_model_as_select() {
             if_not_exists,
             name,
             query,
+            ..
         } => {
             assert!(!or_replace);
             assert!(!if_not_exists);

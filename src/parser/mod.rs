@@ -5262,18 +5262,26 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        let query = match marker {
+        let mut query = None;
+        let mut from_table = None;
+        match marker {
             // BigQuery: AS <query>.
-            Some(Keyword::AS) => Some(Box::new(self.parse_query()?)),
-            // Redshift ML: FROM (<query>) is the training input. A bare
-            // `FROM <table>` isn't a query, so it's skipped (query stays None).
-            Some(Keyword::FROM) if self.consume_token(&Token::LParen) => {
-                let q = self.parse_query()?;
-                self.expect_token(&Token::RParen)?;
-                Some(Box::new(q))
+            Some(Keyword::AS) => query = Some(Box::new(self.parse_query()?)),
+            Some(Keyword::FROM) => {
+                if self.consume_token(&Token::LParen) {
+                    // Redshift ML: FROM (<query>) training input.
+                    let q = self.parse_query()?;
+                    self.expect_token(&Token::RParen)?;
+                    query = Some(Box::new(q));
+                } else {
+                    // Redshift ML: FROM <table> training input.
+                    let start = self.index;
+                    let table = self.parse_object_name(false)?;
+                    from_table = Some(table.spanning(self.span_from_index(start)));
+                }
             }
-            _ => None,
-        };
+            _ => {}
+        }
         // Discard trailing clauses (TARGET/FUNCTION/IAM_ROLE/SETTINGS/...).
         self.skip_to_statement_end();
         Ok(Statement::CreateModel {
@@ -5281,6 +5289,7 @@ impl<'a> Parser<'a> {
             if_not_exists,
             name,
             query,
+            from_table,
         })
     }
 
