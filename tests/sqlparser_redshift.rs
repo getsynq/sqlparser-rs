@@ -1060,3 +1060,29 @@ fn parse_create_model_from_subquery() {
         other => panic!("expected CreateModel, got {other:?}"),
     }
 }
+
+#[test]
+fn parse_create_model_from_bare_table() {
+    // Redshift ML: FROM <table> (not a subquery) — the source table must be
+    // recorded so the training-input lineage edge is captured.
+    let stmt = redshift().one_statement_parses_to(
+        "CREATE MODEL churn_model FROM customer_activity \
+         TARGET churn FUNCTION predict_churn IAM_ROLE default \
+         SETTINGS (S3_BUCKET 'my-bucket')",
+        "CREATE MODEL churn_model FROM customer_activity",
+    );
+    match stmt {
+        Statement::CreateModel {
+            name,
+            query,
+            from_table,
+            ..
+        } => {
+            assert_eq!(name.to_string(), "churn_model");
+            assert!(query.is_none());
+            let from_table = from_table.expect("FROM <table> source captured");
+            assert_eq!(from_table.to_string(), "customer_activity");
+        }
+        other => panic!("expected CreateModel, got {other:?}"),
+    }
+}

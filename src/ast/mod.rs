@@ -2721,21 +2721,28 @@ pub enum Statement {
     },
     /// ```sql
     /// CREATE [ OR REPLACE ] MODEL [ IF NOT EXISTS ] <name>
-    ///   [ TRANSFORM ( ... ) ] [ OPTIONS ( ... ) ] AS <query>
+    ///   [ TRANSFORM ( ... ) ] [ OPTIONS ( ... ) ] AS <query>     -- BigQuery ML
+    /// CREATE MODEL <name> FROM { <table> | ( <query> ) } ...      -- Redshift ML
     /// ```
     ///
-    /// BigQuery ML model. The `AS <query>` is the training input, so it carries
-    /// the lineage edge `training_source -> model`. `TRANSFORM` and `OPTIONS`
-    /// are not lineage-relevant and are skipped.
+    /// BigQuery ML / Redshift ML model. The training input is the lineage edge
+    /// `training_source -> model`, captured as either `query` (BigQuery
+    /// `AS <query>` or Redshift `FROM (<query>)`) or `from_table` (Redshift
+    /// `FROM <table>`). At most one of the two is set. `TRANSFORM`, `OPTIONS`,
+    /// `TARGET`, `FUNCTION`, `IAM_ROLE` and `SETTINGS` are not lineage-relevant
+    /// and are skipped.
     /// See: <https://cloud.google.com/bigquery/docs/reference/standard-sql/bigqueryml-syntax-create>
+    /// and <https://docs.aws.amazon.com/redshift/latest/dg/r_CREATE_MODEL.html>
     CreateModel {
         or_replace: bool,
         if_not_exists: bool,
         name: WithSpan<ObjectName>,
         /// The training-input query: BigQuery `AS <query>` or Redshift ML
-        /// `FROM (<query>)`. `None` for a Redshift `FROM <table>` source that
-        /// isn't a subquery (the table reference is then skipped).
+        /// `FROM (<query>)`. Mutually exclusive with `from_table`.
         query: Option<Box<Query>>,
+        /// The training-input table for a Redshift ML `FROM <table>` source
+        /// (when it isn't a subquery). Mutually exclusive with `query`.
+        from_table: Option<WithSpan<ObjectName>>,
     },
     /// ```sql
     /// CREATE EXTERNAL SCHEMA [ IF NOT EXISTS ] <name>
@@ -3710,6 +3717,7 @@ impl fmt::Display for Statement {
                 if_not_exists,
                 name,
                 query,
+                from_table,
             } => {
                 write!(f, "CREATE ")?;
                 if *or_replace {
@@ -3722,6 +3730,8 @@ impl fmt::Display for Statement {
                 write!(f, "{name}")?;
                 if let Some(query) = query {
                     write!(f, " AS {query}")?;
+                } else if let Some(from_table) = from_table {
+                    write!(f, " FROM {from_table}")?;
                 }
                 Ok(())
             }
