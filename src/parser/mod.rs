@@ -1087,6 +1087,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_truncate(&mut self) -> Result<Statement, ParserError> {
         let table = self.parse_keyword(Keyword::TABLE);
+        let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
         let table_name = self.parse_object_name(false)?;
         let mut partitions = None;
         if self.parse_keyword(Keyword::PARTITION) {
@@ -1098,6 +1099,7 @@ impl<'a> Parser<'a> {
             table_name,
             partitions,
             table,
+            if_exists,
         })
     }
 

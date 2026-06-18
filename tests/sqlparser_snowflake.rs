@@ -4602,3 +4602,26 @@ fn parse_create_unsupported_is_not_a_comment() {
         Err(e) => panic!("parse failed: {e}"),
     }
 }
+
+#[test]
+fn parse_truncate_if_exists() {
+    // Snowflake: TRUNCATE [TABLE] [IF EXISTS] <name>
+    // https://docs.snowflake.com/en/sql-reference/sql/truncate-table
+    let truncate =
+        snowflake().verified_stmt(r#"TRUNCATE IF EXISTS "MY_DB"."MY_SCHEMA"."MY_TABLE""#);
+    assert_eq!(
+        Statement::Truncate {
+            table_name: ObjectName(vec![
+                Ident::with_quote('"', "MY_DB"),
+                Ident::with_quote('"', "MY_SCHEMA"),
+                Ident::with_quote('"', "MY_TABLE"),
+            ]),
+            partitions: None,
+            table: false,
+            if_exists: true,
+        },
+        truncate
+    );
+    // TABLE keyword may precede IF EXISTS.
+    snowflake().verified_stmt("TRUNCATE TABLE IF EXISTS db.table_name");
+}

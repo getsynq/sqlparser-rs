@@ -4157,7 +4157,8 @@ fn parse_truncate() {
         Statement::Truncate {
             table_name: ObjectName(vec![Ident::new("db"), Ident::new("table_name")]),
             partitions: None,
-            table: false
+            table: false,
+            if_exists: false
         },
         truncate
     );
