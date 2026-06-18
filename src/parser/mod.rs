@@ -16149,6 +16149,17 @@ impl<'a> Parser<'a> {
     ///
     /// For now it only supports timestamp versioning for BigQuery and MSSQL dialects.
     pub fn parse_table_version(&mut self) -> Result<Option<TableVersion>, ParserError> {
+        // Delta Lake / Databricks (and Spark) time travel — may appear before the alias:
+        //   table VERSION AS OF <version>
+        //   table TIMESTAMP AS OF <expr>
+        //   table@v<version>            (version shorthand)
+        //   table@<yyyyMMddHHmmssSSS>   (timestamp shorthand)
+        // https://docs.databricks.com/aws/en/delta/history
+        if dialect_of!(self is DatabricksDialect | GenericDialect) {
+            if let Some(version) = self.maybe_parse_delta_time_travel()? {
+                return Ok(Some(version));
+            }
+        }
         if dialect_of!(self is BigQueryDialect | MsSqlDialect)
             && self.parse_keywords(&[Keyword::FOR, Keyword::SYSTEM_TIME, Keyword::AS, Keyword::OF])
         {
@@ -16235,6 +16246,63 @@ impl<'a> Parser<'a> {
         } else {
             Ok(None)
         }
+    }
+
+    /// Parse a Delta Lake / Databricks time-travel qualifier that follows a table
+    /// reference: `VERSION AS OF <version>`, `TIMESTAMP AS OF <expr>`, or the
+    /// `@v<version>` / `@<timestamp>` shorthands. Returns `None` (consuming nothing)
+    /// when no such qualifier is present.
+    fn maybe_parse_delta_time_travel(&mut self) -> Result<Option<TableVersion>, ParserError> {
+        // VERSION AS OF <version> (VERSION is not a reserved keyword — match by value)
+        if matches!(
+            self.peek_tokens(),
+            [Token::Word(w), Token::Word(a), Token::Word(o)]
+                if w.value.eq_ignore_ascii_case("VERSION")
+                    && a.keyword == Keyword::AS
+                    && o.keyword == Keyword::OF
+        ) {
+            self.next_token(); // VERSION
+            self.next_token(); // AS
+            self.next_token(); // OF
+            return Ok(Some(TableVersion::VersionAsOf(self.parse_expr()?)));
+        }
+        // TIMESTAMP AS OF <expr>
+        if matches!(
+            self.peek_tokens(),
+            [Token::Word(w), Token::Word(a), Token::Word(o)]
+                if w.keyword == Keyword::TIMESTAMP
+                    && a.keyword == Keyword::AS
+                    && o.keyword == Keyword::OF
+        ) {
+            self.next_token(); // TIMESTAMP
+            self.next_token(); // AS
+            self.next_token(); // OF
+            return Ok(Some(TableVersion::TimestampAsOf(self.parse_expr()?)));
+        }
+        // `@v<version>` / `@<yyyyMMddHHmmssSSS>` shorthand. The `@` abuts the table
+        // name, so it surfaces as a standalone AtSign followed by the qualifier token.
+        let shorthand = match self.peek_tokens() {
+            [Token::AtSign, Token::Word(w)]
+                if w.value.len() > 1
+                    && (w.value.starts_with('v') || w.value.starts_with('V'))
+                    && w.value[1..].bytes().all(|b| b.is_ascii_digit()) =>
+            {
+                Some(TableVersion::VersionAsOf(Expr::Value(Value::Number(
+                    w.value[1..].parse().unwrap(),
+                    false,
+                ))))
+            }
+            [Token::AtSign, Token::Number(n, long)] => Some(TableVersion::TimestampAsOf(
+                Expr::Value(Value::Number(n.parse().unwrap(), long)),
+            )),
+            _ => None,
+        };
+        if let Some(version) = shorthand {
+            self.next_token(); // @
+            self.next_token(); // version / timestamp token
+            return Ok(Some(version));
+        }
+        Ok(None)
     }
 
     pub fn parse_array_join_table_factor(&mut self) -> Result<TableFactor, ParserError> {
