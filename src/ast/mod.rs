@@ -1693,6 +1693,8 @@ pub enum Statement {
         partitions: Option<Vec<Expr>>,
         /// TABLE - optional keyword;
         table: bool,
+        /// IF EXISTS - optional clause (Snowflake)
+        if_exists: bool,
     },
     /// Msck (Hive)
     Msck {
@@ -3371,9 +3373,11 @@ impl fmt::Display for Statement {
                 table_name,
                 partitions,
                 table,
+                if_exists,
             } => {
                 let table = if *table { "TABLE " } else { "" };
-                write!(f, "TRUNCATE {table}{table_name}")?;
+                let if_exists = if *if_exists { "IF EXISTS " } else { "" };
+                write!(f, "TRUNCATE {table}{if_exists}{table_name}")?;
                 if let Some(ref parts) = partitions {
                     if !parts.is_empty() {
                         write!(f, " PARTITION ({})", display_comma_separated(parts))?;
