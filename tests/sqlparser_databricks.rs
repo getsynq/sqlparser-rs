@@ -662,3 +662,19 @@ fn parse_create_materialized_view_skips_schedule_and_trigger() {
         }
     }
 }
+
+#[test]
+fn parse_struct_field_collate() {
+    // Databricks allows a per-field COLLATE on string types inside STRUCT / nested
+    // ARRAY<STRUCT<...>>. The collation is consumed but not retained in the AST,
+    // so the canonical form drops it (lineage-irrelevant).
+    // https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-collation
+    databricks().one_statement_parses_to(
+        "CREATE TABLE users (id STRING COLLATE UTF8_LCASE, name STRUCT<first: STRING COLLATE UTF8_LCASE, last: STRING COLLATE UTF8_LCASE>)",
+        "CREATE TABLE users (id STRING COLLATE UTF8_LCASE, name STRUCT<first: STRING, last: STRING>)",
+    );
+    databricks().one_statement_parses_to(
+        "CREATE TABLE events (id STRING, tags ARRAY<STRUCT<key: STRING COLLATE UNICODE_CI, value: STRING COLLATE UNICODE_CI>>)",
+        "CREATE TABLE events (id STRING, tags ARRAY<STRUCT<key: STRING, value: STRING>>)",
+    );
+}

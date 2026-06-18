@@ -3248,6 +3248,13 @@ impl<'a> Parser<'a> {
             };
 
         let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
+        // Databricks allows a per-field COLLATE clause on string types inside a
+        // STRUCT, e.g. `STRUCT<first: STRING COLLATE UTF8_LCASE>`. The collation
+        // name carries no lineage, so it is consumed but not retained in the AST.
+        // Only valid when the field type did not itself consume the closing `>`.
+        if !trailing_bracket.0 && self.parse_keyword(Keyword::COLLATE) {
+            let _ = self.parse_collation_name()?;
+        }
         let not_null = if !trailing_bracket.0 {
             self.parse_keywords(&[Keyword::NOT, Keyword::NULL])
         } else {
@@ -3280,6 +3287,13 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::Colon)?;
 
         let (field_type, trailing_bracket) = self.parse_data_type_helper()?;
+        // Databricks allows a per-field COLLATE clause on string types inside a
+        // STRUCT, e.g. `STRUCT<first: STRING COLLATE UTF8_LCASE>`. The collation
+        // name carries no lineage, so it is consumed but not retained in the AST.
+        // Only valid when the field type did not itself consume the closing `>`.
+        if !trailing_bracket.0 && self.parse_keyword(Keyword::COLLATE) {
+            let _ = self.parse_collation_name()?;
+        }
         let not_null = if !trailing_bracket.0 {
             self.parse_keywords(&[Keyword::NOT, Keyword::NULL])
         } else {
