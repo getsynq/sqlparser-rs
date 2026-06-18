@@ -8725,7 +8725,7 @@ impl<'a> Parser<'a> {
         };
 
         // parse optional column list (schema)
-        let (mut columns, constraints, projections) = self.parse_columns()?;
+        let (mut columns, mut constraints, mut projections) = self.parse_columns()?;
 
         // PostgreSQL: partition bound for `PARTITION OF parent`
         let partition_bound = if partition_of.is_some() {
@@ -9147,6 +9147,18 @@ impl<'a> Parser<'a> {
                         }
                     }
                     // Value was a paren group; skip preserving since we don't have AST for it.
+                } else if matches!(self.peek_token().token, Token::Word(_)) {
+                    // Bare-word option value (TARGET_LAG = DOWNSTREAM,
+                    // REFRESH_MODE = AUTO, INITIALIZE = ON_CREATE, WAREHOUSE = wh).
+                    // Parse just the identifier — NOT a full expression — so a
+                    // trailing column-definition-list `(` (Snowflake allows
+                    // the column list *after* the options header) is not mistaken
+                    // for a function call on the value word.
+                    let ident = self.parse_identifier(false)?;
+                    table_options.push(SqlOption {
+                        name: ObjectName(vec![Ident::new(key)]),
+                        value: Expr::Identifier(ident),
+                    });
                 } else if let Ok(value) = self.parse_expr() {
                     table_options.push(SqlOption {
                         name: ObjectName(vec![Ident::new(key)]),
@@ -9181,6 +9193,20 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
+                continue;
+            }
+
+            // Snowflake dynamic / iceberg tables: the column-definition list may
+            // appear *after* the options header rather than before it, e.g.
+            // `TARGET_LAG = ... WAREHOUSE = ... ( "col" TYPE, ... ) AS SELECT ...`.
+            // The up-front parse_columns() saw the first option keyword (not `(`),
+            // so `columns` is still empty here. Pick the list up now.
+            // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+            if columns.is_empty() && constraints.is_empty() && self.peek_token_is(&Token::LParen) {
+                let (cols, cons, projs) = self.parse_columns()?;
+                columns = cols;
+                constraints = cons;
+                projections = projs;
                 continue;
             }
 

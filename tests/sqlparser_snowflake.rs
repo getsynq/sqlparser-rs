@@ -3464,6 +3464,82 @@ fn test_snowflake_create_dynamic_table_full_options() {
 }
 
 #[test]
+fn test_snowflake_create_dynamic_table_column_list_after_options() {
+    // Snowflake allows the column-definition list *after* the options header
+    // (TARGET_LAG / WAREHOUSE / REFRESH_MODE / INITIALIZE), then AS SELECT. The
+    // column list must be captured even though the up-front column parse saw
+    // the first option keyword instead of `(`.
+    // https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table
+    let sql = "CREATE OR REPLACE DYNAMIC TABLE db.sch.t \
+        TARGET_LAG = '100000 Days' WAREHOUSE = COMPUTE_WH \
+        REFRESH_MODE = AUTO INITIALIZE = ON_CREATE \
+        ( \
+            \"SYSTEM_CREATE_DATE\" TIMESTAMP_NTZ(9), \
+            \"TS_TZ\" TIMESTAMP_TZ(9), \
+            \"ID\" VARCHAR(256), \
+            \"AMOUNT\" NUMBER(38,2), \
+            \"DT\" DATE, \
+            \"IS_OK\" BOOLEAN \
+        ) \
+        AS SELECT a, b, c, d, e, f FROM src";
+    match snowflake().parse_sql_statements(sql).unwrap().remove(0) {
+        Statement::CreateTable {
+            dynamic,
+            columns,
+            query,
+            table_options,
+            ..
+        } => {
+            assert!(dynamic);
+            assert!(query.is_some());
+            let names: Vec<String> = columns.iter().map(|c| c.name.to_string()).collect();
+            assert_eq!(
+                names,
+                vec![
+                    "\"SYSTEM_CREATE_DATE\"",
+                    "\"TS_TZ\"",
+                    "\"ID\"",
+                    "\"AMOUNT\"",
+                    "\"DT\"",
+                    "\"IS_OK\"",
+                ]
+            );
+            let keys: Vec<String> = table_options
+                .iter()
+                .map(|o| o.name.to_string().to_uppercase())
+                .collect();
+            for k in ["TARGET_LAG", "WAREHOUSE", "REFRESH_MODE", "INITIALIZE"] {
+                assert!(keys.iter().any(|x| x == k), "missing {k} in {keys:?}");
+            }
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+
+    // Column-list-only variant (no AS SELECT). The tokenizer abuts the closing
+    // quote against the type (`"ID"VARCHAR`), which must still parse.
+    let sql_no_as = "CREATE OR REPLACE DYNAMIC TABLE t \
+        TARGET_LAG = '1 minute' WAREHOUSE = wh \
+        (\"ID\"VARCHAR(256), \"AMOUNT\"NUMBER(38,2), \"IS_OK\"BOOLEAN)";
+    match snowflake()
+        .parse_sql_statements(sql_no_as)
+        .unwrap()
+        .remove(0)
+    {
+        Statement::CreateTable {
+            dynamic,
+            columns,
+            query,
+            ..
+        } => {
+            assert!(dynamic);
+            assert!(query.is_none());
+            assert_eq!(columns.len(), 3);
+        }
+        other => panic!("expected CreateTable, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_snowflake_create_hybrid_table() {
     let sql = "CREATE HYBRID TABLE prefs (customer_id INT NOT NULL, pref_key VARCHAR(64) NOT NULL, PRIMARY KEY (customer_id, pref_key))";
     let stmt = snowflake().parse_sql_statements(sql).unwrap().remove(0);
