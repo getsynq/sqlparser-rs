@@ -678,3 +678,73 @@ fn parse_struct_field_collate() {
         "CREATE TABLE events (id STRING, tags ARRAY<STRUCT<key: STRING, value: STRING>>)",
     );
 }
+
+#[test]
+fn parse_delta_time_travel_version_as_of() {
+    // https://docs.databricks.com/aws/en/delta/history
+    let select = databricks().verified_only_select("SELECT * FROM people10m VERSION AS OF 123");
+    match &select.from[0].relation {
+        TableFactor::Table { name, version, .. } => {
+            assert_eq!(name, &ObjectName(vec![Ident::new("people10m")]));
+            assert_eq!(
+                version,
+                &Some(TableVersion::VersionAsOf(Expr::Value(number("123"))))
+            );
+        }
+        other => panic!("expected Table, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_delta_time_travel_timestamp_as_of() {
+    // String literal, cast, and function-call timestamp expressions are all valid.
+    let select = databricks()
+        .verified_only_select("SELECT * FROM people10m TIMESTAMP AS OF '2018-10-18T22:15:12.013Z'");
+    match &select.from[0].relation {
+        TableFactor::Table { name, version, .. } => {
+            assert_eq!(name, &ObjectName(vec![Ident::new("people10m")]));
+            assert_eq!(
+                version,
+                &Some(TableVersion::TimestampAsOf(Expr::Value(
+                    Value::SingleQuotedString("2018-10-18T22:15:12.013Z".to_string())
+                )))
+            );
+        }
+        other => panic!("expected Table, got {other:?}"),
+    }
+    databricks().verified_stmt(
+        "SELECT * FROM people10m TIMESTAMP AS OF CAST('2018-10-18 13:36:32 CEST' AS TIMESTAMP)",
+    );
+    databricks().verified_stmt(
+        "SELECT * FROM people10m TIMESTAMP AS OF current_timestamp() - INTERVAL '12' HOUR",
+    );
+}
+
+#[test]
+fn parse_delta_time_travel_with_alias_and_merge() {
+    // Time travel may be written before the alias; it canonicalizes to alias-first
+    // (matching the existing FOR SYSTEM_TIME ordering).
+    databricks().one_statement_parses_to(
+        "SELECT * FROM t VERSION AS OF 5 AS snap",
+        "SELECT * FROM t AS snap VERSION AS OF 5",
+    );
+    databricks().verified_stmt("SELECT * FROM t AS snap VERSION AS OF 5");
+    // Inside MERGE ... USING (the canonical alias-first form round-trips).
+    databricks().verified_stmt(
+        "MERGE INTO my_table AS target USING my_table AS source TIMESTAMP AS OF date_sub(current_date(), 1) ON source.userId = target.userId WHEN MATCHED THEN DELETE",
+    );
+}
+
+#[test]
+fn parse_delta_time_travel_at_shorthand() {
+    // `@v<version>` and `@<yyyyMMddHHmmssSSS>` canonicalize to the AS OF forms.
+    let select = databricks().one_statement_parses_to(
+        "SELECT * FROM people10m@v123",
+        "SELECT * FROM people10m VERSION AS OF 123",
+    );
+    assert!(matches!(select, Statement::Query(_)));
+    databricks().one_statement_parses_to(
+        "SELECT * FROM people10m@20190101000000000",
+        "SELECT * FROM people10m TIMESTAMP AS OF 20190101000000000",
+    );
+}

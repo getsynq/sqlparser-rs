@@ -2018,13 +2018,20 @@ impl fmt::Display for TableAlias {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub enum TableVersion {
+    /// BigQuery / MSSQL: `FOR SYSTEM_TIME AS OF <expr>`
     ForSystemTimeAsOf(Expr),
+    /// Delta Lake / Databricks: `VERSION AS OF <version>` (also the `@v<version>` shorthand)
+    VersionAsOf(Expr),
+    /// Delta Lake / Databricks: `TIMESTAMP AS OF <expr>` (also the `@<yyyyMMddHHmmssSSS>` shorthand)
+    TimestampAsOf(Expr),
 }
 
 impl Display for TableVersion {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TableVersion::ForSystemTimeAsOf(e) => write!(f, " FOR SYSTEM_TIME AS OF {e}")?,
+            TableVersion::VersionAsOf(e) => write!(f, " VERSION AS OF {e}")?,
+            TableVersion::TimestampAsOf(e) => write!(f, " TIMESTAMP AS OF {e}")?,
         }
         Ok(())
     }
