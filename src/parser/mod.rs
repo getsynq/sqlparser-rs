@@ -818,6 +818,7 @@ impl<'a> Parser<'a> {
                         operations: vec![AlterTableOperation::RenameTable {
                             table_name: new_name,
                         }],
+                        settings: None,
                     })
                 }
                 Keyword::COMMENT => {
@@ -11168,6 +11169,22 @@ impl<'a> Parser<'a> {
         Ok(operation)
     }
 
+    /// ClickHouse allows a whole `ALTER TABLE` statement to carry a trailing
+    /// `SETTINGS key = value, ...` clause controlling how the alter/mutation is
+    /// executed (`alter_sync`, `mutations_sync`, ...).
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter>
+    fn parse_optional_alter_table_settings(
+        &mut self,
+    ) -> Result<Option<Vec<SqlOption>>, ParserError> {
+        if !dialect_of!(self is ClickHouseDialect | GenericDialect) {
+            return Ok(None);
+        }
+        if !self.parse_keyword(Keyword::SETTINGS) {
+            return Ok(None);
+        }
+        Ok(Some(self.parse_comma_separated(Parser::parse_sql_option)?))
+    }
+
     fn parse_part_or_partition(&mut self) -> Result<Partition, ParserError> {
         let keyword = self.expect_one_of_keywords(&[Keyword::PART, Keyword::PARTITION])?;
         match keyword {
@@ -11187,11 +11204,13 @@ impl<'a> Parser<'a> {
             let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
             let table_name = self.parse_object_name(false)?;
             let operations = self.parse_comma_separated(Parser::parse_alter_table_operation)?;
+            let settings = self.parse_optional_alter_table_settings()?;
             return Ok(Statement::AlterTable {
                 name: table_name,
                 if_exists,
                 only: false,
                 operations,
+                settings,
             });
         }
         // SQL Server `ALTER SECURITY POLICY <name> ...`.
@@ -11238,11 +11257,13 @@ impl<'a> Parser<'a> {
                 let only = self.parse_keyword(Keyword::ONLY); // [ ONLY ]
                 let table_name = self.parse_object_name(false)?;
                 let operations = self.parse_comma_separated(Parser::parse_alter_table_operation)?;
+                let settings = self.parse_optional_alter_table_settings()?;
                 Ok(Statement::AlterTable {
                     name: table_name,
                     if_exists,
                     only,
                     operations,
+                    settings,
                 })
             }
             Keyword::INDEX => {

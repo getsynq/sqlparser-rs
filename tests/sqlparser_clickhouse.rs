@@ -1808,6 +1808,29 @@ fn parse_alter_table_add_projection_with_settings() {
 }
 
 #[test]
+fn parse_alter_table_statement_settings() {
+    // ClickHouse lets the whole ALTER carry execution settings.
+    let stmt = clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t ADD COLUMN c Int32, DROP COLUMN d SETTINGS alter_sync = 2");
+    match stmt {
+        Statement::AlterTable {
+            operations,
+            settings,
+            ..
+        } => {
+            assert_eq!(operations.len(), 2);
+            let settings = settings.expect("SETTINGS should be captured");
+            assert_eq!(settings.len(), 1);
+            assert_eq!(settings[0].to_string(), "alter_sync = 2");
+        }
+        _ => unreachable!(),
+    }
+    clickhouse_and_generic().verified_stmt(
+        "ALTER TABLE t MODIFY COLUMN c INT64 SETTINGS mutations_sync = 2, alter_sync = 1",
+    );
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }
