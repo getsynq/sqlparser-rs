@@ -10616,6 +10616,36 @@ impl<'a> Parser<'a> {
     /// operator name (`=`, `&&`, `OPERATOR(public.&&)`).
     fn parse_exclude_element(&mut self) -> Result<ExcludeElement, ParserError> {
         let element = self.parse_expr()?;
+        // exclude_element: { column | (expression) } [COLLATE c] [opclass]
+        //                  [ASC | DESC] [NULLS {FIRST | LAST}]
+        // COLLATE is already folded into the expression above. The opclass is
+        // a bare name, so it is only an opclass while the next word is not one
+        // of the keywords that may follow it.
+        let opclass = match self.peek_token_kind() {
+            Token::Word(w)
+                if !matches!(
+                    w.keyword,
+                    Keyword::WITH | Keyword::ASC | Keyword::DESC | Keyword::NULLS
+                ) =>
+            {
+                Some(self.parse_object_name(false)?)
+            }
+            _ => None,
+        };
+        let asc = if self.parse_keyword(Keyword::ASC) {
+            Some(true)
+        } else if self.parse_keyword(Keyword::DESC) {
+            Some(false)
+        } else {
+            None
+        };
+        let nulls_first = if self.parse_keywords(&[Keyword::NULLS, Keyword::FIRST]) {
+            Some(true)
+        } else if self.parse_keywords(&[Keyword::NULLS, Keyword::LAST]) {
+            Some(false)
+        } else {
+            None
+        };
         self.expect_keyword(Keyword::WITH)?;
         let mut operator = String::new();
         let mut depth = 0i32;
@@ -10633,7 +10663,13 @@ impl<'a> Parser<'a> {
         if operator.is_empty() {
             return self.expected("an operator after WITH", self.peek_token());
         }
-        Ok(ExcludeElement { element, operator })
+        Ok(ExcludeElement {
+            element,
+            opclass,
+            asc,
+            nulls_first,
+            operator,
+        })
     }
 
     pub fn parse_sql_option(&mut self) -> Result<SqlOption, ParserError> {

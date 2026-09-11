@@ -825,15 +825,36 @@ pub enum TableConstraint {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 pub struct ExcludeElement {
-    /// The column or expression being compared.
+    /// The column or expression being compared. A `COLLATE` clause on it is
+    /// part of the expression (`Expr::Collate`).
     pub element: Expr,
+    /// An optional operator class, e.g. `gist_int4_ops`.
+    pub opclass: Option<ObjectName>,
+    /// Optional `ASC` or `DESC`.
+    pub asc: Option<bool>,
+    /// Optional `NULLS FIRST` or `NULLS LAST`.
+    pub nulls_first: Option<bool>,
     /// The comparison operator, e.g. `=` or `&&`.
     pub operator: String,
 }
 
 impl fmt::Display for ExcludeElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} WITH {}", self.element, self.operator)
+        write!(f, "{}", self.element)?;
+        if let Some(opclass) = &self.opclass {
+            write!(f, " {opclass}")?;
+        }
+        match self.asc {
+            Some(true) => write!(f, " ASC")?,
+            Some(false) => write!(f, " DESC")?,
+            None => (),
+        }
+        match self.nulls_first {
+            Some(true) => write!(f, " NULLS FIRST")?,
+            Some(false) => write!(f, " NULLS LAST")?,
+            None => (),
+        }
+        write!(f, " WITH {}", self.operator)
     }
 }
 

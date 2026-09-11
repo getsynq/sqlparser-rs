@@ -691,6 +691,44 @@ fn parse_exclude_constraint() {
 }
 
 #[test]
+fn parse_exclude_element_postfixes() {
+    // exclude_element: { column | (expression) } [COLLATE c] [opclass]
+    //                  [ASC | DESC] [NULLS {FIRST | LAST}]
+    // https://www.postgresql.org/docs/current/sql-createtable.html
+    for element in [
+        "id COLLATE \"C\"",
+        "id gist_int4_ops",
+        "id DESC",
+        "id ASC NULLS LAST",
+        "id COLLATE \"C\" gist_int4_ops DESC NULLS FIRST",
+        "(lower(a))",
+    ] {
+        pg_and_generic().verified_stmt(&format!(
+            "CREATE TABLE t (id INT, EXCLUDE USING GIST ({element} WITH =))"
+        ));
+    }
+
+    match pg_and_generic().verified_stmt(
+        "CREATE TABLE t (id INT, EXCLUDE USING GIST (id gist_int4_ops DESC NULLS FIRST WITH =))",
+    ) {
+        Statement::CreateTable { constraints, .. } => match &constraints[0] {
+            TableConstraint::Exclude { elements, .. } => {
+                assert_eq!(elements[0].element.to_string(), "id");
+                assert_eq!(
+                    elements[0].opclass.as_ref().unwrap().to_string(),
+                    "gist_int4_ops"
+                );
+                assert_eq!(elements[0].asc, Some(false));
+                assert_eq!(elements[0].nulls_first, Some(true));
+                assert_eq!(elements[0].operator, "=");
+            }
+            c => panic!("unexpected constraint: {c:?}"),
+        },
+        s => panic!("unexpected statement: {s:?}"),
+    }
+}
+
+#[test]
 fn parse_exclude_as_column_name() {
     // EXCLUDE is non-reserved in PostgreSQL (Appendix C) and in Trino, so it
     // is a legal column name and must not be taken for a constraint.
