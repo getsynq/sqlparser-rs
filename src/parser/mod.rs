@@ -11090,6 +11090,12 @@ impl<'a> Parser<'a> {
                 let query = self.parse_query()?;
                 return Ok(AlterTableOperation::ModifyQuery { query });
             }
+            // ClickHouse: MODIFY COMMENT '<text>' (table comment)
+            if self.parse_keyword(Keyword::COMMENT) {
+                return Ok(AlterTableOperation::ModifyComment(
+                    self.parse_literal_string()?,
+                ));
+            }
             // ClickHouse: MODIFY COLUMN <name> [<type>] [REMOVE DEFAULT | ...]
             self.expect_keyword(Keyword::COLUMN)?;
             let column_name = self.parse_identifier(false)?.unwrap();
@@ -11124,6 +11130,18 @@ impl<'a> Parser<'a> {
                 column_name,
                 column_type,
                 options,
+            }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keywords(&[Keyword::COMMENT, Keyword::COLUMN])
+        {
+            // ClickHouse: COMMENT COLUMN [IF EXISTS] <name> '<text>'
+            let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
+            let column_name = self.parse_identifier(false)?.unwrap();
+            let comment = self.parse_literal_string()?;
+            AlterTableOperation::CommentColumn {
+                if_exists,
+                column_name,
+                comment,
             }
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keyword(Keyword::MATERIALIZE)
