@@ -686,6 +686,17 @@ fn parse_exclude_constraint() {
     }
 
     pg_and_generic().verified_stmt("CREATE TABLE t (id INT, EXCLUDE USING GIST (id WITH =))");
+    // No USING: the index method is optional.
+    pg_and_generic().verified_stmt("CREATE TABLE t (id INT, EXCLUDE (id WITH =))");
+}
+
+#[test]
+fn parse_exclude_as_column_name() {
+    // EXCLUDE is non-reserved in PostgreSQL (Appendix C) and in Trino, so it
+    // is a legal column name and must not be taken for a constraint.
+    // https://www.postgresql.org/docs/current/sql-keywords-appendix.html
+    pg_and_generic().verified_stmt("CREATE TABLE t (exclude INT)");
+    pg_and_generic().verified_stmt("ALTER TABLE t ADD exclude INT");
 }
 
 #[test]
