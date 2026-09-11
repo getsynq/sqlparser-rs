@@ -11252,8 +11252,14 @@ impl<'a> Parser<'a> {
                 AlterTableOperation::MaterializeProjection { name }
             } else if self.parse_keyword(Keyword::INDEX) {
                 let name = self.parse_identifier(false)?.unwrap();
+                // Same two spellings OPTIMIZE TABLE takes: `PARTITION <expr>`
+                // or `PARTITION ID '<id>'`.
                 let partition = if self.parse_keywords(&[Keyword::IN, Keyword::PARTITION]) {
-                    Some(self.parse_identifier(false)?.unwrap())
+                    if self.parse_keyword(Keyword::ID) {
+                        Some(Partition::Identifier(self.parse_identifier(false)?))
+                    } else {
+                        Some(Partition::Expr(self.parse_expr()?))
+                    }
                 } else {
                     None
                 };
