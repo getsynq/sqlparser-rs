@@ -10368,6 +10368,35 @@ impl<'a> Parser<'a> {
                     options,
                 }))
             }
+            Token::Word(w)
+                if w.keyword == Keyword::EXCLUDE
+                    && dialect_of!(self is PostgreSqlDialect | RedshiftSqlDialect | GenericDialect) =>
+            {
+                // PostgreSQL: EXCLUDE [USING <method>] (<element> WITH <op>, ...)
+                //             [WHERE (<predicate>)]
+                let using = if self.parse_keyword(Keyword::USING) {
+                    Some(self.parse_identifier(false)?.unwrap())
+                } else {
+                    None
+                };
+                self.expect_token(&Token::LParen)?;
+                let elements = self.parse_comma_separated(Parser::parse_exclude_element)?;
+                self.expect_token(&Token::RParen)?;
+                let predicate = if self.parse_keyword(Keyword::WHERE) {
+                    self.expect_token(&Token::LParen)?;
+                    let predicate = self.parse_expr()?;
+                    self.expect_token(&Token::RParen)?;
+                    Some(predicate)
+                } else {
+                    None
+                };
+                Ok(Some(TableConstraint::Exclude {
+                    name,
+                    using,
+                    elements,
+                    predicate,
+                }))
+            }
             _ => {
                 if name.is_some() {
                     self.expected("PRIMARY, UNIQUE, FOREIGN, or CHECK", next_token)
@@ -10563,6 +10592,32 @@ impl<'a> Parser<'a> {
         } else {
             self.expected("index type {BTREE | HASH}", self.peek_token())
         }
+    }
+
+    /// One `<element> WITH <operator>` pair of a PostgreSQL exclusion
+    /// constraint. The element is a real expression so its column references
+    /// stay visible; the operator is taken verbatim, since it can be any
+    /// operator name (`=`, `&&`, `OPERATOR(public.&&)`).
+    fn parse_exclude_element(&mut self) -> Result<ExcludeElement, ParserError> {
+        let element = self.parse_expr()?;
+        self.expect_keyword(Keyword::WITH)?;
+        let mut operator = String::new();
+        let mut depth = 0i32;
+        loop {
+            match self.peek_token().token {
+                Token::LParen => depth += 1,
+                Token::RParen if depth == 0 => break,
+                Token::RParen => depth -= 1,
+                Token::Comma if depth == 0 => break,
+                Token::EOF => break,
+                _ => {}
+            }
+            operator.push_str(&self.next_token().to_string());
+        }
+        if operator.is_empty() {
+            return self.expected("an operator after WITH", self.peek_token());
+        }
+        Ok(ExcludeElement { element, operator })
     }
 
     pub fn parse_sql_option(&mut self) -> Result<SqlOption, ParserError> {

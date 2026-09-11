@@ -779,6 +779,19 @@ pub enum TableConstraint {
         /// Referred column identifier list.
         columns: Vec<WithSpan<Ident>>,
     },
+    /// `[ CONSTRAINT <name> ] EXCLUDE [ USING <method> ] ( <element> WITH <op>
+    /// [, ...] ) [ WHERE ( <predicate> ) ]`
+    ///
+    /// PostgreSQL exclusion constraint.
+    /// <https://www.postgresql.org/docs/current/sql-createtable.html>
+    Exclude {
+        name: Option<Ident>,
+        /// The index method after `USING`, e.g. `gist`.
+        using: Option<Ident>,
+        elements: Vec<ExcludeElement>,
+        /// The optional partial-constraint predicate after `WHERE`.
+        predicate: Option<Expr>,
+    },
     /// `LIKE source_table [ { INCLUDING | EXCLUDING } option [, ...] ]`
     ///
     /// PostgreSQL/Redshift: CREATE TABLE new_table (LIKE old_table INCLUDING DEFAULTS)
@@ -786,6 +799,25 @@ pub enum TableConstraint {
         table_name: ObjectName,
         options: Vec<CreateTableLikeOption>,
     },
+}
+
+/// One `<element> WITH <operator>` pair of a PostgreSQL exclusion constraint.
+///
+/// <https://www.postgresql.org/docs/current/sql-createtable.html>
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
+pub struct ExcludeElement {
+    /// The column or expression being compared.
+    pub element: Expr,
+    /// The comparison operator, e.g. `=` or `&&`.
+    pub operator: String,
+}
+
+impl fmt::Display for ExcludeElement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} WITH {}", self.element, self.operator)
+    }
 }
 
 /// A single INCLUDING or EXCLUDING clause in a `CREATE TABLE (LIKE ...)` statement.
@@ -925,6 +957,25 @@ impl fmt::Display for TableConstraint {
 
                 write!(f, " ({})", display_comma_separated(columns))?;
 
+                Ok(())
+            }
+            Self::Exclude {
+                name,
+                using,
+                elements,
+                predicate,
+            } => {
+                if let Some(name) = name {
+                    write!(f, "CONSTRAINT {name} ")?;
+                }
+                write!(f, "EXCLUDE")?;
+                if let Some(using) = using {
+                    write!(f, " USING {using}")?;
+                }
+                write!(f, " ({})", display_comma_separated(elements))?;
+                if let Some(predicate) = predicate {
+                    write!(f, " WHERE ({predicate})")?;
+                }
                 Ok(())
             }
             Self::Like {
