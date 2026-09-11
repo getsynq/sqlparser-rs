@@ -670,6 +670,7 @@ define_keywords!(
     SET,
     SETOF,
     SETS,
+    SETTING,
     SETTINGS,
     SHARE,
     SHOW,

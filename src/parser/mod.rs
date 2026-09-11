@@ -11090,6 +11090,12 @@ impl<'a> Parser<'a> {
                 let query = self.parse_query()?;
                 return Ok(AlterTableOperation::ModifyQuery { query });
             }
+            // ClickHouse: MODIFY SETTING <name> = <value>, ...
+            if self.parse_keyword(Keyword::SETTING) {
+                return Ok(AlterTableOperation::ModifySetting(
+                    self.parse_comma_separated(Parser::parse_sql_option)?,
+                ));
+            }
             // ClickHouse: MODIFY TTL <expr>
             if self.parse_keyword(Keyword::TTL) {
                 return Ok(AlterTableOperation::ModifyTtl(self.parse_expr()?));
@@ -11135,6 +11141,12 @@ impl<'a> Parser<'a> {
                 column_type,
                 options,
             }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keywords(&[Keyword::RESET, Keyword::SETTING])
+        {
+            AlterTableOperation::ResetSetting(
+                self.parse_comma_separated(|p| p.parse_identifier(false).map(|id| id.unwrap()))?,
+            )
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keywords(&[Keyword::REMOVE, Keyword::TTL])
         {

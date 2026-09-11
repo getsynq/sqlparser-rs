@@ -1871,6 +1871,21 @@ fn parse_alter_table_ttl() {
 }
 
 #[test]
+fn parse_alter_table_setting() {
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t RESET SETTING merge_with_ttl_timeout");
+    let stmt = clickhouse_and_generic().verified_stmt(
+        "ALTER TABLE t MODIFY SETTING allow_experimental_replacing_merge_with_cleanup = 1, min_age_to_force_merge_seconds = 86400",
+    );
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::ModifySetting(settings) => assert_eq!(settings.len(), 2),
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }

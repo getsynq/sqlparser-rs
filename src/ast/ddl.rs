@@ -55,6 +55,16 @@ pub enum AlterTableOperation {
         column_name: Ident,
         comment: String,
     },
+    /// `MODIFY SETTING <name> = <value>, ...` (ClickHouse) — changes table
+    /// engine settings.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/setting>
+    ModifySetting(Vec<SqlOption>),
+    /// `RESET SETTING <name>, ...` (ClickHouse) — restores table engine
+    /// settings to their defaults.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/setting>
+    ResetSetting(Vec<Ident>),
     /// `MODIFY TTL <expr>` (ClickHouse) — replaces the table's TTL expression.
     ///
     /// <https://clickhouse.com/docs/sql-reference/statements/alter/ttl>
@@ -325,6 +335,12 @@ impl fmt::Display for AlterTableOperation {
                     write!(f, "IF EXISTS ")?;
                 }
                 write!(f, "{column_name} '{}'", escape_single_quote_string(comment))
+            }
+            AlterTableOperation::ModifySetting(settings) => {
+                write!(f, "MODIFY SETTING {}", display_comma_separated(settings))
+            }
+            AlterTableOperation::ResetSetting(names) => {
+                write!(f, "RESET SETTING {}", display_comma_separated(names))
             }
             AlterTableOperation::ModifyTtl(expr) => write!(f, "MODIFY TTL {expr}"),
             AlterTableOperation::RemoveTtl => write!(f, "REMOVE TTL"),
