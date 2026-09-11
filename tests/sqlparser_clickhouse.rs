@@ -1902,6 +1902,32 @@ fn parse_alter_table_modify_order_by() {
 }
 
 #[test]
+fn parse_alter_table_add_index_if_not_exists() {
+    let stmt = clickhouse().verified_stmt(
+        "ALTER TABLE runs ADD INDEX IF NOT EXISTS bloom_assets assets TYPE bloom_filter GRANULARITY 4",
+    );
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::AddConstraint(TableConstraint::ClickhouseIndex {
+                if_not_exists,
+                name,
+                index_expr,
+                ..
+            }) => {
+                assert!(if_not_exists);
+                assert_eq!(name.to_string(), "bloom_assets");
+                assert_eq!(index_expr.to_string(), "assets");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+    clickhouse().verified_stmt(
+        "ALTER TABLE runs ADD INDEX bloom_assets assets TYPE bloom_filter GRANULARITY 4",
+    );
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }

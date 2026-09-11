@@ -749,6 +749,8 @@ pub enum TableConstraint {
         columns: Vec<WithSpan<Ident>>,
     },
     ClickhouseIndex {
+        /// `IF NOT EXISTS`, accepted by `ALTER TABLE ... ADD INDEX`.
+        if_not_exists: bool,
         name: WithSpan<Ident>,
         index_expr: Expr,
         index_type: Option<ObjectName>,
@@ -882,12 +884,17 @@ impl fmt::Display for TableConstraint {
                 Ok(())
             }
             TableConstraint::ClickhouseIndex {
+                if_not_exists,
                 name,
                 index_expr,
                 index_type,
                 granularity,
             } => {
-                write!(f, "INDEX {name} {index_expr}")?;
+                write!(f, "INDEX ")?;
+                if *if_not_exists {
+                    write!(f, "IF NOT EXISTS ")?;
+                }
+                write!(f, "{name} {index_expr}")?;
                 if let Some(index_type) = index_type {
                     write!(f, " TYPE {index_type}")?;
                 }

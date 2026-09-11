@@ -10271,6 +10271,8 @@ impl<'a> Parser<'a> {
             Token::Word(w)
                 if (w.keyword == Keyword::INDEX) && dialect_of!(self is ClickHouseDialect) =>
             {
+                let if_not_exists =
+                    self.parse_keywords(&[Keyword::IF, Keyword::NOT, Keyword::EXISTS]);
                 let name = self.parse_identifier(false)?;
 
                 let index_expr = self.parse_expr()?;
@@ -10303,6 +10305,7 @@ impl<'a> Parser<'a> {
                 };
 
                 Ok(Some(TableConstraint::ClickhouseIndex {
+                    if_not_exists,
                     name,
                     index_expr,
                     index_type,
