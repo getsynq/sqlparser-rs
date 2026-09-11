@@ -2269,6 +2269,9 @@ pub enum Statement {
         if_exists: bool,
         only: bool,
         operations: Vec<AlterTableOperation>,
+        /// ClickHouse trailing `SETTINGS key = value, ...` applying to the
+        /// whole statement (e.g. `alter_sync`, `mutations_sync`).
+        settings: Option<Vec<SqlOption>>,
     },
     /// ```sql
     /// ALTER INDEX
@@ -4792,6 +4795,7 @@ impl fmt::Display for Statement {
                 if_exists,
                 only,
                 operations,
+                settings,
             } => {
                 write!(f, "ALTER TABLE ")?;
                 if *if_exists {
@@ -4804,7 +4808,11 @@ impl fmt::Display for Statement {
                     f,
                     "{name} {operations}",
                     operations = display_comma_separated(operations)
-                )
+                )?;
+                if let Some(settings) = settings {
+                    write!(f, " SETTINGS {}", display_comma_separated(settings))?;
+                }
+                Ok(())
             }
             Statement::ExchangeTables { first, second } => {
                 write!(f, "EXCHANGE TABLES {first} AND {second}")

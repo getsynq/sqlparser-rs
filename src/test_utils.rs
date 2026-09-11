@@ -259,6 +259,7 @@ pub fn alter_table_op_with_name(stmt: Statement, expected_name: &str) -> AlterTa
             if_exists,
             only: is_only,
             operations,
+            settings: _,
         } => {
             assert_eq!(name.to_string(), expected_name);
             assert!(!if_exists);
