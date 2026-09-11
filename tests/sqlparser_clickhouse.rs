@@ -1886,6 +1886,22 @@ fn parse_alter_table_setting() {
 }
 
 #[test]
+fn parse_alter_table_modify_order_by() {
+    let stmt = clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t MODIFY ORDER BY (workspace, entity_id, precedence)");
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            // The new sorting key keeps its column references for lineage.
+            AlterTableOperation::ModifyOrderBy(expr) => {
+                assert_eq!(expr.to_string(), "(workspace, entity_id, precedence)");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }
