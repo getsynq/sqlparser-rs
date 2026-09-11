@@ -11090,6 +11090,10 @@ impl<'a> Parser<'a> {
                 let query = self.parse_query()?;
                 return Ok(AlterTableOperation::ModifyQuery { query });
             }
+            // ClickHouse: MODIFY ORDER BY <expr>
+            if self.parse_keywords(&[Keyword::ORDER, Keyword::BY]) {
+                return Ok(AlterTableOperation::ModifyOrderBy(self.parse_expr()?));
+            }
             // ClickHouse: MODIFY SETTING <name> = <value>, ...
             if self.parse_keyword(Keyword::SETTING) {
                 return Ok(AlterTableOperation::ModifySetting(

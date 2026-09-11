@@ -55,6 +55,11 @@ pub enum AlterTableOperation {
         column_name: Ident,
         comment: String,
     },
+    /// `MODIFY ORDER BY <expr>` (ClickHouse) — replaces the table's sorting
+    /// key.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/order-by>
+    ModifyOrderBy(Expr),
     /// `MODIFY SETTING <name> = <value>, ...` (ClickHouse) — changes table
     /// engine settings.
     ///
@@ -336,6 +341,7 @@ impl fmt::Display for AlterTableOperation {
                 }
                 write!(f, "{column_name} '{}'", escape_single_quote_string(comment))
             }
+            AlterTableOperation::ModifyOrderBy(expr) => write!(f, "MODIFY ORDER BY {expr}"),
             AlterTableOperation::ModifySetting(settings) => {
                 write!(f, "MODIFY SETTING {}", display_comma_separated(settings))
             }
