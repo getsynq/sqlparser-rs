@@ -10374,6 +10374,22 @@ impl<'a> Parser<'a> {
             {
                 // PostgreSQL: EXCLUDE [USING <method>] (<element> WITH <op>, ...)
                 //             [WHERE (<predicate>)]
+                //
+                // EXCLUDE is non-reserved in PostgreSQL (Appendix C) and in
+                // Trino (→ GenericDialect), so it is also a legal column name.
+                // Only the constraint is followed by `(` or `USING`; anything
+                // else is a column called `exclude` — backtrack and let the
+                // column parser take it, the way the INDEX/KEY arm above does.
+                let next_is_constraint = matches!(self.peek_token_kind(), Token::LParen)
+                    || matches!(
+                        self.peek_token_kind(),
+                        Token::Word(w) if w.keyword == Keyword::USING
+                    );
+                if !next_is_constraint {
+                    self.prev_token();
+                    return Ok(None);
+                }
+
                 let using = if self.parse_keyword(Keyword::USING) {
                     Some(self.parse_identifier(false)?.unwrap())
                 } else {
