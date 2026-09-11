@@ -332,11 +332,11 @@ pub enum DataType {
     /// AggregateFunction(name, types_of_arguments...)
     ///
     /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction
-    AggregateFunction(ObjectName, Box<DataType>),
+    AggregateFunction(ObjectName, Vec<DataType>),
     /// SimpleAggregateFunction(name, types_of_arguments...)
     ///
     /// [clickhouse]: https://clickhouse.com/docs/en/sql-reference/data-types/aggregatefunction
-    SimpleAggregateFunction(ObjectName, Box<DataType>),
+    SimpleAggregateFunction(ObjectName, Vec<DataType>),
     /// No type specified - only used with
     /// [`SQLiteDialect`](crate::dialect::SQLiteDialect), from statements such
     /// as `CREATE TABLE t1 (a)`.
@@ -608,12 +608,17 @@ impl fmt::Display for DataType {
             }
             DataType::Unspecified => Ok(()),
             DataType::AggregateFunction(function, types_of_arguments) => {
-                write!(f, "AggregateFunction({function}, {types_of_arguments})")
+                write!(
+                    f,
+                    "AggregateFunction({function}, {})",
+                    display_comma_separated(types_of_arguments)
+                )
             }
             DataType::SimpleAggregateFunction(function, types_of_arguments) => {
                 write!(
                     f,
-                    "SimpleAggregateFunction({function}, {types_of_arguments})"
+                    "SimpleAggregateFunction({function}, {})",
+                    display_comma_separated(types_of_arguments)
                 )
             }
         }

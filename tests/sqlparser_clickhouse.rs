@@ -1629,6 +1629,11 @@ fn test_aggregate_function_column() {
             "CREATE TABLE t (column1 {}(uniq, Array(Tuple(DateTime64(8, 'UTC'), Int32))))",
             func
         ));
+        // Aggregates taking several arguments, e.g. argMax(value, ordering).
+        clickhouse().verified_stmt(&format!(
+            "CREATE TABLE t (column1 {}(argMax, Array(STRING), DateTime64(6, 'UTC')))",
+            func
+        ));
     }
 }
 
