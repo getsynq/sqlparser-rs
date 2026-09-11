@@ -1,12 +1,12 @@
 # SQL Parser Corpus Fix Loop
 
-You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/cloud/kernel-cll/sqlparser-rs`. Your goal is to fix one failing corpus test per iteration.
+You are working on the Coalesce Quality fork of sqlparser-rs at `/Users/lustefaniak/getsynq/cloud/kernel-cll/sqlparser-rs`. Your goal is to fix one failing corpus test per iteration.
 
 ## Priority
 
 **Only work on real customer SQL.** We care about what customers actually run in their warehouses, not theoretical syntax the DWH docs say is legal. The corpus directories are tiered accordingly:
 
-0. **Highest priority — explicitly requested SQL (overrides the hard rule below):** If the user points at a specific SQL construct, file, or repo path (e.g. "fix SECURE VIEW from dwhtesting", "this query from a customer ticket doesn't parse"), treat it as tier-0 and fix it **even if the corpus has zero failures for that pattern**. Write a focused unit test instead of relying on corpus delta to prove the fix. Also tier-0: SQL emitted by SYNQ / Coalesce Quality internal tooling — the `dev-infra/dwhtesting` seed scripts, fixtures from `kernel-cll` test suites, and any query the product itself generates against customer warehouses. If it runs in our own stack or our own tests, it must parse.
+0. **Highest priority — explicitly requested SQL (overrides the hard rule below):** If the user points at a specific SQL construct, file, or repo path (e.g. "fix SECURE VIEW from dwhtesting", "this query from a customer ticket doesn't parse"), treat it as tier-0 and fix it **even if the corpus has zero failures for that pattern**. Write a focused unit test instead of relying on corpus delta to prove the fix. Also tier-0: SQL emitted by Coalesce Quality internal tooling — the `dev-infra/dwhtesting` seed scripts, fixtures from `kernel-cll` test suites, and any query the product itself generates against customer warehouses. If it runs in our own stack or our own tests, it must parse.
 1. **Main loop tier — customer query logs & real customer SQL definitions:**
    - `unparsed_snowflake`, `unparsed_bigquery`, `unparsed_redshift`, `unparsed_trino` (raw query logs)
    - `customer_snowflake`, `customer_bigquery`, `customer_redshift`, `customer_clickhouse`, `customer_databricks`, `customer_postgres`, etc. (real customer model/view definitions)
@@ -17,11 +17,11 @@ You are working on the SYNQ fork of sqlparser-rs at `/Users/lustefaniak/getsynq/
 
 **Ordering rule:** prefer tier-1 patterns when they exist. When tier-1 is empty for the top-15 ranked list, fall through to tier-2 (first-party upstream fixtures) — these are still real dialect syntax and fixes there often transfer to tier-1 later. Only skip tier-3 (`sqlglot_*`, `synq_*`) outright. The guiding principle is still "no AST surface for theoretical syntax" — if a tier-2 pattern looks like invalid/dead SQL, skip it using the usual exit hatch.
 
-**Tier-0 overrides the hard rule.** When the user has explicitly asked for a fix, or the gap blocks SYNQ / Coalesce Quality internal SQL, commit the fix even with zero corpus delta — the value is proven by the request, not the corpus. Add a regression test (unit test or a new corpus file contributed upstream to `kernel-cll-corpus`) so future loop runs catch it.
+**Tier-0 overrides the hard rule.** When the user has explicitly asked for a fix, or the gap blocks Coalesce Quality internal SQL, commit the fix even with zero corpus delta — the value is proven by the request, not the corpus. Add a regression test (unit test or a new corpus file contributed upstream to `kernel-cll-corpus`) so future loop runs catch it.
 
 **Dialect priority order (within tier 1):** Snowflake > Redshift > BigQuery > Databricks > ClickHouse > Postgres > everything else.
 
-When picking which failure to fix, first maximize **lineage value** (see below), then tier-1 file count, then prefer higher-priority dialects. Tier-0 (user-directed / SYNQ / Coalesce) always jumps the queue.
+When picking which failure to fix, first maximize **lineage value** (see below), then tier-1 file count, then prefer higher-priority dialects. Tier-0 (user-directed / Coalesce Quality) always jumps the queue.
 
 **Lineage value ordering.** This parser exists to feed CLL. Fixes that unlock table/column references for the visitor are strictly more valuable than fixes that only get "parse: ok" with no lineage payload. When two failure patterns tie on file count, prefer the one that, once parsed, exposes lineage:
 

@@ -2,10 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# sqlparser-rs - SYNQ Fork
+# sqlparser-rs - Coalesce Quality Fork
 
 ## Overview
-This is a **fork of [apache/datafusion-sqlparser-rs](https://github.com/apache/datafusion-sqlparser-rs)**, an extensible SQL lexer and parser for Rust supporting ANSI SQL:2011 and multiple SQL dialects. This fork contains SYNQ-specific extensions for parsing SQL dialects used in the kernel-cll column-level lineage parser.
+This is a **fork of [apache/datafusion-sqlparser-rs](https://github.com/apache/datafusion-sqlparser-rs)**, an extensible SQL lexer and parser for Rust supporting ANSI SQL:2011 and multiple SQL dialects. This fork contains Coalesce Quality-specific extensions for parsing SQL dialects used in the kernel-cll column-level lineage parser.
 
 ## Building and Testing
 
@@ -375,7 +375,7 @@ When adding fields to AST structs, you must update ALL pattern matches:
 Since this is a fork of apache/datafusion-sqlparser-rs:
 - Avoid creating new AST node types when possible
 - Prefer parameterizing existing AST nodes for compatibility
-- Document SYNQ-specific extensions clearly
+- Document Coalesce Quality-specific extensions clearly
 - Consider if changes should be contributed upstream
 
 ### Testing Requirements
