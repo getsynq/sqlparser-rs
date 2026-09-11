@@ -11090,6 +11090,10 @@ impl<'a> Parser<'a> {
                 let query = self.parse_query()?;
                 return Ok(AlterTableOperation::ModifyQuery { query });
             }
+            // ClickHouse: MODIFY TTL <expr>
+            if self.parse_keyword(Keyword::TTL) {
+                return Ok(AlterTableOperation::ModifyTtl(self.parse_expr()?));
+            }
             // ClickHouse: MODIFY COMMENT '<text>' (table comment)
             if self.parse_keyword(Keyword::COMMENT) {
                 return Ok(AlterTableOperation::ModifyComment(
@@ -11131,6 +11135,10 @@ impl<'a> Parser<'a> {
                 column_type,
                 options,
             }
+        } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
+            && self.parse_keywords(&[Keyword::REMOVE, Keyword::TTL])
+        {
+            AlterTableOperation::RemoveTtl
         } else if dialect_of!(self is ClickHouseDialect|GenericDialect)
             && self.parse_keywords(&[Keyword::COMMENT, Keyword::COLUMN])
         {

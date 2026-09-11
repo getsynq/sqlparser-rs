@@ -1854,6 +1854,23 @@ fn parse_alter_table_comments() {
 }
 
 #[test]
+fn parse_alter_table_ttl() {
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t REMOVE TTL");
+    let stmt = clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t MODIFY TTL toDateTime(created_at) + INTERVAL 90 DAY");
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            // The TTL expression keeps its column reference for lineage.
+            AlterTableOperation::ModifyTtl(expr) => {
+                assert_eq!(expr.to_string(), "toDateTime(created_at) + INTERVAL 90 DAY");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }

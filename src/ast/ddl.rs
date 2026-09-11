@@ -55,6 +55,14 @@ pub enum AlterTableOperation {
         column_name: Ident,
         comment: String,
     },
+    /// `MODIFY TTL <expr>` (ClickHouse) — replaces the table's TTL expression.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/ttl>
+    ModifyTtl(Expr),
+    /// `REMOVE TTL` (ClickHouse) — drops the table's TTL expression.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/ttl>
+    RemoveTtl,
     /// `MODIFY COMMENT '<comment>'` (ClickHouse) — sets the table comment.
     ///
     /// <https://clickhouse.com/docs/sql-reference/statements/alter/comment>
@@ -318,6 +326,8 @@ impl fmt::Display for AlterTableOperation {
                 }
                 write!(f, "{column_name} '{}'", escape_single_quote_string(comment))
             }
+            AlterTableOperation::ModifyTtl(expr) => write!(f, "MODIFY TTL {expr}"),
+            AlterTableOperation::RemoveTtl => write!(f, "REMOVE TTL"),
             AlterTableOperation::ModifyComment(comment) => {
                 write!(
                     f,
