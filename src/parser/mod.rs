@@ -12454,21 +12454,18 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::LParen)?;
                     let function = self.parse_object_name(false)?;
                     self.expect_token(&Token::Comma)?;
-                    let inside_type = self.parse_data_type()?;
+                    let argument_types = self.parse_comma_separated(Parser::parse_data_type)?;
                     self.expect_token(&Token::RParen)?;
-                    Ok(DataType::AggregateFunction(function, inside_type.into()))
+                    Ok(DataType::AggregateFunction(function, argument_types))
                 }
                 Keyword::SIMPLEAGGREGATEFUNCTION if dialect_of!(self is ClickHouseDialect | GenericDialect) =>
                 {
                     self.expect_token(&Token::LParen)?;
                     let function = self.parse_object_name(false)?;
                     self.expect_token(&Token::Comma)?;
-                    let inside_type = self.parse_data_type()?;
+                    let argument_types = self.parse_comma_separated(Parser::parse_data_type)?;
                     self.expect_token(&Token::RParen)?;
-                    Ok(DataType::SimpleAggregateFunction(
-                        function,
-                        inside_type.into(),
-                    ))
+                    Ok(DataType::SimpleAggregateFunction(function, argument_types))
                 }
                 Keyword::MAP if dialect_of!(self is ClickHouseDialect | GenericDialect) => {
                     self.prev_token();
