@@ -11312,6 +11312,7 @@ impl<'a> Parser<'a> {
                 })
             }
             Keyword::INDEX => {
+                let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
                 let index_name = self.parse_object_name(false)?;
                 let operation = if self.parse_keyword(Keyword::RENAME) {
                     if self.parse_keyword(Keyword::TO) {
@@ -11325,6 +11326,7 @@ impl<'a> Parser<'a> {
                 };
 
                 Ok(Statement::AlterIndex {
+                    if_exists,
                     name: index_name,
                     operation,
                 })

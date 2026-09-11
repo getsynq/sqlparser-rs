@@ -3624,11 +3624,25 @@ fn parse_alter_index() {
     let rename_index = "ALTER INDEX idx RENAME TO new_idx";
     match verified_stmt(rename_index) {
         Statement::AlterIndex {
+            if_exists,
             name,
             operation: AlterIndexOperation::RenameIndex { index_name },
         } => {
+            assert!(!if_exists);
             assert_eq!("idx", name.to_string());
             assert_eq!("new_idx", index_name.to_string())
+        }
+        _ => unreachable!(),
+    };
+
+    // PostgreSQL guards the rename with IF EXISTS.
+    // https://www.postgresql.org/docs/current/sql-alterindex.html
+    match verified_stmt("ALTER INDEX IF EXISTS idx RENAME TO new_idx") {
+        Statement::AlterIndex {
+            if_exists, name, ..
+        } => {
+            assert!(if_exists);
+            assert_eq!("idx", name.to_string());
         }
         _ => unreachable!(),
     };

@@ -2277,6 +2277,7 @@ pub enum Statement {
     /// ALTER INDEX
     /// ```
     AlterIndex {
+        if_exists: bool,
         name: ObjectName,
         operation: AlterIndexOperation,
     },
@@ -4817,8 +4818,16 @@ impl fmt::Display for Statement {
             Statement::ExchangeTables { first, second } => {
                 write!(f, "EXCHANGE TABLES {first} AND {second}")
             }
-            Statement::AlterIndex { name, operation } => {
-                write!(f, "ALTER INDEX {name} {operation}")
+            Statement::AlterIndex {
+                if_exists,
+                name,
+                operation,
+            } => {
+                write!(f, "ALTER INDEX ")?;
+                if *if_exists {
+                    write!(f, "IF EXISTS ")?;
+                }
+                write!(f, "{name} {operation}")
             }
             Statement::AlterView {
                 name,
