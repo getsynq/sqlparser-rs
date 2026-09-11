@@ -61,7 +61,9 @@ pub enum AlterTableOperation {
     /// <https://clickhouse.com/docs/sql-reference/statements/alter/skipping-index>
     MaterializeIndex {
         name: Ident,
-        partition: Option<Ident>,
+        /// The optional `IN PARTITION <p>` restriction. A ClickHouse partition
+        /// is an expression or a `PARTITION ID '<id>'`, not only a bare name.
+        partition: Option<Partition>,
     },
     /// `MODIFY ORDER BY <expr>` (ClickHouse) — replaces the table's sorting
     /// key.
@@ -352,7 +354,7 @@ impl fmt::Display for AlterTableOperation {
             AlterTableOperation::MaterializeIndex { name, partition } => {
                 write!(f, "MATERIALIZE INDEX {name}")?;
                 if let Some(partition) = partition {
-                    write!(f, " IN PARTITION {partition}")?;
+                    write!(f, " IN {partition}")?;
                 }
                 Ok(())
             }

@@ -1941,12 +1941,19 @@ fn parse_alter_table_materialize_index() {
         Statement::AlterTable { operations, .. } => match &operations[0] {
             AlterTableOperation::MaterializeIndex { name, partition } => {
                 assert_eq!(name.to_string(), "idx_trace_id");
-                assert_eq!(partition.as_ref().unwrap().to_string(), "p0");
+                assert_eq!(partition.as_ref().unwrap().to_string(), "PARTITION p0");
             }
             op => panic!("unexpected operation: {op:?}"),
         },
         _ => unreachable!(),
     }
+    // A partition is an expression, or the `PARTITION ID '<id>'` spelling —
+    // the same two forms OPTIMIZE TABLE takes.
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t MATERIALIZE INDEX i IN PARTITION 201901");
+    clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t MATERIALIZE INDEX i IN PARTITION tuple()");
+    clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t MATERIALIZE INDEX i IN PARTITION ID '201901'");
 }
 
 #[test]
