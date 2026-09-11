@@ -55,6 +55,14 @@ pub enum AlterTableOperation {
         column_name: Ident,
         comment: String,
     },
+    /// `MATERIALIZE INDEX <name> [IN PARTITION <partition>]` (ClickHouse) —
+    /// builds a skipping index for rows written before it existed.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/skipping-index>
+    MaterializeIndex {
+        name: Ident,
+        partition: Option<Ident>,
+    },
     /// `MODIFY ORDER BY <expr>` (ClickHouse) — replaces the table's sorting
     /// key.
     ///
@@ -340,6 +348,13 @@ impl fmt::Display for AlterTableOperation {
                     write!(f, "IF EXISTS ")?;
                 }
                 write!(f, "{column_name} '{}'", escape_single_quote_string(comment))
+            }
+            AlterTableOperation::MaterializeIndex { name, partition } => {
+                write!(f, "MATERIALIZE INDEX {name}")?;
+                if let Some(partition) = partition {
+                    write!(f, " IN PARTITION {partition}")?;
+                }
+                Ok(())
             }
             AlterTableOperation::ModifyOrderBy(expr) => write!(f, "MODIFY ORDER BY {expr}"),
             AlterTableOperation::ModifySetting(settings) => {

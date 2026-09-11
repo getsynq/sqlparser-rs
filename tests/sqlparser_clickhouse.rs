@@ -1933,6 +1933,23 @@ fn parse_alter_table_add_index_if_not_exists() {
 }
 
 #[test]
+fn parse_alter_table_materialize_index() {
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t MATERIALIZE INDEX idx_trace_id");
+    let stmt = clickhouse_and_generic()
+        .verified_stmt("ALTER TABLE t MATERIALIZE INDEX idx_trace_id IN PARTITION p0");
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::MaterializeIndex { name, partition } => {
+                assert_eq!(name.to_string(), "idx_trace_id");
+                assert_eq!(partition.as_ref().unwrap().to_string(), "p0");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }

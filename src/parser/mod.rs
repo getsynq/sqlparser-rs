@@ -11234,8 +11234,19 @@ impl<'a> Parser<'a> {
             } else if self.parse_keyword(Keyword::PROJECTION) {
                 let name = self.parse_identifier(false)?.unwrap();
                 AlterTableOperation::MaterializeProjection { name }
+            } else if self.parse_keyword(Keyword::INDEX) {
+                let name = self.parse_identifier(false)?.unwrap();
+                let partition = if self.parse_keywords(&[Keyword::IN, Keyword::PARTITION]) {
+                    Some(self.parse_identifier(false)?.unwrap())
+                } else {
+                    None
+                };
+                AlterTableOperation::MaterializeIndex { name, partition }
             } else {
-                return self.expected("COLUMN or PROJECTION after MATERIALIZE", self.peek_token());
+                return self.expected(
+                    "COLUMN, PROJECTION or INDEX after MATERIALIZE",
+                    self.peek_token(),
+                );
             }
         } else if dialect_of!(self is ClickHouseDialect|PostgreSqlDialect|GenericDialect)
             && self.parse_keyword(Keyword::UPDATE)
