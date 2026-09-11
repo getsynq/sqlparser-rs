@@ -323,6 +323,34 @@ Keywords in `src/keywords.rs` MUST be in strict alphabetical order — `ALL_KEYW
 If a keyword is out of order, the tokenizer silently fails to recognize it (maps to `Keyword::NoKeyword`).
 Verify ordering carefully: e.g., `EXCHANGE` < `EXCLUDE` < `EXEC` (compare character by character).
 
+#### A keyword you parse is a column name somewhere else
+
+Most SQL keywords are **non-reserved**, which means they are also legal identifiers. A new arm
+that consumes a keyword unconditionally therefore stops some dialect from having a column of
+that name, and the failure surfaces far from the feature you were adding — `CREATE TABLE t
+(exclude INT)` broke on the arm that introduced PostgreSQL `EXCLUDE` constraints, because
+`parse_create_table_body` tries `parse_optional_table_constraint` *before* `parse_column_def`
+and propagates its error.
+
+Before consuming a bare keyword in a position where a column, table or alias could also stand:
+
+1. **Check whether it is reserved** in every dialect the arm is gated to — PostgreSQL's
+   [Appendix C](https://www.postgresql.org/docs/current/sql-keywords-appendix.html) and
+   [Trino's reserved list](https://trino.io/docs/current/language/reserved.html) are the two
+   that bite most, since Trino maps to `GenericDialect`. Non-reserved means it is a legal
+   identifier and the arm must be able to decline.
+2. **Peek for a token the identifier reading cannot have** — a following `(`, `USING`, a type
+   name — and when it is absent, `self.prev_token(); return Ok(None);` so the column parser
+   takes the word. `parse_optional_table_constraint`'s `INDEX`/`KEY` and `EXCLUDE` arms are the
+   worked examples; both document why.
+3. **Test the identifier reading, not just the feature** — `CREATE TABLE t (<word> INT)` and
+   `ALTER TABLE t ADD <word> INT` for the arms above. A round-trip test of the new syntax alone
+   passes happily while the regression ships.
+
+The same applies in reverse to `RESERVED_FOR_COLUMN_ALIAS` / `RESERVED_FOR_TABLE_ALIAS`: adding
+a keyword there takes it away from every dialect as an alias, so add to both lists and only for
+words that genuinely cannot be one.
+
 #### AST Change Workflow
 When adding fields to AST structs, you must update ALL pattern matches:
 1. Add field to struct definition (e.g., `src/ast/mod.rs`, `src/ast/query.rs`)
