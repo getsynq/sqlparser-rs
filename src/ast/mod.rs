@@ -38,8 +38,8 @@ pub use self::dcl::{
 pub use self::ddl::{
     AlterColumnOperation, AlterIndexOperation, AlterTableOperation, ColumnDef, ColumnLocation,
     ColumnMask, ColumnOption, ColumnOptionDef, ColumnPolicy, ColumnPolicyProperty,
-    ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, GeneratedAs, IndexType,
-    KeyOrIndexDisplay, Partition, PolicyArg, PolicyCommand, PolicyKind, ProcedureParam,
+    ConstraintCharacteristics, CreateTableLikeOption, Deduplicate, ExcludeElement, GeneratedAs,
+    IndexType, KeyOrIndexDisplay, Partition, PolicyArg, PolicyCommand, PolicyKind, ProcedureParam,
     RedshiftGrantee, RedshiftPolicyKind, ReferentialAction, RowLevelSecurityMode,
     SecurityPolicyBlockDml, SecurityPolicyPredicate, SecurityPolicyPredicateKind,
     SecurityPolicyPredicateOp, TableConstraint, TablePolicy, TablePolicyKind, TableProjection, Tag,

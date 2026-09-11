@@ -660,6 +660,35 @@ fn parse_alter_table_alter_column() {
 }
 
 #[test]
+fn parse_exclude_constraint() {
+    // https://www.postgresql.org/docs/current/sql-createtable.html
+    let sql = "ALTER TABLE query_logs_jobs ADD CONSTRAINT no_overlap EXCLUDE USING GIST (workspace WITH =, time_range WITH &&) WHERE (done_at IS NULL)";
+    match pg_and_generic().verified_stmt(sql) {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::AddConstraint(TableConstraint::Exclude {
+                name,
+                using,
+                elements,
+                predicate,
+            }) => {
+                assert_eq!(name.as_ref().unwrap().to_string(), "no_overlap");
+                assert_eq!(using.as_ref().unwrap().to_string(), "GIST");
+                // The constrained columns stay reachable as expressions.
+                assert_eq!(elements[0].element.to_string(), "workspace");
+                assert_eq!(elements[0].operator, "=");
+                assert_eq!(elements[1].element.to_string(), "time_range");
+                assert_eq!(elements[1].operator, "&&");
+                assert_eq!(predicate.as_ref().unwrap().to_string(), "done_at IS NULL");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+
+    pg_and_generic().verified_stmt("CREATE TABLE t (id INT, EXCLUDE USING GIST (id WITH =))");
+}
+
+#[test]
 fn parse_alter_table_add_columns() {
     match pg().verified_stmt("ALTER TABLE IF EXISTS ONLY tab ADD COLUMN a TEXT, ADD COLUMN b INT") {
         Statement::AlterTable {
