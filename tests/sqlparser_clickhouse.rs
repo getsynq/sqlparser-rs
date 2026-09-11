@@ -1831,6 +1831,29 @@ fn parse_alter_table_statement_settings() {
 }
 
 #[test]
+fn parse_alter_table_comments() {
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t MODIFY COMMENT 'table level'");
+    clickhouse_and_generic().verified_stmt("ALTER TABLE t COMMENT COLUMN c 'column level'");
+    let stmt =
+        clickhouse_and_generic().verified_stmt("ALTER TABLE t COMMENT COLUMN IF EXISTS c 'why'");
+    match stmt {
+        Statement::AlterTable { operations, .. } => match &operations[0] {
+            AlterTableOperation::CommentColumn {
+                if_exists,
+                column_name,
+                comment,
+            } => {
+                assert!(if_exists);
+                assert_eq!(column_name.to_string(), "c");
+                assert_eq!(comment, "why");
+            }
+            op => panic!("unexpected operation: {op:?}"),
+        },
+        _ => unreachable!(),
+    }
+}
+
+#[test]
 fn parse_alter_table_drop_projection() {
     clickhouse_and_generic().verified_stmt("ALTER TABLE t DROP PROJECTION p");
 }

@@ -47,6 +47,18 @@ pub enum AlterTableOperation {
         /// <column_def>.
         column_def: ColumnDef,
     },
+    /// `COMMENT COLUMN [IF EXISTS] <column_name> '<comment>'` (ClickHouse)
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/column>
+    CommentColumn {
+        if_exists: bool,
+        column_name: Ident,
+        comment: String,
+    },
+    /// `MODIFY COMMENT '<comment>'` (ClickHouse) — sets the table comment.
+    ///
+    /// <https://clickhouse.com/docs/sql-reference/statements/alter/comment>
+    ModifyComment(String),
     /// `ADD COLUMNS (<column_def>, ...) [CASCADE]`
     ///
     /// Hive/Databricks plural form for adding multiple columns in one statement.
@@ -294,6 +306,24 @@ impl fmt::Display for AlterTableOperation {
                 write!(f, " {column_def}")?;
 
                 Ok(())
+            }
+            AlterTableOperation::CommentColumn {
+                if_exists,
+                column_name,
+                comment,
+            } => {
+                write!(f, "COMMENT COLUMN ")?;
+                if *if_exists {
+                    write!(f, "IF EXISTS ")?;
+                }
+                write!(f, "{column_name} '{}'", escape_single_quote_string(comment))
+            }
+            AlterTableOperation::ModifyComment(comment) => {
+                write!(
+                    f,
+                    "MODIFY COMMENT '{}'",
+                    escape_single_quote_string(comment)
+                )
             }
             AlterTableOperation::AddColumns {
                 column_defs,
